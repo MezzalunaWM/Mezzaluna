@@ -47,8 +47,6 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     .scene_node_data = .{ .layer_surface = self }
   };
 
-  self.wlr_layer_surface.surface.data = &self.scene_node_data;
-
   if(server.seat.focused_output) |output| {
     self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {
       .background => try output.layers.background.createSceneLayerSurfaceV1(wlr_layer_surface),
@@ -61,6 +59,9 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
       }
     };
   }
+
+  self.wlr_layer_surface.surface.data = &self.scene_node_data;
+  self.scene_layer_surface.tree.node.data = &self.scene_node_data;
 
   self.wlr_layer_surface.events.destroy.add(&self.destroy);
   self.wlr_layer_surface.surface.events.map.add(&self.map);

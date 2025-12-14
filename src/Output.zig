@@ -35,6 +35,15 @@ layers: struct {
   overlay: *wlr.SceneTree
 },
 
+layer_scene_node_data: struct {
+  background: SceneNodeData,
+  bottom: SceneNodeData,
+  content: SceneNodeData,
+  top: SceneNodeData,
+  fullscreen: SceneNodeData,
+  overlay: SceneNodeData
+},
+
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
 destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
@@ -60,6 +69,14 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
       .top = try self.tree.createSceneTree(),
       .fullscreen = try self.tree.createSceneTree(),
       .overlay = try self.tree.createSceneTree(),
+    },
+    .layer_scene_node_data = .{
+      .background = .{ .output_layer = self.layers.background },
+      .bottom = .{ .output_layer = self.layers.bottom },
+      .content = .{ .output_layer = self.layers.content },
+      .top = .{ .output_layer = self.layers.top },
+      .fullscreen = .{ .output_layer = self.layers.fullscreen },
+      .overlay = .{ .output_layer = self.layers.overlay }
     },
     .scene_output = try server.root.scene.createSceneOutput(wlr_output),
     .scene_node_data = SceneNodeData{ .output = self },
@@ -92,7 +109,15 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
   server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
   self.setFocused();
 
-  wlr_output.data = &self.scene_node_data;
+  self.wlr_output.data = &self.scene_node_data;
+  self.tree.node.data = &self.scene_node_data;
+
+  self.layers.background.node.data = &self.layer_scene_node_data.background;
+  self.layers.bottom.node.data = &self.layer_scene_node_data.bottom;
+  self.layers.content.node.data = &self.layer_scene_node_data.content;
+  self.layers.top.node.data = &self.layer_scene_node_data.top;
+  self.layers.fullscreen.node.data = &self.layer_scene_node_data.fullscreen;
+  self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
 
   server.events.exec("OutputInitPost", .{self.id});
 
@@ -280,6 +305,9 @@ fn handleDestroy(
 }
 
 pub fn arrangeLayers(self: *Output) void {
+  const debug = @import("Debug.zig");
+  debug.debugPrintSceneTree();
+
   var full_box: wlr.Box = .{
     .x = 0,
     .y = 0,
@@ -291,28 +319,30 @@ pub fn arrangeLayers(self: *Output) void {
   inline for (@typeInfo(zwlr.LayerShellV1.Layer).@"enum".fields) |comptime_layer| {
     const layer: *wlr.SceneTree = @field(self.layers, comptime_layer.name);
     var it = layer.children.safeIterator(.forward);
+
     while (it.next()) |node| {
-      if(node.data == null) continue;
+      if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
 
-      const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-      const layer_surface: *LayerSurface = switch(scene_node_data.*) {
-        .layer_surface => @fieldParentPtr("scene_node_data", scene_node_data),
-        else => continue
-      };
+        const layer_surface: *LayerSurface = switch(node_data.*) {
+          .layer_surface => @fieldParentPtr("scene_node_data", scene_node_data),
+          else => continue
+        };
 
-      if (!layer_surface.wlr_layer_surface.initialized) continue;
+        if (!layer_surface.wlr_layer_surface.initialized) continue;
 
-      // TEST: river seems to try and prevent clients from taking an
-      // exclusive size greater than half the screen by killing them. Do we
-      // need to? Clients can do quite a bit of nasty stuff and taking
-      // exclusive focus isn't even that bad.
+        // TEST: river seems to try and prevent clients from taking an
+        // exclusive size greater than half the screen by killing them. Do we
+        // need to? Clients can do quite a bit of nasty stuff and taking
+        // exclusive focus isn't even that bad.
 
-      layer_surface.scene_layer_surface.configure(&full_box, &full_box);
+        layer_surface.scene_layer_surface.configure(&full_box, &full_box);
 
-      // TEST: are these calls useless?
-      // const x = layer_surface.scene_layer_surface.tree.node.x;
-      // const y = layer_surface.scene_layer_surface.tree.node.y;
-      // layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
+        // TEST: are these calls useless?
+        // const x = layer_surface.scene_layer_surface.tree.node.x;
+        // const y = layer_surface.scene_layer_surface.tree.node.y;
+        // layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
+      }
     }
   }
 }

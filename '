@@ -19,7 +19,6 @@ const Utils = @import("Utils.zig");
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 
 scene: *wlr.Scene,
-scene_node_data: SceneNodeData,
 
 waiting_room: *wlr.SceneTree,
 scene_output_layout: *wlr.SceneOutputLayout,
@@ -39,14 +38,11 @@ pub fn init(self: *Root) void {
 
   self.* = .{
     .scene = scene,
-    .scene_node_data = .{ .root = self },
     .waiting_room = try scene.tree.createSceneTree(),
     .output_layout = output_layout,
     .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(server.wl_server),
     .scene_output_layout = try scene.attachOutputLayout(output_layout),
   };
-
-  self.scene.tree.node.data = &self.scene_node_data;
 }
 
 pub fn deinit(self: *Root) void {
@@ -117,4 +113,110 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
   }
 
   return null;
+}
+
+pub fn debugPrintSceneTree(self: *Root) void {
+    std.log.debug("=== SCENE TREE DEBUG ===", .{});
+    printNode(&self.scene.tree.node, 0);
+    std.log.debug("=== END SCENE TREE ===", .{});
+}
+
+fn printNode(node: *wlr.SceneNode, depth: usize) void {
+  errdefer Utils.oomPanic();
+
+  var indent = gpa.alloc(u8, depth);
+  for(0..indent.len) |i| {
+
+  }
+
+  // Print node type and position
+  const type_name = switch (node.type) {
+    .tree => "TREE",
+    .rect => "RECT",
+    .buffer => "BUFFER",
+  };
+
+  std.log.debug("{s}{s} @ ({d}, {d}) enabled={} visible={}", .{
+    indent,
+    type_name,
+    node.x,
+    node.y,
+    node.enabled,
+    node.state.pending.enabled,
+  });
+
+  // Print associated data if present
+  if (node.data) |data| {
+    const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
+    switch (scene_node_data.*) {
+      .output => |output| {
+        std.log.debug("{s}  → Output: {s} (focused={}, id={})", .{
+          indent,
+          output.wlr_output.name,
+          output.focused,
+          output.id,
+        });
+      },
+      .view => |view| {
+        std.log.debug("{s}  → View: id={} mapped={} focused={}", .{
+          indent,
+          view.id,
+          view.xdg_toplevel.base.surface.mapped,
+          view.focused,
+        });
+        if (view.xdg_toplevel.title) |title| {
+          std.log.debug("{s}     title=\"{s}\"", .{ indent, title });
+        }
+      },
+      .layer_surface => |layer| {
+        const layer_name = switch (layer.wlr_layer_surface.current.layer) {
+          .background => "background",
+          .bottom => "bottom",
+          .top => "top",
+          .overlay => "overlay",
+          else => "unknown",
+        };
+        std.log.debug("{s}  → LayerSurface: layer={s} mapped={}", .{
+          indent,
+          layer_name,
+          layer.wlr_layer_surface.surface.mapped,
+        });
+        if (layer.wlr_layer_surface.namespace.len > 0) {
+          std.log.debug("{s}     namespace=\"{s}\"", .{
+            indent,
+            layer.wlr_layer_surface.namespace,
+          });
+        }
+      },
+    }
+  }
+
+  // Print buffer-specific info
+  if (node.type == .buffer) {
+    const scene_buffer = wlr.SceneBuffer.fromNode(node);
+    std.log.debug("{s}  buffer: {d}x{d}", .{
+      indent,
+      scene_buffer.buffer.?.width,
+      scene_buffer.buffer.?.height,
+    });
+
+    // Check if it's a surface
+    if (wlr.SceneSurface.tryFromBuffer(scene_buffer)) |scene_surface| {
+      std.log.debug("{s}  → Surface: {*}", .{ indent, scene_surface.surface });
+    }
+  }
+
+  // Recursively print children if this is a tree
+  if (node.type == .tree) {
+    const tree = wlr.SceneTree.fromNode(node);
+    var it = tree.children.iterator(.forward);
+    var child_count: usize = 0;
+    while (it.next()) |child| {
+      child_count += 1;
+      printNode(child, depth + 1);
+    }
+    if (child_count == 0) {
+      std.log.debug("{s}  (no children)", .{indent});
+    }
+  }
 }
