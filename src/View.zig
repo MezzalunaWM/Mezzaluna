@@ -164,7 +164,6 @@ fn handleMap(listener: *wl.Listener(void)) void {
     &server.seat.keyboard_group.keyboard.modifiers
   );
 
-  std.log.debug("setting view decoration mode to server side\n", .{});
   if(view.xdg_toplevel_decoration) |decoration| {
     _ = decoration.setMode(wlr.XdgToplevelDecorationV1.Mode.server_side);
   }

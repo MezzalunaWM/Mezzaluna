@@ -27,6 +27,7 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
 
   const self = try gpa.create(LayerSurface);
 
+
   self.* = .{
     .output = blk: {
       // These block things are dangerous
@@ -60,7 +61,6 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
       }
     };
   }
-
 
   self.wlr_layer_surface.events.destroy.add(&self.destroy);
   self.wlr_layer_surface.surface.events.map.add(&self.map);
@@ -104,8 +104,10 @@ fn handleDestroy(
 fn handleMap(
   listener: *wl.Listener(void)
 ) void {
-  const layer: *LayerSurface = @fieldParentPtr("map", listener);
-  layer.allowKeyboard();
+  const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
+  std.log.debug("layer surface mapped", .{});
+  layer_suraface.output.arrangeLayers();
+  layer_suraface.allowKeyboard();
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
@@ -113,6 +115,8 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 
   // FIXME: this crashes mez when killing mez
   layer_surface.output.arrangeLayers();
+
+  // TODO: Idk if this should be deiniting the layer surface entirely
   layer_surface.deinit();
 }
 
@@ -121,6 +125,8 @@ fn handleCommit(
   _: *wlr.Surface
 ) void {
   const layer_surface: *LayerSurface = @fieldParentPtr("commit", listener);
+
+  std.log.debug("layer surface commited", .{});
 
   if (!layer_surface.wlr_layer_surface.initial_commit) return;
   layer_surface.output.arrangeLayers();

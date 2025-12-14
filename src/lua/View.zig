@@ -64,13 +64,9 @@ pub fn close(L: *zlua.Lua) i32 {
 // ---@param x number x position for view
 // ---@param y number y position for view
 pub fn set_position(L: *zlua.Lua) i32 {
-  std.log.debug("repositioning", .{});
-
   const view_id: u64 = @intCast(L.checkInteger(1));
   const x: i32 = @intFromFloat(@round(L.checkNumber(2)));
   const y: i32 = @intFromFloat(@round(L.checkNumber(3)));
-
-  std.log.debug("position to set: ({d}, {d})", .{x, y});
 
   const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
   if(view) |v| {

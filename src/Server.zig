@@ -211,7 +211,6 @@ fn handleNewXdgToplevelDecoration(
   decoration: *wlr.XdgToplevelDecorationV1
 ) void {
   if(server.root.viewById(@intFromPtr(decoration.toplevel))) |view| {
-    std.log.debug("found view\n", .{});
     view.xdg_toplevel_decoration = decoration;
   }
 }
@@ -224,6 +223,7 @@ fn handleNewLayerSurface(
   _: *wl.Listener(*wlr.LayerSurfaceV1),
   layer_surface: *wlr.LayerSurfaceV1
 ) void {
+  std.log.debug("requested layer shell\n", .{});
   if (layer_surface.output == null) {
     if (server.seat.focused_output == null) {
       std.log.err("No output available for new layer surface", .{});
