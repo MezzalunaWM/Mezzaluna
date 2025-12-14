@@ -305,9 +305,6 @@ fn handleDestroy(
 }
 
 pub fn arrangeLayers(self: *Output) void {
-  const debug = @import("Debug.zig");
-  debug.debugPrintSceneTree();
-
   var full_box: wlr.Box = .{
     .x = 0,
     .y = 0,
