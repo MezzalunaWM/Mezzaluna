@@ -45,7 +45,7 @@ cursor: Cursor,
 
 // Lua data
 keymaps: std.AutoHashMap(u64, Keymap),
-hooks: std.ArrayList(*Hook),
+hooks: std.AutoHashMap(i32, *Hook),
 events: Events,
 remote_lua_clients: std.DoublyLinkedList,
 
@@ -102,7 +102,7 @@ pub fn init(self: *Server) void {
     .cursor = undefined,
     .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
     .keymaps = .init(gpa),
-    .hooks = try .initCapacity(gpa, 10), // TODO: choose how many slots to start with
+    .hooks = .init(gpa),
     .events = try .init(gpa),
     .remote_lua_clients = .{},
   };
