@@ -1,3 +1,11 @@
+mez.input.add_keymap("alt", "g", {
+  press = function ()
+    for _, id in ipairs(mez.view.get_all_ids()) do
+      print(id)
+    end
+  end
+})
+
 local master = function()
   local config = {
     tag_count = 5,
@@ -6,7 +14,7 @@ local master = function()
   local ctx = {
     master_ratio = 0.5,
     tags = {},
-    tag_id = 1
+    tag_id = 1,
   }
 
   local tile_onscreen = function(tag_id, res)
@@ -124,9 +132,10 @@ local master = function()
     end
   })
 
-  mez.hook.add("ViewPointerMotion", {
-    callback = function (view_id, cursor_x, cursor_y)
-      mez.view.set_focused(view_id)
+
+  mez.hook.add("ViewRequestFullscreen", {
+    callback = function (view_id)
+      mez.view.toggle_fullscreen(view_id)
     end
   })
 
@@ -248,6 +257,29 @@ local master = function()
     end
   })
 
+  local fullscreen = function (view_id)
+    print("Fullscreen")
+    mez.view.toggle_fullscreen(view_id)
+    mez.view.set_position(view_id, 0, 0)
+    local res = mez.output.get_resolution(0)
+    mez.view.set_size(view_id, res.width, res.height)
+    tile_all()
+  end
+
+  mez.input.add_keymap("alt|shift", "F", {
+    press = function() fullscreen(0) end
+  })
+
+  mez.hook.add("ViewRequestFullscreen", {
+    callback = fullscreen
+  })
+
+  mez.hook.add("ViewPointerMotion", {
+    callback = function (view_id, cursor_x, cursor_y)
+      mez.view.set_focused(view_id)
+    end
+  })
+
   for i = 1, 12 do
     mez.input.add_keymap("ctrl|alt", "XF86Switch_VT_"..i, {
       press = function() mez.api.change_vt(i) end
@@ -282,4 +314,3 @@ function print_table(tbl, indent, seen)
         end
     end
 end
-

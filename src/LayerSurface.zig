@@ -6,12 +6,13 @@ const wlr = @import("wlroots");
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig");
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
 output: *Output,
+scene_node_data: SceneNodeData,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
 scene_layer_surface: *wlr.SceneLayerSurfaceV1,
 
@@ -27,9 +28,22 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
   const self = try gpa.create(LayerSurface);
 
   self.* = .{
-    .output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data)),
+    .output = blk: {
+      // These block things are dangerous
+      // There was no need for this
+      // But I cannot be stopped
+      //        - Powerhungry programmer
+      const data = wlr_layer_surface.output.?.data;
+      if(data == null) unreachable;
+      const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(wlr_layer_surface.output.?.data.?));
+      break :blk switch(scene_node_data.*) {
+        .output => @fieldParentPtr("scene_node_data", scene_node_data),
+        else => unreachable
+      };
+    },
     .wlr_layer_surface = wlr_layer_surface,
     .scene_layer_surface = undefined,
+    .scene_node_data = .{ .layer_surface = self }
   };
 
   if(server.seat.focused_output) |output| {
@@ -45,11 +59,8 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     };
   }
 
-  try SceneNodeData.setData(
-      &self.scene_layer_surface.tree.node,
-      .{ .layer_surface = self },
-  );
-  self.wlr_layer_surface.surface.data = &self.scene_layer_surface.tree.node;
+  self.wlr_layer_surface.surface.data = &self.scene_node_data;
+  self.scene_layer_surface.tree.node.data = &self.scene_node_data;
 
   self.wlr_layer_surface.events.destroy.add(&self.destroy);
   self.wlr_layer_surface.surface.events.map.add(&self.map);
@@ -93,8 +104,10 @@ fn handleDestroy(
 fn handleMap(
   listener: *wl.Listener(void)
 ) void {
-  const layer: *LayerSurface = @fieldParentPtr("map", listener);
-  layer.allowKeyboard();
+  const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
+  std.log.debug("layer surface mapped", .{});
+  layer_suraface.output.arrangeLayers();
+  layer_suraface.allowKeyboard();
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
@@ -102,6 +115,8 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 
   // FIXME: this crashes mez when killing mez
   layer_surface.output.arrangeLayers();
+
+  // TODO: Idk if this should be deiniting the layer surface entirely
   layer_surface.deinit();
 }
 

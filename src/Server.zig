@@ -4,20 +4,21 @@ const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
-const Root         = @import("Root.zig");
-const Seat         = @import("Seat.zig");
-const Cursor       = @import("Cursor.zig");
-const Keyboard     = @import("Keyboard.zig");
-const LayerSurface = @import("LayerSurface.zig");
-const Output       = @import("Output.zig");
-const View         = @import("View.zig");
-const Utils        = @import("Utils.zig");
-const Keymap       = @import("types/Keymap.zig");
-const Hook         = @import("types/Hook.zig");
-const Events       = @import("types/Events.zig");
-const Popup = @import("Popup.zig");
-const RemoteLua = @import("RemoteLua.zig");
+const Root             = @import("Root.zig");
+const Seat             = @import("Seat.zig");
+const Cursor           = @import("Cursor.zig");
+const Keyboard         = @import("Keyboard.zig");
+const LayerSurface     = @import("LayerSurface.zig");
+const Output           = @import("Output.zig");
+const View             = @import("View.zig");
+const Keymap           = @import("types/Keymap.zig");
+const Hook             = @import("types/Hook.zig");
+const Events           = @import("types/Events.zig");
+const Popup            = @import("Popup.zig");
+const RemoteLua        = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
+const Utils            = @import("Utils.zig");
+const SceneNodeData    = @import("SceneNodeData.zig").SceneNodeData;
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
@@ -34,8 +35,7 @@ shm: *wlr.Shm,
 xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
-
-// Input
+xdg_activation: *wlr.XdgActivationV1,
 
 allocator: *wlr.Allocator,
 
@@ -43,7 +43,7 @@ root: Root,
 seat: Seat,
 cursor: Cursor,
 
-// lua data
+// Lua data
 keymaps: std.AutoHashMap(u64, Keymap),
 hooks: std.ArrayList(*Hook),
 events: Events,
@@ -53,14 +53,11 @@ remote_lua_clients: std.DoublyLinkedList,
 new_input: wl.Listener(*wlr.InputDevice) = .init(handleNewInput),
 new_output: wl.Listener(*wlr.Output) = .init(handleNewOutput),
 // backend.events.destroy
-
-// XdgShell listeners
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(handleNewXdgToplevel),
 new_xdg_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewXdgPopup),
 new_xdg_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(handleNewXdgToplevelDecoration),
-
-// LayerShell Listeners
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleNewLayerSurface),
+request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .init(handleRequestActivate),
 
 pub fn init(self: *Server) void {
   errdefer Utils.oomPanic();
@@ -94,6 +91,7 @@ pub fn init(self: *Server) void {
     .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
     .layer_shell = try wlr.LayerShellV1.create(wl_server, 4),
     .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
+    .xdg_activation = try wlr.XdgActivationV1.create(self.wl_server),
     .event_loop = event_loop,
     .session = session,
     .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
@@ -133,19 +131,13 @@ pub fn init(self: *Server) void {
   self.root.scene.setGammaControlManagerV1(try wlr.GammaControlManagerV1.create(self.wl_server));
 
   // Add event listeners to events
-  // Backedn events
   self.backend.events.new_input.add(&self.new_input);
   self.backend.events.new_output.add(&self.new_output);
-
-  // XdgShell events
   self.xdg_shell.events.new_toplevel.add(&self.new_xdg_toplevel);
   self.xdg_shell.events.new_popup.add(&self.new_xdg_popup);
-
-  // XdgDecorationManagerV1 events
   self.xdg_toplevel_decoration_manager.events.new_toplevel_decoration.add(&self.new_xdg_toplevel_decoration);
-
-  // LayerShell events
   self.layer_shell.events.new_surface.add(&self.new_layer_surface);
+  self.xdg_activation.events.request_activate.add(&self.request_activate);
 
   self.events.exec("ServerStartPost", .{});
 }
@@ -217,14 +209,15 @@ fn handleNewXdgToplevelDecoration(
   }
 }
 
-fn handleNewXdgPopup(_: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopup) void {
-    _ = xdg_popup;
+fn handleNewXdgPopup(_: *wl.Listener(*wlr.XdgPopup), _: *wlr.XdgPopup) void {
+  std.log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
 }
 
 fn handleNewLayerSurface(
   _: *wl.Listener(*wlr.LayerSurfaceV1),
   layer_surface: *wlr.LayerSurfaceV1
 ) void {
+  std.log.debug("requested layer shell\n", .{});
   if (layer_surface.output == null) {
     if (server.seat.focused_output == null) {
       std.log.err("No output available for new layer surface", .{});
@@ -236,4 +229,18 @@ fn handleNewLayerSurface(
   }
 
   _ = LayerSurface.init(layer_surface);
+}
+
+fn handleRequestActivate(
+    _: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivate),
+    event: *wlr.XdgActivationV1.event.RequestActivate,
+) void {
+  if(event.surface.data == null) return;
+
+  const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
+  if(scene_node_data.* == .view) {
+    scene_node_data.view.setFocused();
+  } else {
+    std.log.warn("Ignoring request to activate non-view", .{});
+  }
 }

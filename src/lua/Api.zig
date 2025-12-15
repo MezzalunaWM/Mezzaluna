@@ -55,3 +55,11 @@ pub fn change_vt(L: *zlua.Lua) i32 {
   L.pushNil();
   return 1;
 }
+
+/// --- Print the scene tree for debugging
+pub fn print_scene(L: *zlua.Lua) i32 {
+  @import("../Debug.zig").debugPrintSceneTree();
+
+  L.pushNil();
+  return 1;
+}

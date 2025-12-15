@@ -1,7 +1,10 @@
 const std = @import("std");
 const zlua = @import("zlua");
+const wlr = @import("wlroots");
 
+const Output = @import("../Output.zig");
 const View = @import("../View.zig");
+const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 const LuaUtils = @import("LuaUtils.zig");
 
 const server = &@import("../main.zig").server;
@@ -15,24 +18,48 @@ fn view_id_err(L: *zlua.Lua) noreturn {
 // ---Get the ids for all available views
 // ---@return view_id[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
-  var it = server.root.scene.tree.children.iterator(.forward);
-  var index: usize = 1;
+  var output_it = server.root.output_layout.outputs.iterator(.forward);
+  var index: i32 = 1;
 
   L.newTable();
 
-  while(it.next()) |node| : (index += 1) {
-    if(node.data == null) continue;
+  while(output_it.next()) |o| {
+    if(o.output.data == null) continue;
+    const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
-    const view = @as(*View, @ptrCast(@alignCast(node.data.?)));
+    const layers = [_]*wlr.SceneTree{
+      output.layers.content,
+      output.layers.fullscreen,
+    };
 
-    L.pushInteger(@intCast(index));
-    L.pushInteger(@intCast(view.id));
-    L.setTable(-3);
+    for(layers) |layer| {
+      if(layer.children.length() == 0) continue;
+      if(@intFromPtr(layer) == 0) {
+        std.log.debug("ts is literally a null ptr", .{});
+        continue;
+      }
+
+      var view_it = layer.children.iterator(.forward);
+
+      while(view_it.next()) |v| {
+        if(v.data == null) continue;
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
+
+        if(scene_node_data.* == .view) {
+          L.pushInteger(@intCast(index));
+          L.pushInteger(@intCast(scene_node_data.view.id));
+          L.setTable(-3);
+
+          index += 1;
+        }
+      }
+    }
   }
 
   return 1;
 }
 
+// TODO: What is this?
 pub fn check(L: *zlua.Lua) i32 {
   L.pushNil();
   return 1;
@@ -69,13 +96,9 @@ pub fn close(L: *zlua.Lua) i32 {
 // ---@param x number x position for view
 // ---@param y number y position for view
 pub fn set_position(L: *zlua.Lua) i32 {
-  std.log.debug("repositioning", .{});
-
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   const x = LuaUtils.coerceNumber(i32, L.checkNumber(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
   const y = LuaUtils.coerceNumber(i32, L.checkNumber(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
-
-  std.log.debug("position to set: ({d}, {d})", .{x, y});
 
   const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
   if(view) |v| {
@@ -152,6 +175,25 @@ pub fn set_focused(L: *zlua.Lua) i32 {
     view.setFocused();
     L.pushNil();
     return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Resize the view by it's top left corner
+// ---@param view_id view_id 0 maps to focused view
+pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
+  if(view) |v| {
+    std.log.debug("toggling fullscreen", .{});
+    if(v.fullscreen) {
+      v.toContent();
+    } else {
+      v.toFullscreen();
+    }
   }
 
   L.pushNil();

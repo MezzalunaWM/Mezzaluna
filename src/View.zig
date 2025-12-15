@@ -6,6 +6,8 @@ const wlr = @import("wlroots");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+
 const Utils = @import("Utils.zig");
 
 const gpa = std.heap.c_allocator;
@@ -13,6 +15,7 @@ const server = &@import("main.zig").server;
 
 mapped: bool,
 focused: bool,
+fullscreen: bool,
 id: u64,
 
 // workspace: Workspace,
@@ -20,6 +23,7 @@ output: ?*Output,
 xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 scene_tree: *wlr.SceneTree,
+scene_node_data: SceneNodeData,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -56,12 +60,15 @@ pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.* = .{
     .focused = false,
     .mapped = false,
+    .fullscreen = false,
     .id = @intFromPtr(xdg_toplevel),
     .output = null,
 
     .xdg_toplevel = xdg_toplevel,
     .scene_tree = undefined,
     .xdg_toplevel_decoration = null,
+
+    .scene_node_data = .{ .view = self }
   };
 
   self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
@@ -76,8 +83,8 @@ pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.scene_tree = try server.root.waiting_room.createSceneXdgSurface(xdg_toplevel.base);
   }
 
-  self.scene_tree.node.data = self;
-  self.xdg_toplevel.base.data = self.scene_tree;
+  self.scene_tree.node.data = &self.scene_node_data;
+  self.xdg_toplevel.base.data = &self.scene_node_data;
 
   self.xdg_toplevel.events.destroy.add(&self.destroy);
   self.xdg_toplevel.base.surface.events.map.add(&self.map);
@@ -123,11 +130,27 @@ pub fn setFocused(self: *View) void {
 }
 
 pub fn close(self: *View) void {
+  self.xdg_toplevel.sendClose();
   if(self.focused) {
     server.seat.focused_view = null;
   }
+}
 
-  self.xdg_toplevel.sendClose();
+pub fn toFullscreen(self: *View) void {
+  // TODO: What should the final behaviour of this be
+  if(server.seat.focused_output) |output| {
+    self.scene_tree.node.reparent(output.layers.fullscreen);
+  }
+  self.fullscreen = true;
+  _ = self.xdg_toplevel.setFullscreen(true);
+}
+
+pub fn toContent(self: *View) void {
+  if(server.seat.focused_output) |output| {
+    self.scene_tree.node.reparent(output.layers.content);
+  }
+  self.fullscreen = false;
+  _ = self.xdg_toplevel.setFullscreen(false);
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
@@ -258,7 +281,7 @@ fn handleRequestMinimize(
   listener: *wl.Listener(void)
 ) void {
   const view: *View = @fieldParentPtr("request_minimize", listener);
-  server.events.exec("ViewRequestFullscreen", .{view.id});
+  server.events.exec("ViewRequestMinimize", .{view.id});
 }
 
 fn handleSetAppId(
