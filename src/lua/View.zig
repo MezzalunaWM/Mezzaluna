@@ -109,10 +109,34 @@ pub fn set_position(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Resize the view by it's top left corner
+// ---Get the position of the view
 // ---@param view_id view_id 0 maps to focused view
-// ---@param width number width for view
-// ---@param height number height for view
+// ---@return { x: integer, y: integer }? Position of the view
+pub fn get_position(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
+  if (view) |v| {
+    L.newTable();
+
+    _ = L.pushString("x");
+    L.pushInteger(@intCast(v.xdg_toplevel.base.geometry.x));
+    L.setTable(-3);
+
+    _ = L.pushString("y");
+    L.pushInteger(@intCast(v.xdg_toplevel.base.geometry.y));
+    L.setTable(-3);
+
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Set the size of the spesified view. Will be resized relative to
+//    the view's top left corner.
+// ---@param view_id view_id 0 maps to focused view
+// ---@return
 pub fn set_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   // We use u32s here to enforce a minimum size of zero. The call to resize a
@@ -131,6 +155,9 @@ pub fn set_size(L: *zlua.Lua) i32 {
   return 1;
 }
 
+// ---Get the size of the view
+// ---@param view_id view_id 0 maps to focused view
+// ---@return { width: integer, height: integer }? Size of the view
 pub fn get_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);

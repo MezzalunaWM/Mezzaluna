@@ -6,6 +6,43 @@ mez.input.add_keymap("alt", "g", {
   end
 })
 
+mez.input.add_keymap("alt", "i", {
+  press = function ()
+    local coroutine = require("coroutine")
+    print(coroutine)
+    local co = coroutine.create(function ()
+      print("starting coroutine")
+      local view_id = mez.view.get_focused_id()
+
+      local size = mez.view.get_size(view_id)
+      local pos = mez.view.get_position(view_id)
+      local res = mez.output.get_resolution(0)
+
+      local x_pos = pos.x
+      local y_pos = pos.y
+      local x_vel = 10
+      local y_vel = 10
+
+      while true do
+        x_pos = x_pos + x_vel
+        y_pos = y_pos + y_vel
+
+        if x_pos + size.width > res.width or x_pos < 0 then
+          x_vel = x_vel * -1
+        end
+
+        if y_pos + size.height > res.height or y_pos < 0 then
+          y_vel = y_vel * -1
+        end
+
+        print("(" .. x_pos .. ", " .. y_pos .. ")")
+        mez.view.set_position(view_id, x_pos, y_pos)
+      end
+    end)
+    coroutine.resume(co)
+  end
+})
+
 local master = function()
   local config = {
     tag_count = 5,
