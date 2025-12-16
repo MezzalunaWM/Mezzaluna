@@ -12,6 +12,7 @@ const Api =    @import("Api.zig");
 const Hook =   @import("Hook.zig");
 const View =   @import("View.zig");
 const Output = @import("Output.zig");
+const Remote = @import("Remote.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -138,6 +139,11 @@ pub fn openLibs(self: *zlua.Lua) void {
       const output_funcs = zlua.fnRegsFromType(Output);
       LuaUtils.newLib(self, output_funcs);
       self.setField(-2, "output");
+    }
+    {
+      const remote_funcs = zlua.fnRegsFromType(Remote);
+      LuaUtils.newLib(self, remote_funcs);
+      self.setField(-2, "remote");
     }
   }
 }
