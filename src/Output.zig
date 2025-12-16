@@ -19,6 +19,7 @@ const server = &@import("main.zig").server;
 
 focused: bool,
 id: u64,
+fullscreen: ?*View,
 
 wlr_output: *wlr.Output,
 state: wlr.Output.State,
@@ -63,6 +64,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     .id = @intFromPtr(wlr_output),
     .wlr_output = wlr_output,
     .tree = try server.root.scene.tree.createSceneTree(),
+    .fullscreen = null,
     .layers = .{
       .background = try self.tree.createSceneTree(),
       .bottom = try self.tree.createSceneTree(),
@@ -83,8 +85,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     .scene_node_data = SceneNodeData{ .output = self },
     .state = wlr.Output.State.init()
   };
-
-
 
   wlr_output.events.frame.add(&self.frame);
   wlr_output.events.request_state.add(&self.request_state);
@@ -256,6 +256,21 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
     }
   }
 
+  return null;
+}
+
+pub fn getFullscreenedView(self: *Output) ?*View {
+  if(self.layers.fullscreen.children.length() != 1) {
+    return null;
+  }
+
+  var it = self.layers.fullscreen.children.iterator(.forward);
+  if(it.next().?.data) |data| {
+    const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
+    if(scene_node_data.* == .view) {
+      return scene_node_data.view;
+    }
+  }
   return null;
 }
 
