@@ -6,13 +6,23 @@ const wl = @import("wayland").server.wl;
 const xkb = @import("xkbcommon");
 
 const Utils =  @import("Utils.zig");
+const Popup = @import("Popup.zig");
 const View =   @import("View.zig");
+const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 
 const server = &@import("main.zig").server;
 
+const FocusDataType = enum { view, popup, layer_surface };
+pub const FocusData = union(FocusDataType) {
+  view: *View,
+  popup: *Popup,
+  layer_surface: *LayerSurface
+};
+
 wlr_seat: *wlr.Seat,
-focused_view: ?*View,
+
+focused_surface: ?FocusData,
 focused_output: ?*Output,
 
 keyboard_group: *wlr.KeyboardGroup,
@@ -40,7 +50,7 @@ pub fn init(self: *Seat) void {
 
   self.* = .{
     .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
-    .focused_view = null,
+    .focused_surface = null,
     .focused_output = null,
     .keyboard_group = try wlr.KeyboardGroup.create(),
     .keymap = keymap.ref(),
@@ -63,6 +73,74 @@ pub fn deinit(self: *Seat) void {
 
   self.keyboard_group.destroy();
   self.wlr_seat.destroy();
+}
+
+pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
+  const surface: ?*wlr.Surface = blk: {
+    if (to_focus != null) {
+      break :blk switch (to_focus.?) {
+        .view => to_focus.?.view.xdg_toplevel.base.surface,
+        .layer_surface => to_focus.?.layer_surface.wlr_layer_surface.surface,
+        .popup => to_focus.?.popup.xdg_popup.base.surface
+      };
+    } else {
+      break :blk null;
+    }
+  };
+
+  // Remove focus from the current surface unless
+  //  - current has exclusive keyboard interactivity
+  //  - the current view is fullscreen and
+  //      - to focus is a content level view
+  //      - to focus is a bottom or background level layer
+  if (self.focused_surface) |current_focus| {
+    const current_surface = switch(current_focus) {
+      .view => current_focus.view.xdg_toplevel.base.surface,
+      .layer_surface => current_focus.layer_surface.wlr_layer_surface.surface,
+      .popup => current_focus.popup.xdg_popup.base.surface
+    };
+    if (current_surface == surface) return; // Same surface
+
+    // Don't change focus under these circumstances
+    if(current_focus == .layer_surface) {
+      if(current_focus.layer_surface.wlr_layer_surface.current.keyboard_interactive == .exclusive) return;
+    } else if(current_focus == .view and current_focus.view.fullscreen) { // Current focus is a fullscreened view
+      switch (to_focus.?) {
+        .layer_surface => |*layer_surface| {
+          const layer = layer_surface.*.wlr_layer_surface.current.layer;
+          if(layer == .background or layer == .bottom) return;
+        },
+        .view => |*view| {
+          if(!view.*.fullscreen) return; // TODO: Is this the correct conditional
+        },
+        else => {}
+      }
+    }
+
+    // Clear the focus if applicable
+    switch (current_focus) {
+      .layer_surface => {}, // IDK if we actually have to clear any focus here
+      else => {
+        if(wlr.XdgSurface.tryFromWlrSurface(current_surface)) |xdg_surface| {
+          _ = xdg_surface.role_data.toplevel.?.setActivated(false);
+        }
+      }
+    }
+  }
+
+  if(to_focus != null) {
+    server.seat.wlr_seat.keyboardNotifyEnter(
+      surface.?,
+      &server.seat.wlr_seat.keyboard_state.keyboard.?.keycodes,
+      null
+    );
+    if(to_focus.? != .layer_surface) {
+      if(wlr.XdgSurface.tryFromWlrSurface(surface.?)) |xdg_surface| {
+        _ = xdg_surface.role_data.toplevel.?.setActivated(true);
+      }
+    }
+    self.focused_surface = to_focus;
+  }
 }
 
 pub fn focusOutput(self: *Seat, output: *Output) void {

@@ -295,11 +295,7 @@ local master = function()
   })
 
   local fullscreen = function (view_id)
-    print("Fullscreen")
     mez.view.toggle_fullscreen(view_id)
-    mez.view.set_position(view_id, 0, 0)
-    local res = mez.output.get_resolution(0)
-    mez.view.set_size(view_id, res.width, res.height)
     tile_all()
   end
 

@@ -239,7 +239,7 @@ fn handleRequestActivate(
 
   const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
   if(scene_node_data.* == .view) {
-    scene_node_data.view.setFocused();
+    server.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
   } else {
     std.log.warn("Ignoring request to activate non-view", .{});
   }

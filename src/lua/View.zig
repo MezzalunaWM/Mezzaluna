@@ -68,9 +68,11 @@ pub fn check(L: *zlua.Lua) i32 {
 // ---Get the id for the focused view
 // ---@return view_id?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-  if(server.seat.focused_view) |view| {
-    L.pushInteger(@intCast(view.id));
-    return 1;
+  if(server.seat.focused_surface) |fs| {
+    if(fs == .view) {
+      L.pushInteger(@intCast(fs.view.id));
+      return 1;
+    }
   }
 
   L.pushNil();
@@ -82,8 +84,7 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
 pub fn close(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.close();
   }
 
@@ -100,8 +101,7 @@ pub fn set_position(L: *zlua.Lua) i32 {
   const x = LuaUtils.coerceNumber(i32, L.checkNumber(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
   const y = LuaUtils.coerceNumber(i32, L.checkNumber(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.setPosition(x, y);
   }
 
@@ -114,8 +114,7 @@ pub fn set_position(L: *zlua.Lua) i32 {
 // ---@return { x: integer, y: integer }? Position of the view
 pub fn get_position(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if (view) |v| {
+  if (LuaUtils.viewById(view_id)) |v| {
     L.newTable();
 
     _ = L.pushString("x");
@@ -146,8 +145,7 @@ pub fn set_size(L: *zlua.Lua) i32 {
   const width = LuaUtils.coerceNumber(u32, L.checkNumber(2)) catch L.raiseErrorStr("The width must be >= 0 and < inf", .{});
   const height = LuaUtils.coerceNumber(u32, L.checkNumber(3)) catch L.raiseErrorStr("The height must be >= 0 and < inf", .{});
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.setSize(@intCast(width), @intCast(height));
   }
 
@@ -160,8 +158,7 @@ pub fn set_size(L: *zlua.Lua) i32 {
 // ---@return { width: integer, height: integer }? Size of the view
 pub fn get_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if (view) |v| {
+  if (LuaUtils.viewById(view_id)) |v| {
     L.newTable();
 
     _ = L.pushString("width");
@@ -185,23 +182,9 @@ pub fn set_focused(L: *zlua.Lua) i32 {
   const view_id: ?c_longlong = L.optInteger(1);
 
   if(view_id == null) {
-    if(server.seat.focused_view != null) {
-      server.seat.focused_view.?.focused = false;
-      server.seat.focused_view = null;
-    }
-    L.pushNil();
-    return 1;
-  }
-
-  if (view_id == null) {
-    L.pushNil();
-    return 1;
-  }
-
-  if(server.root.viewById(@intCast(view_id.?))) |view| {
-    view.setFocused();
-    L.pushNil();
-    return 1;
+    server.seat.focusSurface(null);
+  } else if(server.root.viewById(@intCast(view_id.?))) |view| {
+    server.seat.focusSurface(.{ .view = view });
   }
 
   L.pushNil();
@@ -213,14 +196,8 @@ pub fn set_focused(L: *zlua.Lua) i32 {
 pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
-    std.log.debug("toggling fullscreen", .{});
-    if(v.fullscreen) {
-      v.toContent();
-    } else {
-      v.toFullscreen();
-    }
+  if(LuaUtils.viewById(view_id)) |v| {
+    v.toggleFullscreen();
   }
 
   L.pushNil();
@@ -233,8 +210,7 @@ pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
 pub fn get_title(L: *zlua.Lua) i32 {
   const view_id: u64 = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     if(v.xdg_toplevel.title == null) {
       L.pushNil();
       return 1;
@@ -254,8 +230,7 @@ pub fn get_title(L: *zlua.Lua) i32 {
 pub fn get_app_id(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     if(v.xdg_toplevel.app_id == null) {
       L.pushNil();
       return 1;

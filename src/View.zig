@@ -104,53 +104,34 @@ pub fn deinit(self: *View) void {
   self.request_resize.link.remove();
 }
 
-pub fn setFocused(self: *View) void {
-  if (server.seat.wlr_seat.keyboard_state.focused_surface) |previous_surface| {
-    if (previous_surface == self.xdg_toplevel.base.surface) return;
-    if (wlr.XdgSurface.tryFromWlrSurface(previous_surface)) |xdg_surface| {
-      _ = xdg_surface.role_data.toplevel.?.setActivated(false);
-    }
-  }
-
-  self.scene_tree.node.raiseToTop();
-  _ = self.xdg_toplevel.setActivated(true);
-
-  const wlr_keyboard = server.seat.wlr_seat.getKeyboard() orelse return;
-  server.seat.wlr_seat.keyboardNotifyEnter(
-    self.xdg_toplevel.base.surface,
-    wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
-    &wlr_keyboard.modifiers,
-  );
-
-  if(server.seat.focused_view) |prev_view| {
-    prev_view.focused = false;
-  }
-  server.seat.focused_view = self;
-  self.focused = true;
-}
-
 pub fn close(self: *View) void {
   self.xdg_toplevel.sendClose();
   if(self.focused) {
-    server.seat.focused_view = null;
+    self.focused = false;
+    _ = self.xdg_toplevel.base.role_data.toplevel.?.setActivated(false);
+    server.seat.focused_surface = null;
   }
 }
 
-pub fn toFullscreen(self: *View) void {
-  // TODO: What should the final behaviour of this be
+pub fn toggleFullscreen(self: *View) void {
+  self.fullscreen = !self.fullscreen;
   if(server.seat.focused_output) |output| {
-    self.scene_tree.node.reparent(output.layers.fullscreen);
-  }
-  self.fullscreen = true;
-  _ = self.xdg_toplevel.setFullscreen(true);
-}
+    if(self.fullscreen and output.fullscreen != self) {
+      // Check to see if another fullscreened view exists, if so replace it
+      if(output.getFullscreenedView()) |view| {
+        view.toggleFullscreen();
+      }
 
-pub fn toContent(self: *View) void {
-  if(server.seat.focused_output) |output| {
-    self.scene_tree.node.reparent(output.layers.content);
+      self.scene_tree.node.reparent(output.layers.fullscreen);
+      self.setPosition(0, 0);
+      self.setSize(output.wlr_output.width, output.wlr_output.height);
+      output.fullscreen = self;
+    } else {
+      self.scene_tree.node.reparent(output.layers.content);
+      output.fullscreen = null;
+    }
   }
-  self.fullscreen = false;
-  _ = self.xdg_toplevel.setFullscreen(false);
+  _ = self.xdg_toplevel.setFullscreen(self.fullscreen);
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {

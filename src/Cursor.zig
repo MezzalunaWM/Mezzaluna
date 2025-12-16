@@ -122,15 +122,18 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     },
     .resize => {
       // Fix this resize
-      const focused_view = server.seat.focused_view;
+      const view: *View = blk: {
+        if(server.seat.focused_surface) |fs| {
+          if(fs != .view) return;
+          break :blk fs.view;
+        } else { return; }
+      };
 
-      if(focused_view) |view| {
-        _ = view.xdg_toplevel.setSize(
-          // TODO: configure the min and max using lua?
-          std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.x)) - view.scene_tree.node.x), 10, std.math.maxInt(i32)),
-          std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.y)) - view.scene_tree.node.y), 10, std.math.maxInt(i32))
-        );
-      }
+      _ = view.xdg_toplevel.setSize(
+        // TODO: configure the min and max using lua?
+        std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.x)) - view.scene_tree.node.x), 10, std.math.maxInt(i32)),
+        std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.y)) - view.scene_tree.node.y), 10, std.math.maxInt(i32))
+      );
     },
   }
 }
@@ -160,10 +163,6 @@ fn handleButton(
 
   _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
 
-  if (server.seat.focused_view) |view| {
-    view.setFocused();
-  }
-
   // @hook PointerButtonPress // TODO Probably change this name
   // @param button string // TODO Translate a button to a string or smth
   // @param state string - "pressed" or "released"
@@ -177,18 +176,23 @@ fn handleButton(
         // Can be BTN_RIGHT, BTN_LEFT, or BTN_MIDDLE
         cursor.drag.start_x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x));
         cursor.drag.start_y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y));
-        if(server.seat.focused_view) |view| {
+        if(server.seat.focused_surface) |fs| {
           // Keep track of where the drag started
-          cursor.drag.view = view;
-          cursor.drag.view_offset_x = cursor.drag.start_x - view.scene_tree.node.x;
-          cursor.drag.view_offset_y = cursor.drag.start_y - view.scene_tree.node.y;
+
+          if(fs == .view) {
+            cursor.drag.view = fs.view;
+            cursor.drag.view_offset_x = cursor.drag.start_x - fs.view.scene_tree.node.x;
+            cursor.drag.view_offset_y = cursor.drag.start_y - fs.view.scene_tree.node.y;
+          }
 
           // Maybe comptime this for later reference
           if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_LEFT")) {
             cursor.mode = .move;
           } else if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_RIGHT")) {
-            cursor.mode = .resize;
-            _ = view.xdg_toplevel.setResizing(true);
+            if(fs == .view) {
+              cursor.mode = .resize;
+              _ = fs.view.xdg_toplevel.setResizing(true);
+            }
           }
         }
       }
