@@ -13,8 +13,7 @@ const Output = @import("Output.zig");
 
 const server = &@import("main.zig").server;
 
-const FocusDataType = enum { view, popup, layer_surface };
-pub const FocusData = union(FocusDataType) {
+pub const FocusData = union(enum) {
   view: *View,
   popup: *Popup,
   layer_surface: *LayerSurface
