@@ -105,12 +105,13 @@ pub fn deinit(self: *View) void {
 }
 
 pub fn close(self: *View) void {
-  self.xdg_toplevel.sendClose();
   if(self.focused) {
+    if(self.fullscreen) self.toggleFullscreen();
     self.focused = false;
-    _ = self.xdg_toplevel.base.role_data.toplevel.?.setActivated(false);
-    server.seat.focused_surface = null;
+    server.seat.focusSurface(null);
   }
+
+  self.xdg_toplevel.sendClose();
 }
 
 pub fn toggleFullscreen(self: *View) void {
@@ -263,6 +264,7 @@ fn handleRequestMinimize(
 ) void {
   const view: *View = @fieldParentPtr("request_minimize", listener);
   server.events.exec("ViewRequestMinimize", .{view.id});
+  std.log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(
@@ -270,6 +272,7 @@ fn handleSetAppId(
 ) void {
   const view: *View = @fieldParentPtr("set_app_id", listener);
   server.events.exec("ViewAppIdUpdate", .{view.id});
+  std.log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(
@@ -277,4 +280,5 @@ fn handleSetTitle(
 ) void {
   const view: *View = @fieldParentPtr("set_title", listener);
   server.events.exec("ViewTitleUpdate", .{view.id});
+  std.log.debug("request_set_title unimplemented", .{});
 }

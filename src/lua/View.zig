@@ -196,7 +196,9 @@ pub fn set_focused(L: *zlua.Lua) i32 {
 pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
+  std.log.debug("fullscreen view {d}", .{view_id});
   if(LuaUtils.viewById(view_id)) |v| {
+    std.log.debug("toggling fullscreen", .{});
     v.toggleFullscreen();
   }
 

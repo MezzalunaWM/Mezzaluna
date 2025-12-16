@@ -169,13 +169,6 @@ local master = function()
     end
   })
 
-
-  mez.hook.add("ViewRequestFullscreen", {
-    callback = function (view_id)
-      mez.view.toggle_fullscreen(view_id)
-    end
-  })
-
   mez.input.add_keymap("alt", "p", {
     press = function()
       mez.api.spawn("wmenu-run")

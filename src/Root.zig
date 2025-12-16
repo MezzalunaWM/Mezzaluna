@@ -101,6 +101,10 @@ pub fn viewById(self: *Root, id: u64) ?*View {
         return view_snd.view;
       }
     }
+
+    if(output.fullscreen) |fullscreen| {
+      if(fullscreen.id == id) return fullscreen;
+    }
   }
 
   return null;

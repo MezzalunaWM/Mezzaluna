@@ -238,7 +238,14 @@ fn handleRequestActivate(
   if(event.surface.data == null) return;
 
   const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
+
   if(scene_node_data.* == .view) {
+    if(server.seat.focused_output) |output| {
+      if(output.fullscreen) |fullscreen| {
+        server.seat.focusSurface(.{ .view = fullscreen });
+        return;
+      }
+    }
     server.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
   } else {
     std.log.warn("Ignoring request to activate non-view", .{});
