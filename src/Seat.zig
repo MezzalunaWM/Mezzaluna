@@ -15,8 +15,14 @@ const server = &@import("main.zig").server;
 
 pub const FocusData = union(enum) {
   view: *View,
-  popup: *Popup,
-  layer_surface: *LayerSurface
+  layer_surface: *LayerSurface,
+
+  pub fn getSurface(self: FocusData) *wlr.Surface {
+    return switch (self) {
+      .view => |*v| v.*.xdg_toplevel.base.surface,
+      .layer_surface => |*ls| ls.*.wlr_layer_surface.surface,
+    };
+  }
 };
 
 wlr_seat: *wlr.Seat,
@@ -77,11 +83,7 @@ pub fn deinit(self: *Seat) void {
 pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
   const surface: ?*wlr.Surface = blk: {
     if (to_focus != null) {
-      break :blk switch (to_focus.?) {
-        .view => to_focus.?.view.xdg_toplevel.base.surface,
-        .layer_surface => to_focus.?.layer_surface.wlr_layer_surface.surface,
-        .popup => to_focus.?.popup.xdg_popup.base.surface
-      };
+      break :blk to_focus.?.getSurface();
     } else {
       break :blk null;
     }
@@ -93,11 +95,7 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
   //  - current is fullscreen and to focus is content
   //  - current is fullscreen and layer is bottom or background
   if (self.focused_surface) |current_focus| {
-    const current_surface = switch(current_focus) {
-      .view => current_focus.view.xdg_toplevel.base.surface,
-      .layer_surface => current_focus.layer_surface.wlr_layer_surface.surface,
-      .popup => current_focus.popup.xdg_popup.base.surface
-    };
+    const current_surface = current_focus.getSurface();
     if (current_surface == surface) return; // Same surface
 
     if(to_focus != null) {
@@ -114,12 +112,10 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
               },
               .view => |*view| {
                 if(!view.*.fullscreen) return;
-              },
-              else => {}
+              }
             }
           }
-        },
-        else => {}
+        }
       }
     } else if(current_focus == .view and current_focus.view.fullscreen){
       return;
