@@ -150,6 +150,15 @@ fn handleMap(listener: *wl.Listener(void)) void {
 
   server.events.exec("ViewMapPre", .{view.id});
 
+  // we're gonna tell the client that it's tiled so it doesn't try anything
+  // stupid
+  _ = view.xdg_toplevel.setTiled(.{
+    .top = true,
+    .bottom = true,
+    .left = true,
+    .right = true,
+  });
+
   view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
   view.xdg_toplevel.events.request_move.add(&view.request_move);
   view.xdg_toplevel.events.request_resize.add(&view.request_resize);

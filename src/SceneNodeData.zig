@@ -5,15 +5,7 @@ const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const Root = @import("Root.zig");
 
-const SceneNodeType = enum {
-  view,
-  layer_surface,
-  output,
-  output_layer,
-  root
-};
-
-pub const SceneNodeData = union(SceneNodeType) {
+pub const SceneNodeData = union(enum) {
   view: *View,
   layer_surface: *LayerSurface,
   output: *Output,

@@ -1,6 +1,7 @@
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const Output = @import("../Output.zig");
 const View = @import("../View.zig");
@@ -26,6 +27,10 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
   while(output_it.next()) |o| {
     if(o.output.data == null) continue;
     const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+    if (!output.state.enabled) {
+      std.log.debug("ts not enabled", .{});
+      continue;
+    }
 
     const layers = [_]*wlr.SceneTree{
       output.layers.content,
@@ -239,6 +244,40 @@ pub fn get_app_id(L: *zlua.Lua) i32 {
     }
 
     _ = L.pushString(std.mem.span(v.xdg_toplevel.app_id.?));
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Get the app_id of the view
+// ---@param view_id view_id 0 maps to focused view
+// ---@param enable boolean
+pub fn set_enabled(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  if (!L.isBoolean(2)) {
+    L.raiseErrorStr("argument 2 must be a boolean", .{});
+  }
+  const activate = L.toBoolean(2);
+
+  if (LuaUtils.viewById(view_id)) |v| {
+    _ = v.xdg_toplevel.setActivated(activate);
+    return 0;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Get the app_id of the view
+// ---@param view_id view_id 0 maps to focused view
+// ---@return boolean?
+pub fn get_enabled(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  if(LuaUtils.viewById(view_id)) |v| {
+    _ = L.pushBoolean(v.xdg_toplevel.current.activated);
     return 1;
   }
 

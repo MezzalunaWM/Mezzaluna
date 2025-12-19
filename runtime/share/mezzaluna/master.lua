@@ -59,6 +59,7 @@ local master = function()
       return
     end
 
+    mez.view.set_enabled(ctx.tags[tag_id].master, true)
     if #ctx.tags[tag_id].stack == 0 then
       mez.view.set_size(ctx.tags[tag_id].master, res.width, res.height)
       mez.view.set_position(ctx.tags[tag_id].master, 0, 0)
@@ -67,6 +68,7 @@ local master = function()
       mez.view.set_position(ctx.tags[tag_id].master, 0, 0)
 
       for i, stack_id in ipairs(ctx.tags[tag_id].stack) do
+        mez.view.set_enabled(stack_id, true)
         mez.view.set_size(stack_id, res.width * (1 - ctx.master_ratio), res.height / #ctx.tags[tag_id].stack)
         mez.view.set_position(stack_id, res.width * ctx.master_ratio, (res.height / #ctx.tags[tag_id].stack * (i - 1)))
       end
@@ -78,12 +80,9 @@ local master = function()
       return
     end
 
-    mez.view.set_position(ctx.tags[tag_id].master, 0, -res.height)
-    mez.view.set_size(ctx.tags[tag_id].master, res.width, res.height)
-
+    mez.view.set_enabled(ctx.tags[tag_id].master, false)
     for _, view in ipairs(ctx.tags[tag_id].stack) do
-      mez.view.set_position(view, 0, -res.height)
-      mez.view.set_size(view, res.width, res.height)
+      mez.view.set_enabled(view, false)
     end
   end
 
