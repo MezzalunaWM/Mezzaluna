@@ -3,13 +3,13 @@ mez.layout_manager.new_layout({
   callback = function(output)
     local mw, my, ty;
 
-    local mon = mez.output.get_resolution(0)
+    local mon = mez.output.get_resolution(output)
     local nmaster = 1
     local mfact = 0.5
 
     local view_ids = {}
 
-    local ok, ids = pcall(mez.output.get_all_views, 0)
+    local ok, ids = pcall(mez.output.get_all_views, output)
     if not ok or ids == nil then
       print("nillllll")
       return
