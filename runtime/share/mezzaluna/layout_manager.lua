@@ -4,10 +4,18 @@
 --- TODO: this may be overridden by the user by setting mez.layout prior to the
 --- runtime loading
 
----@class layout a singular layout
+local mapper = require("mapper")
+
+---@class layout.options options when creating a layout
 ---@field name string the name of the layout
 ---@field callback function this is the function which is run when changes to current state have been made
 ---@field events string[]? this is a list of the events that callback will be run on
+---@field layout_maps mapper.map[]? a list of layout maps
+---@field focus_maps mapper.map[]? a list of focus changing maps
+---@field cursor_maps mapper.map[]? a list of focus changing maps
+
+---@class layout : layout.options a singular layout
+---@field callback_id number the id of the callback
 
 ---@class layout_manager manage all your layouts
 ---@field layouts layout[] all the layouts that are registered
@@ -23,7 +31,7 @@ local layout_manager = {
 }
 
 --- create a new layout
----@param options layout
+---@param options layout.options
 ---@return layout your_layout returns your new layout
 function layout_manager.new_layout(options)
   local layout = {}
@@ -31,6 +39,9 @@ function layout_manager.new_layout(options)
   layout.name = options.name
   layout.callback = options.callback
   layout.events = layout_manager.events
+  layout.layout_maps = options.layout_maps
+  layout.focus_maps = options.focus_maps
+  layout.cursor_maps = options.cursor_maps
 
   -- store the new layout in the layout list
   layout_manager.layouts[#layout_manager.layouts + 1] = layout
@@ -50,18 +61,30 @@ function layout_manager.set_layout(layout_name)
 
   if layout_manager.current_layout then
     local current_layout = layout_manager.current_layout
-    -- TODO: this actually doesn't exist in mez just yet
-    -- mez.hook.del(current_layout)
+    mez.hook.del(layout_manager.current_layout.callback_id)
+    for _, maps in ipairs({
+      current_layout.layout_maps,
+      current_layout.focus_maps,
+      current_layout.cursor_maps,
+    }) do
+      mapper.del(maps)
+    end
   end
-  mez.hook.add(layout.events, {
+  layout_manager.current_layout = layout
+  layout.callback_id = mez.hook.add(layout.events, {
     callback = function ()
-      print("layouting")
       for _, output in ipairs(mez.output.get_all_ids()) do
         layout.callback(output)
       end
-      print("layouting done")
     end,
   })
+  for _, maps in ipairs({
+    layout.layout_maps,
+    layout.focus_maps,
+    layout.cursor_maps,
+  }) do
+    mapper.add(maps)
+  end
   layout.callback()
 end
 

@@ -1,6 +1,7 @@
 mez.layout_manager.new_layout({
   name = "master",
   callback = function(output)
+    if not output then return end
     local mw, my, ty;
 
     local mon = mez.output.get_resolution(output)
