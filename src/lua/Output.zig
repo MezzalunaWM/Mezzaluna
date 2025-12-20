@@ -1,8 +1,10 @@
 const std = @import("std");
 const zlua = @import("zlua");
+const wlr = @import("wlroots");
 
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 
 const server = &@import("../main.zig").server;
 
@@ -28,6 +30,59 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     L.pushInteger(@intCast(index));
     L.pushInteger(@intCast(output.id));
     L.setTable(-3);
+  }
+
+  return 1;
+}
+
+/// ---Get the view ids for all views on an output
+/// ---@param output_id output_id
+/// ---@return view_id[]?
+pub fn get_all_views(L: *zlua.Lua) i32 {
+  const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+  var index: i32 = 1;
+
+  L.newTable();
+
+  if(LuaUtils.outputById(output_id)) |o| {
+    if(o.wlr_output.data == null) {
+      L.pushNil();
+      return 1;
+    }
+    const output: *Output = @ptrCast(@alignCast(o.wlr_output.data.?));
+    if (!output.state.enabled) {
+      std.log.debug("ts not enabled", .{});
+      L.pushNil();
+      return 1;
+    }
+
+    const layers = [_]*wlr.SceneTree{
+      output.layers.content,
+      output.layers.fullscreen,
+    };
+
+    for(layers) |layer| {
+      if(layer.children.length() == 0) continue;
+      if(@intFromPtr(layer) == 0) {
+        std.log.debug("ts is literally a null ptr", .{});
+        continue;
+      }
+
+      var view_it = layer.children.iterator(.forward);
+
+      while(view_it.next()) |v| {
+        if(v.data == null) continue;
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
+
+        if(scene_node_data.* == .view) {
+          L.pushInteger(@intCast(index));
+          L.pushInteger(@intCast(scene_node_data.view.id));
+          L.setTable(-3);
+
+          index += 1;
+        }
+      }
+    }
   }
 
   return 1;

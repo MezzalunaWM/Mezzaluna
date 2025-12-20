@@ -4,6 +4,7 @@ const std = @import("std");
 const zlua = @import("zlua");
 
 const View = @import("../View.zig");
+const Output = @import("../Output.zig");
 
 const server = &@import("../main.zig").server;
 
@@ -55,6 +56,17 @@ pub fn viewById(view_id: u64) ?*View {
     }
   } else {
     return server.root.viewById(view_id);
+  }
+  return null;
+}
+
+pub fn outputById(output_id: u64) ?*Output {
+  if (output_id == 0) {
+    if(server.seat.focused_output) |output| {
+      return output;
+    }
+  } else {
+    return server.root.outputById(output_id);
   }
   return null;
 }

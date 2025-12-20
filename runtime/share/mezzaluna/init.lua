@@ -11,6 +11,7 @@ end
 -- allow loading files in the runtime directory
 package.path = package.path..";"..mez.fs.joinpath(mez.path.runtime, "?.lua")
 mez.inspect = require("inspect").inspect
+mez.layout_manager = require("layout_manager")
 
 mez.path.base_config = mez.fs.joinpath(mez.path.runtime, "master.lua")
 
