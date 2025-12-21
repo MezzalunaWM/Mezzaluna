@@ -7,6 +7,7 @@ const wlr = @import("wlroots");
 
 const Keymap = @import("../types/Keymap.zig");
 const Utils = @import("../Utils.zig");
+const LuaUtils = @import("LuaUtils.zig");
 
 const server = &@import("../main.zig").server;
 
@@ -80,4 +81,32 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 
   L.pushNil();
   return 1;
+}
+
+/// ---Get the repeat information
+/// ---@return integer[2]
+pub fn get_repeat_info(L: *zlua.Lua) i32 {
+  L.newTable();
+
+  L.pushInteger(server.seat.keyboard_group.keyboard.repeat_info.rate);
+  L.setField(-2, "rate");
+  L.pushInteger(server.seat.keyboard_group.keyboard.repeat_info.delay);
+  L.setField(-2, "delay");
+
+  return 1;
+}
+
+/// ---Set the repeat information
+/// ---@param integer rate
+/// ---@param integer delay
+pub fn set_repeat_info(L: *zlua.Lua) i32 {
+  const rate = LuaUtils.coerceInteger(i32, L.checkInteger(1)) catch {
+    L.raiseErrorStr("The rate must be a valid number", .{});
+  };
+  const delay = LuaUtils.coerceInteger(i32, L.checkInteger(2)) catch {
+    L.raiseErrorStr("The delay must be a valid number", .{});
+  };
+
+  server.seat.keyboard_group.keyboard.setRepeatInfo(rate, delay);
+  return 0;
 }
