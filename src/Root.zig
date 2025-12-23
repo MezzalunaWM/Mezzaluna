@@ -21,7 +21,6 @@ xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 scene: *wlr.Scene,
 scene_node_data: SceneNodeData,
 
-waiting_room: *wlr.SceneTree,
 scene_output_layout: *wlr.SceneOutputLayout,
 
 output_layout: *wlr.OutputLayout,
@@ -40,7 +39,6 @@ pub fn init(self: *Root) void {
   self.* = .{
     .scene = scene,
     .scene_node_data = .{ .root = self },
-    .waiting_room = try scene.tree.createSceneTree(),
     .output_layout = output_layout,
     .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(server.wl_server),
     .scene_output_layout = try scene.attachOutputLayout(output_layout),
