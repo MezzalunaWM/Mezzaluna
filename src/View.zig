@@ -166,6 +166,12 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
   view.mapped = false; // we do this before any work is done so that nobody tries
                        // any funny business
 
+  if (server.seat.focused_surface) |fs| {
+    if (fs == .view and fs.view == view) {
+      server.seat.focusSurface(null);
+    }
+  }
+
   view.request_fullscreen.link.remove();
   view.request_move.link.remove();
   view.request_resize.link.remove();

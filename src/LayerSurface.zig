@@ -113,6 +113,12 @@ fn handleMap(
 fn handleUnmap(listener: *wl.Listener(void)) void {
   const layer_surface: *LayerSurface = @fieldParentPtr("unmap", listener);
 
+  if (server.seat.focused_surface) |fs| {
+    if (fs == .layer_surface and fs.layer_surface == layer_surface) {
+      server.seat.focusSurface(null);
+    }
+  }
+
   // FIXME: this crashes mez when killing mez
   layer_surface.output.arrangeLayers();
 
