@@ -35,7 +35,7 @@ keymap: *xkb.Keymap,
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),
-// request_set_primary_selection
+request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(handleRequestSetPrimarySelection),
 // request_start_drage
 
 pub fn init(self: *Seat) void {
@@ -70,11 +70,13 @@ pub fn init(self: *Seat) void {
 
   self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
   self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
+  self.wlr_seat.events.request_set_primary_selection.add(&self.request_set_primary_selection);
 }
 
 pub fn deinit(self: *Seat) void {
   self.request_set_cursor.link.remove();
   self.request_set_selection.link.remove();
+  self.request_set_primary_selection.link.remove();
 
   self.keyboard_group.destroy();
   self.wlr_seat.destroy();
@@ -165,9 +167,16 @@ fn handleRequestSetCursor(
   server.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
 }
 
-fn handleRequestSetSelection (
+fn handleRequestSetSelection(
   _: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
   event: *wlr.Seat.event.RequestSetSelection,
 ) void {
   server.seat.wlr_seat.setSelection(event.source, event.serial);
+}
+
+fn handleRequestSetPrimarySelection(
+  _: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
+  event: *wlr.Seat.event.RequestSetPrimarySelection,
+) void {
+  server.seat.wlr_seat.setPrimarySelection(event.source, event.serial);
 }
