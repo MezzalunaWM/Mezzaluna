@@ -51,7 +51,7 @@ set_title: wl.Listener(void) = .init(handleSetTitle),
 // Do we need to add this
 // set_parent: wl.Listener(void) = .init(handleSetParent),
 
-pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
+pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   errdefer Utils.oomPanic();
 
   const self = try gpa.create(View);
@@ -71,16 +71,10 @@ pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
     .scene_node_data = .{ .view = self }
   };
 
-  self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
-
   // Add new Toplevel to root of the tree
-  // Later add to spesified output
   if(server.seat.focused_output) |output| {
     self.scene_tree = try output.layers.content.createSceneXdgSurface(xdg_toplevel.base);
     self.output = output;
-  } else {
-    std.log.err("No output to attach new view to", .{});
-    self.scene_tree = try server.root.waiting_room.createSceneXdgSurface(xdg_toplevel.base);
   }
 
   self.scene_tree.node.data = &self.scene_node_data;
@@ -88,35 +82,22 @@ pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
 
   self.xdg_toplevel.events.destroy.add(&self.destroy);
   self.xdg_toplevel.base.surface.events.map.add(&self.map);
+  self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
   self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
   self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
+  self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
 
   return self;
 }
 
-pub fn deinit(self: *View) void {
-  self.map.link.remove();
-  self.unmap.link.remove();
-  self.commit.link.remove();
-
-  self.destroy.link.remove();
-  self.request_move.link.remove();
-  self.request_resize.link.remove();
-}
-
+/// tell the client that we're removing it
 pub fn close(self: *View) void {
-  if(self.focused) {
-    if(self.fullscreen) self.toggleFullscreen();
-    self.focused = false;
-    server.seat.focusSurface(null);
-  }
-
   self.xdg_toplevel.sendClose();
 }
 
 pub fn toggleFullscreen(self: *View) void {
   self.fullscreen = !self.fullscreen;
-  if(server.seat.focused_output) |output| {
+  if(self.output) |output| {
     if(self.fullscreen and output.fullscreen != self) {
       // Check to see if another fullscreened view exists, if so replace it
       if(output.getFullscreenedView()) |view| {
@@ -169,16 +150,11 @@ fn handleMap(listener: *wl.Listener(void)) void {
   const xdg_surface = view.xdg_toplevel.base;
   server.seat.wlr_seat.keyboardNotifyEnter(
     xdg_surface.surface,
-    server.seat.keyboard_group.keyboard.keycodes[0..server.seat.keyboard_group.keyboard.num_keycodes],
+    &server.seat.keyboard_group.keyboard.keycodes,
     &server.seat.keyboard_group.keyboard.modifiers
   );
 
-  if(view.xdg_toplevel_decoration) |decoration| {
-    _ = decoration.setMode(wlr.XdgToplevelDecorationV1.Mode.server_side);
-  }
-
   view.mapped = true;
-
   server.events.exec("ViewMapPost", .{view.id});
 }
 
@@ -187,17 +163,15 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
   std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
   server.events.exec("ViewUnmapPre", .{view.id});
+  view.mapped = false; // we do this before any work is done so that nobody tries
+                       // any funny business
 
   view.request_fullscreen.link.remove();
   view.request_move.link.remove();
   view.request_resize.link.remove();
   view.set_title.link.remove();
   view.set_app_id.link.remove();
-
-  // Why does this crash mez???
-  // view.ack_configure.link.remove();
-
-  view.mapped = false;
+  view.ack_configure.link.remove();
 
   server.events.exec("ViewUnmapPost", .{view.id});
 }
@@ -226,7 +200,18 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
   // On the first commit, send a configure to tell the client it can proceed
   if (view.xdg_toplevel.base.initial_commit) {
-    view.setSize(640, 360);
+
+    // 5 is the XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION, I'm just not sure where it is in the bindings
+    if (view.xdg_toplevel.base.client.shell.version >= 5) {
+      // the client should know that it can only fullscreen, nothing else
+      _ = view.xdg_toplevel.setWmCapabilities(.{ .fullscreen = true, });
+    }
+
+    // before committing we tell the client that we'll handle the decorations
+    if (view.xdg_toplevel_decoration) |deco| _ = deco.setMode(.server_side);
+
+    // this tells the client that it can start doing things
+    view.setSize(0, 0);
   }
 }
 
@@ -258,7 +243,7 @@ fn handleAckConfigure(
 ) void {
   const view: *View = @fieldParentPtr("ack_configure", listener);
   _ = view;
-  std.log.err("Unimplemented act configure", .{});
+  std.log.err("Unimplemented ack configure", .{});
 }
 
 fn handleRequestFullscreen(

@@ -197,7 +197,7 @@ fn handleNewXdgToplevel(
   _: *wl.Listener(*wlr.XdgToplevel),
   xdg_toplevel: *wlr.XdgToplevel
 ) void {
-  _ = View.initFromTopLevel(xdg_toplevel);
+  _ = View.init(xdg_toplevel);
 }
 
 fn handleNewXdgToplevelDecoration(

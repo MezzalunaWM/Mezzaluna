@@ -284,3 +284,15 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
   L.pushNil();
   return 1;
 }
+
+/// TODO: impl
+/// Setting the wm capabilities is for telling the client what they can request.
+/// This is important to letting the user define whatever type of layout they
+/// wish and have it be as seamless as possbile.
+///
+/// NOTE(squibid): this should be handled by the layout_manager to reduce the
+/// work required by the user
+pub fn setWmCapabilities(L: *zlua.Lua) i32 {
+  _ = L;
+  return 0;
+}
