@@ -10,6 +10,7 @@ const xkb = @import("xkbcommon");
 
 const View = @import("View.zig");
 const Utils = @import("Utils.zig");
+const Mousemap = @import("types/Mousemap.zig");
 const c = @import("C.zig").c;
 
 const server = &@import("main.zig").server;
@@ -149,45 +150,33 @@ event: *wlr.Pointer.event.MotionAbsolute,
 }
 
 fn handleButton(
-listener: *wl.Listener(*wlr.Pointer.event.Button),
-event: *wlr.Pointer.event.Button
+  listener: *wl.Listener(*wlr.Pointer.event.Button),
+  event: *wlr.Pointer.event.Button
 ) void {
   const cursor: *Cursor = @fieldParentPtr("button", listener);
 
-  _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
-
-  // @hook PointerButtonPress // TODO Probably change this name
-  // @param button string // TODO Translate a button to a string or smth
-  // @param state string - "pressed" or "released"
-  // @param time_msecs number
-  const state = if (event.state == .pressed) "pressed" else "released";
-  server.events.exec("PointerButtonPress", .{event.button, state, event.time_msec});
-
   switch (event.state) {
     .pressed => {
-      if(server.seat.keyboard_group.keyboard.getModifiers().alt) {
-        // Can be BTN_RIGHT, BTN_LEFT, or BTN_MIDDLE
-        cursor.drag.start_x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x));
-        cursor.drag.start_y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y));
-        if(server.seat.focused_surface) |fs| {
-          // Keep track of where the drag started
+      cursor.drag.start_x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x));
+      cursor.drag.start_y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y));
+      if(server.seat.focused_surface) |fs| {
+        // Keep track of where the drag started
 
-          if(fs == .view) {
-            cursor.drag.view = fs.view;
-            cursor.drag.view_offset_x = cursor.drag.start_x - fs.view.scene_tree.node.x;
-            cursor.drag.view_offset_y = cursor.drag.start_y - fs.view.scene_tree.node.y;
-          }
-
-          // Maybe comptime this for later reference
-          if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_LEFT")) {
-            cursor.mode = .move;
-          } else if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_RIGHT")) {
-            if(fs == .view) {
-              cursor.mode = .resize;
-              _ = fs.view.xdg_toplevel.setResizing(true);
-            }
-          }
+        if(fs == .view) {
+          cursor.drag.view = fs.view;
+          cursor.drag.view_offset_x = cursor.drag.start_x - fs.view.scene_tree.node.x;
+          cursor.drag.view_offset_y = cursor.drag.start_y - fs.view.scene_tree.node.y;
         }
+
+        // Maybe comptime this for later reference
+        // if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_LEFT")) {
+        //   cursor.mode = .move;
+        // } else if(event.button == c.libevdev_event_code_from_name(c.EV_KEY, "BTN_RIGHT")) {
+        //   if(fs == .view) {
+        //     cursor.mode = .resize;
+        //     _ = fs.view.xdg_toplevel.setResizing(true);
+        //   }
+        // }
       }
     },
     .released => {
@@ -204,6 +193,36 @@ event: *wlr.Pointer.event.Button
     else => {
       std.log.err("Invalid/Unimplemented pointer button event type", .{});
     }
+  }
+
+
+  var handled = false;
+  const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
+
+  // Proceed if mousemap for current mouse and modifier state's exist
+  if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
+    switch (event.state) {
+      .pressed => {
+        // Only make callback if a callback function exists
+        if(map.options.lua_press_ref_idx > 0) {
+          map.callback(.press);
+          handled = true;
+        }
+      },
+      .released => {
+        if(map.options.lua_press_ref_idx > 0) {
+          map.callback(.release);
+          handled = true;
+        }
+      },
+      else => { unreachable; }
+    }
+  }
+
+  // If no keymap exists for button event, forward it to a surface
+  // TODO: Allow for transparent mousemaps that pass mouse button events anyways
+  if(!handled) {
+    _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
   }
 }
 

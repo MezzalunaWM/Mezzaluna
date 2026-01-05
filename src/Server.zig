@@ -12,6 +12,7 @@ const LayerSurface     = @import("LayerSurface.zig");
 const Output           = @import("Output.zig");
 const View             = @import("View.zig");
 const Keymap           = @import("types/Keymap.zig");
+const Mousemap         = @import("types/Mousemap.zig");
 const Hook             = @import("types/Hook.zig");
 const Events           = @import("types/Events.zig");
 const Popup            = @import("Popup.zig");
@@ -103,6 +104,7 @@ pub fn init(self: *Server) void {
     .cursor = undefined,
     .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
     .keymaps = .init(gpa),
+    .mousemaps = .init(gpa),
     .hooks = .init(gpa),
     .events = try .init(gpa),
     .remote_lua_clients = .{},

@@ -6,9 +6,11 @@ const xkb = @import("xkbcommon");
 const wlr = @import("wlroots");
 
 const Keymap = @import("../types/Keymap.zig");
+const Mousemap = @import("../types/Mousemap.zig");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 
+const c = @import("../C.zig").c;
 const server = &@import("../main.zig").server;
 
 fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
@@ -64,35 +66,36 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
 /// ---Create a new mousemap
 /// ---@param string modifiers
-/// ---@param string button name (ex. "left", "right")
+/// ---@param string libevdev button name (ex. "BTN_LEFT", "BTN_RIGHT")
 /// ---@param table options
 pub fn add_mousemap(L: *zlua.Lua) i32 {
   var mousemap: Mousemap = undefined;
-  // mousemap.options.repeat = true;
 
   const mod = L.checkString(1);
   mousemap.modifier = parse_modkeys(mod);
 
   const button = L.checkString(2);
-  mousemap.keycode = xkb.Keysym.fromName(button, .no_flags);
+  mousemap.event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
 
   _ = L.pushString("press");
   _ = L.getTable(3);
   if (L.isFunction(-1)) {
-    keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+    mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
   }
 
   _ = L.pushString("release");
   _ = L.getTable(3);
   if (L.isFunction(-1)) {
-    keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+    mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
   }
 
-  _ = L.pushString("repeat");
+  _ = L.pushString("drag");
   _ = L.getTable(3);
-  keymap.options.repeat = L.isNil(-1) or L.toBoolean(-1);
+  if (L.isFunction(-1)) {
+    mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+  }
 
-  const hash = Keymap.hash(mousemap.modifier, mousemap.keycode);
+  const hash = Mousemap.hash(mousemap.modifier, mousemap.event_code);
   server.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
 
   L.pushNil();
@@ -129,13 +132,12 @@ pub fn del_mousemap(L: *zlua.Lua) i32 {
 
   var mousemap: Mousemap = undefined;
   const mod = L.checkString(1);
-
   mousemap.modifier = parse_modkeys(mod);
 
   const button = L.checkString(2);
+  mousemap.event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
 
-  mousemap.keycode = xkb.Keysym.fromName(button, .no_flags);
-  _ = server.mousemaps.remove(Keymap.hash(mousemap.modifier, mousemap.keycode));
+  _ = server.mousemaps.remove(Mousemap.hash(mousemap.modifier, mousemap.event_code));
 
   L.pushNil();
   return 1;
