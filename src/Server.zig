@@ -45,6 +45,7 @@ cursor: Cursor,
 
 // Lua data
 keymaps: std.AutoHashMap(u64, Keymap),
+mousemaps: std.AutoHashMap(u64, Mousemap),
 hooks: std.AutoHashMap(i32, *Hook),
 events: Events,
 remote_lua_clients: std.DoublyLinkedList,

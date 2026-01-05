@@ -13,7 +13,6 @@ const Utils = @import("Utils.zig");
 const c = @import("C.zig").c;
 
 const server = &@import("main.zig").server;
-const linux = std.os.linux;
 
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
@@ -26,7 +25,7 @@ frame: wl.Listener(*wlr.Cursor) = .init(handleFrame),
 hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) = .init(handleHoldBegin),
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) = .init(handleHoldEnd),
 
-mode: enum { passthrough, move, resize } = .passthrough,
+mode: enum { normal, drag } = .normal,
 
 // Drag information
 drag: struct {
@@ -80,8 +79,9 @@ pub fn deinit(self: *Cursor) void {
 
 pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
   server.events.exec("PointerMotion", .{self.wlr_cursor.x, self.wlr_cursor.y});
+
   switch (self.mode) {
-    .passthrough => {
+    .normal => {
       const output = server.seat.focused_output;
       // Exit the switch if no focused output exists
       if (output == null) return;
@@ -100,6 +100,8 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
 
       switch (surfaceAtResult.?.scene_node_data.*) {
         .view => {
+          // TODO: If serious performance issues arise from this, we need to be able to disable unused hooks
+          // Perhaps after the config is executed, if no callbacks are present on this hook, we disable it entirely
           server.events.exec("ViewPointerMotion", .{surfaceAtResult.?.scene_node_data.view.id, self.wlr_cursor.x, self.wlr_cursor.y});
         },
         .layer_surface => { },
@@ -109,55 +111,46 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
       server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
       server.seat.wlr_seat.pointerNotifyMotion(time_msec, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
     },
-    .move => { // TODO: Have these behave more like pointer motion
-      if(self.drag.view) |view| {
-        view.scene_tree.node.setPosition(
-          // TODO: add a lua option to configure the behavior of this, by
-          // default it will be the following:
-          @as(c_int, @intFromFloat(self.wlr_cursor.x)) - self.drag.view_offset_x.?,
-          @as(c_int, @intFromFloat(self.wlr_cursor.y)) - self.drag.view_offset_y.?
-          // and the user should be able to configure if it clamps or not
-        );
-      }
-    },
-    .resize => {
-      // Fix this resize
-      const view: *View = blk: {
-        if(server.seat.focused_surface) |fs| {
-          if(fs != .view) return;
-          break :blk fs.view;
-        } else { return; }
-      };
+    .drag => {
 
-      _ = view.xdg_toplevel.setSize(
-        // TODO: configure the min and max using lua?
-        std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.x)) - view.scene_tree.node.x), 10, std.math.maxInt(i32)),
-        std.math.clamp(@as(c_int, @as(i32, @intFromFloat(self.wlr_cursor.y)) - view.scene_tree.node.y), 10, std.math.maxInt(i32))
-      );
-    },
+      // @hook PointerDragMotion
+      // @param button string // TODO Translate a button to a string or smth
+      // @param state string - "pressed" or "released"
+      // @param time_msecs number // TODO idk what the hell msecs is
+      server.events.exec("PointerDragMotion", .{
+        self.wlr_cursor.x,
+        self.wlr_cursor.y,
+
+        self.drag.start_x,
+        self.drag.start_y,
+        self.drag.view.?.id,
+        self.drag.view_offset_x,
+        self.drag.view_offset_y
+      });
+    }
   }
 }
 
 // --------- WLR Cursor event handlers ---------
 fn handleMotion(
-  _: *wl.Listener(*wlr.Pointer.event.Motion),
-  event: *wlr.Pointer.event.Motion,
+_: *wl.Listener(*wlr.Pointer.event.Motion),
+event: *wlr.Pointer.event.Motion,
 ) void {
   server.cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
   server.cursor.processCursorMotion(event.time_msec);
 }
 
 fn handleMotionAbsolute(
-  _: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
-  event: *wlr.Pointer.event.MotionAbsolute,
+_: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
+event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
   server.cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
   server.cursor.processCursorMotion(event.time_msec);
 }
 
 fn handleButton(
-  listener: *wl.Listener(*wlr.Pointer.event.Button),
-  event: *wlr.Pointer.event.Button
+listener: *wl.Listener(*wlr.Pointer.event.Button),
+event: *wlr.Pointer.event.Button
 ) void {
   const cursor: *Cursor = @fieldParentPtr("button", listener);
 
@@ -166,7 +159,7 @@ fn handleButton(
   // @hook PointerButtonPress // TODO Probably change this name
   // @param button string // TODO Translate a button to a string or smth
   // @param state string - "pressed" or "released"
-  // @param time_msecs number // TODO idk what the hell msecs is
+  // @param time_msecs number
   const state = if (event.state == .pressed) "pressed" else "released";
   server.events.exec("PointerButtonPress", .{event.button, state, event.time_msec});
 
@@ -198,7 +191,7 @@ fn handleButton(
       }
     },
     .released => {
-      cursor.mode = .passthrough;
+      cursor.mode = .normal;
 
       if(cursor.drag.view) |view| {
         _ = view.xdg_toplevel.setResizing(false);
@@ -215,8 +208,8 @@ fn handleButton(
 }
 
 fn handleHoldBegin(
-  listener: *wl.Listener(*wlr.Pointer.event.HoldBegin),
-  event: *wlr.Pointer.event.HoldBegin
+listener: *wl.Listener(*wlr.Pointer.event.HoldBegin),
+event: *wlr.Pointer.event.HoldBegin
 ) void {
   _ = listener;
   _ = event;
@@ -224,8 +217,8 @@ fn handleHoldBegin(
 }
 
 fn handleHoldEnd(
-  listener: *wl.Listener(*wlr.Pointer.event.HoldEnd),
-  event: *wlr.Pointer.event.HoldEnd
+listener: *wl.Listener(*wlr.Pointer.event.HoldEnd),
+event: *wlr.Pointer.event.HoldEnd
 ) void {
   _ = listener;
   _ = event;
@@ -233,17 +226,17 @@ fn handleHoldEnd(
 }
 
 fn handleAxis(
-  _: *wl.Listener(*wlr.Pointer.event.Axis),
-  event: *wlr.Pointer.event.Axis,
+_: *wl.Listener(*wlr.Pointer.event.Axis),
+event: *wlr.Pointer.event.Axis,
 ) void {
   server.seat.wlr_seat.pointerNotifyAxis(
-    event.time_msec,
-    event.orientation,
-    event.delta,
-    event.delta_discrete,
-    event.source,
-    event.relative_direction,
-  );
+  event.time_msec,
+  event.orientation,
+  event.delta,
+  event.delta_discrete,
+  event.source,
+  event.relative_direction,
+);
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
