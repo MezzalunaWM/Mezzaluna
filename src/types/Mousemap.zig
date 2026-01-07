@@ -24,7 +24,8 @@ options: struct {
 
 pub const MousemapState = enum { press, drag, release };
 
-pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) void {
+// Returns true if mouse input should be passed through
+pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) bool {
   const ArgsType = @TypeOf(args);
   const args_type_info = @typeInfo(ArgsType);
   if (args_type_info != .@"struct") {
@@ -41,7 +42,7 @@ pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) void
   if (t != zlua.LuaType.function) {
     RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
     Lua.state.pop(1);
-    return;
+    return false;
   }
 
   // allow passing any arguments to the lua hook
@@ -51,10 +52,13 @@ pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) void
     i = k;
   }
 
-  Lua.state.protectedCall(.{ .args = i, .results = 0 }) catch {
+  Lua.state.protectedCall(.{ .args = i, .results = 1 }) catch {
     RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
   };
+
+  const ret = if (Lua.state.isBoolean(-1)) Lua.state.toBoolean(-1) else false;
   Lua.state.pop(-1);
+  return ret;
 }
 
 pub fn hash(modifier: wlr.Keyboard.ModifierMask, event_code: i32) u64 {

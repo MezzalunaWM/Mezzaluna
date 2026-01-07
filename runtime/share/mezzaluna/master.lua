@@ -280,23 +280,20 @@ local master = function()
         mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
       end
     end,
-  })
+  }, {})
 
   mez.input.add_mousemap("alt", "BTN_RIGHT", {
+    press = function() return false end,
     drag = function(pos, drag)
       if drag.view ~= nil then
         mez.view.set_size(
           drag.view.id,
-          (pos.x - drag.start.x) + drag.view.offset.x,
-          (pos.y - drag.start.y) + drag.view.offset.y
+          (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x),
+          (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
         )
-        -- mez.view.set_size(
-        --   drag.view.id,
-        --   (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x),
-        --   (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
-        -- )
       end
     end,
+    release = function() return false end
   })
 end
 

@@ -90,8 +90,8 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     // Proceed if mousemap for current mouse and modifier state's exist
     if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
       if(map.options.lua_drag_ref_idx > 0) {
-        handled = true;
-        map.callback(.drag, .{
+        std.debug.print("check\n", .{});
+        handled = map.callback(.drag, .{
           .{
             .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
             .y = @as(c_int, @intFromFloat(self.wlr_cursor.y))
@@ -210,24 +210,22 @@ fn handleButton(
       .pressed => {
         // Only make callback if a callback function exists
         if(map.options.lua_press_ref_idx > 0) {
-          map.callback(.press, .{
+          handled = map.callback(.press, .{
             .{
               .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
               .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y))
             },
           });
-          handled = true;
         }
       },
       .released => {
         if(map.options.lua_press_ref_idx > 0) {
-          map.callback(.release, .{
+          handled = map.callback(.release, .{
             .{
               .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
               .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y))
             },
           });
-          handled = true;
         }
       },
       else => { unreachable; }
