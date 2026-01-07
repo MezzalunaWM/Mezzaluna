@@ -24,7 +24,13 @@ options: struct {
 
 pub const MousemapState = enum { press, drag, release };
 
-pub fn callback(self: *const Mousemap, state: MousemapState) void {
+pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) void {
+  const ArgsType = @TypeOf(args);
+  const args_type_info = @typeInfo(ArgsType);
+  if (args_type_info != .@"struct") {
+    @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+  }
+
   const lua_ref_idx = switch(state) {
     .press => self.options.lua_press_ref_idx,
     .release => self.options.lua_release_ref_idx,
@@ -38,7 +44,14 @@ pub fn callback(self: *const Mousemap, state: MousemapState) void {
     return;
   }
 
-  Lua.state.protectedCall(.{ .args = 0, .results = 0 }) catch {
+  // allow passing any arguments to the lua hook
+  var i: u8 = 0;
+  inline for (args, 1..) |field, k| {
+    try Lua.state.pushAny(field);
+    i = k;
+  }
+
+  Lua.state.protectedCall(.{ .args = i, .results = 0 }) catch {
     RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
   };
   Lua.state.pop(-1);
