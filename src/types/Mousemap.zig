@@ -40,7 +40,7 @@ pub fn callback(self: *const Mousemap, state: MousemapState, args: anytype) bool
 
   const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
   if (t != zlua.LuaType.function) {
-    RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
+    RemoteLua.sendNewLogEntry("Failed to call mousemap, it doesn't have a callback.");
     Lua.state.pop(1);
     return false;
   }
