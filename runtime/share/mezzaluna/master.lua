@@ -275,17 +275,26 @@ local master = function()
   end
 
   mez.input.add_mousemap("alt", "BTN_LEFT", {
+    press = function()
+      mez.input.set_cursor_type("pointer")
+    end,
     drag = function(pos, drag)
       if drag.view ~= nil then
         mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
       end
     end,
+    release = function()
+      mez.input.set_cursor_type("default")
+    end,
   }, {})
 
   mez.input.add_mousemap("alt", "BTN_RIGHT", {
-    press = function() return false end,
+    press = function()
+      mez.input.set_cursor_type("cross")
+    end,
     drag = function(pos, drag)
       if drag.view ~= nil then
+        -- mez.input.set_cursor_type("pointer")
         mez.view.set_size(
           drag.view.id,
           (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x),
@@ -293,7 +302,9 @@ local master = function()
         )
       end
     end,
-    release = function() return false end
+    release = function()
+      mez.input.set_cursor_type("default")
+    end
   })
 end
 

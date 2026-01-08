@@ -78,7 +78,7 @@ pub fn deinit(self: *Cursor) void {
 }
 
 pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
-  self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
+  // TODO: allow acces via lua
 
   var handled = false;
 
@@ -129,6 +129,7 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     } else {
       // This may not be necessary, remove if no bugs
       server.seat.wlr_seat.pointerClearFocus();
+      self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
     }
   }
 }
