@@ -3,11 +3,13 @@ const Input = @This();
 const std = @import("std");
 const zlua = @import("zlua");
 const xkb = @import("xkbcommon");
+const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const Keymap = @import("../types/Keymap.zig");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const c = @import("../C.zig").c;
 
 const server = &@import("../main.zig").server;
 
@@ -108,5 +110,60 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
   };
 
   server.seat.keyboard_group.keyboard.setRepeatInfo(rate, delay);
+  return 0;
+}
+
+/// FIXME: this doesn't work just yet, and I'm not sure how we can get the
+/// correct time.
+fn getTimeMs() u32 {
+  const now = std.posix.clock_gettime(.MONOTONIC) catch unreachable;
+  return @intCast(now.sec * 1000 + @divTrunc(now.nsec, 1000000));
+}
+
+pub fn send_key(L: *zlua.Lua) i32 {
+  const key = L.checkString(1);
+  const state = L.checkString(2);
+
+  var pressed: u32 = 1;
+  if (std.mem.eql(u8, state, "press")) {
+    pressed = 1;
+  } if (std.mem.eql(u8, state, "release")) {
+    pressed = 0;
+  }
+
+  const keysym = xkb.Keysym.fromName(key, .no_flags);
+
+  server.seat.wlr_seat.keyboardSendKey(
+    getTimeMs(),
+    keysym.toUTF32(),
+    pressed,
+  );
+
+  return 0;
+}
+
+pub fn send_pointer_motion(L: *zlua.Lua) i32 {
+  const sx = L.checkNumber(1);
+  const sy = L.checkNumber(2);
+
+  server.seat.wlr_seat.pointerSendMotion(getTimeMs(), sx, sy);
+
+  return 0;
+}
+
+pub fn send_pointer_button(L: *zlua.Lua) i32 {
+  const button = L.checkString(1);
+  const state = L.checkString(2);
+
+  var pressed: wl.Pointer.ButtonState = .pressed;
+  if (std.mem.eql(u8, state, "press")) {
+    pressed = .pressed;
+  } if (std.mem.eql(u8, state, "release")) {
+    pressed = .released;
+  }
+
+  const mousesym = c.libevdev_event_code_from_name(c.EV_KEY, button);
+  _ = server.seat.wlr_seat.pointerSendButton(0, @intCast(mousesym), pressed);
+
   return 0;
 }

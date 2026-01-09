@@ -312,6 +312,12 @@ local master = function()
   end
 end
 
+mez.input.add_keymap("alt", "x", {
+  press = function()
+    mez.input.send_key("a", "press")
+  end
+})
+
 master()
 
 function print_table(tbl, indent, seen)
