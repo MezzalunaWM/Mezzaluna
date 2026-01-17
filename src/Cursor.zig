@@ -90,7 +90,6 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     // Proceed if mousemap for current mouse and modifier state's exist
     if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
       if(map.options.lua_drag_ref_idx > 0) {
-        std.debug.print("check\n", .{});
         handled = map.callback(.drag, .{
           .{
             .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),

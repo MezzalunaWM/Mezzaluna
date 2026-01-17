@@ -74,17 +74,12 @@ pub fn viewById(self: *Root, id: u64) ?*View {
   var output_it = self.output_layout.outputs.iterator(.forward);
 
   while(output_it.next()) |o| {
-    if(o.output.data == null) continue;
+    if(o.output.data == null) {
+      std.log.err("Wlr_output arbitrary data not assigned", .{});
+      unreachable;
+    }
 
-    const output_snd: *SceneNodeData = @ptrCast(@alignCast(o.output.data.?));
-    const output: *Output = switch (output_snd.*) {
-      .output => |output_ptr| output_ptr,
-      else => {
-        std.log.err("Incorrect scene node type found", .{});
-        unreachable;
-      }
-    };
-
+    const output: *Output = @ptrCast(@alignCast(o.output.data.?));
     var node_it = output.layers.content.children.iterator(.forward);
 
     while(node_it.next()) |node| {

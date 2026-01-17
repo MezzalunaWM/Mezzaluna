@@ -28,23 +28,17 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
   const self = try gpa.create(LayerSurface);
 
   self.* = .{
-    .output = blk: {
-      // These block things are dangerous
-      // There was no need for this
-      // But I cannot be stopped
-      //        - Powerhungry programmer
-      const data = wlr_layer_surface.output.?.data;
-      if(data == null) unreachable;
-      const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(wlr_layer_surface.output.?.data.?));
-      break :blk switch(scene_node_data.*) {
-        .output => @fieldParentPtr("scene_node_data", scene_node_data),
-        else => unreachable
-      };
-    },
+    .output = undefined,
     .wlr_layer_surface = wlr_layer_surface,
     .scene_layer_surface = undefined,
     .scene_node_data = .{ .layer_surface = self }
   };
+
+  if(wlr_layer_surface.output.?.data == null) {
+    std.log.err("Wlr_output arbitrary data not assigned", .{});
+    unreachable;
+  }
+  self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
   if(server.seat.focused_output) |output| {
     self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {

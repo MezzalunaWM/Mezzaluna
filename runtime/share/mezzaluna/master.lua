@@ -279,6 +279,7 @@ local master = function()
       mez.input.set_cursor_type("pointer")
     end,
     drag = function(pos, drag)
+      print("running this too!")
       if drag.view ~= nil then
         mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
       end
@@ -287,6 +288,28 @@ local master = function()
       mez.input.set_cursor_type("default")
     end,
   }, {})
+
+  -- This is so impractical
+  -- I love it
+  mez.input.add_mousemap("alt|shift", "BTN_LEFT", {
+    press = function()
+      mez.input.set_cursor_type("cross")
+      move_all_drag = {}
+      for _, id in ipairs(mez.view.get_all_ids()) do
+        move_all_drag[id] = mez.view.get_position(id)
+      end
+    end,
+    drag = function(pos, drag)
+      print("Dragging")
+      for id, view_start in pairs(move_all_drag) do
+        mez.view.set_position(id, view_start.x + pos.x - drag.start.x, view_start.y + pos.y - drag.start.y)
+      end
+    end,
+    release = function()
+      move_all_drag = nil
+      mez.input.set_cursor_type("default")
+    end
+  })
 
   mez.input.add_mousemap("alt", "BTN_RIGHT", {
     press = function()
@@ -306,6 +329,7 @@ local master = function()
       mez.input.set_cursor_type("default")
     end
   })
+
 end
 
 master()

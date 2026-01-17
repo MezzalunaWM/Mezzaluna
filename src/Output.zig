@@ -54,10 +54,7 @@ destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
 pub fn init(wlr_output: *wlr.Output) ?*Output {
   errdefer Utils.oomPanic();
 
-  server.events.exec("OutputInitPre", .{});
-
   const self = try gpa.create(Output);
-
 
   self.* = .{
     .focused = false,
@@ -108,11 +105,12 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     return null;
   }
 
+  // TODO: Allow user to define output positions
   const layout_output = try server.root.output_layout.addAuto(self.wlr_output);
   server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
   self.setFocused();
 
-  self.wlr_output.data = &self.scene_node_data;
+  self.wlr_output.data = self;
   self.tree.node.data = &self.scene_node_data;
 
   self.layers.background.node.data = &self.layer_scene_node_data.background;

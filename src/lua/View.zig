@@ -20,17 +20,18 @@ fn view_id_err(L: *zlua.Lua) noreturn {
 // ---@return view_id[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
   var output_it = server.root.output_layout.outputs.iterator(.forward);
-  var index: i32 = 1;
 
+  var index: i32 = 1;
   L.newTable();
 
   while(output_it.next()) |o| {
-    if(o.output.data == null) continue;
-    const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-    if (!output.state.enabled) {
-      std.log.debug("ts not enabled", .{});
-      continue;
+    if(o.output.data == null) {
+      std.log.err("Output arbitrary data not assigned", .{});
+      unreachable;
     }
+
+    const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+    if (!output.state.enabled) continue;
 
     const layers = [_]*wlr.SceneTree{
       output.layers.content,
@@ -123,11 +124,11 @@ pub fn get_position(L: *zlua.Lua) i32 {
     L.newTable();
 
     _ = L.pushString("x");
-    L.pushInteger(@intCast(v.xdg_toplevel.base.geometry.x));
+    L.pushInteger(@intCast(v.scene_tree.node.x));
     L.setTable(-3);
 
     _ = L.pushString("y");
-    L.pushInteger(@intCast(v.xdg_toplevel.base.geometry.y));
+    L.pushInteger(@intCast(v.scene_tree.node.y));
     L.setTable(-3);
 
     return 1;
@@ -251,9 +252,9 @@ pub fn get_app_id(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the app_id of the view
+// ---Enable or disable a view
 // ---@param view_id view_id 0 maps to focused view
-// ---@param enable boolean
+// ---@param enabled boolean
 pub fn set_enabled(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   if (!L.isBoolean(2)) {
@@ -270,7 +271,7 @@ pub fn set_enabled(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the app_id of the view
+// ---Check if a view is enabled
 // ---@param view_id view_id 0 maps to focused view
 // ---@return boolean?
 pub fn get_enabled(L: *zlua.Lua) i32 {
@@ -278,6 +279,40 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
 
   if(LuaUtils.viewById(view_id)) |v| {
     _ = L.pushBoolean(v.xdg_toplevel.current.activated);
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Set a view you intend to resize
+// ---@param view_id view_id 0 maps to focused view
+// ---@param enable boolean
+pub fn set_resizing(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  if (!L.isBoolean(2)) {
+    L.raiseErrorStr("argument 2 must be a boolean", .{});
+  }
+  const resizing = L.toBoolean(2);
+
+  if (LuaUtils.viewById(view_id)) |v| {
+    _ = v.xdg_toplevel.setResizing(resizing);
+    return 0;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Check if a view is resizing
+// ---@param view_id view_id 0 maps to focused view
+// ---@return boolean? nil if view cannot be found
+pub fn get_resizing(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  if(LuaUtils.viewById(view_id)) |v| {
+    _ = L.pushBoolean(v.xdg_toplevel.current.resizing);
     return 1;
   }
 
