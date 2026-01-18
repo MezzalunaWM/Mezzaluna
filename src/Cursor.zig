@@ -78,9 +78,7 @@ pub fn deinit(self: *Cursor) void {
 }
 
 pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
-  // TODO: allow acces via lua
-
-  var handled = false;
+  var passthrough = true;
 
   if (self.mode == .drag) {
     const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
@@ -90,7 +88,7 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     // Proceed if mousemap for current mouse and modifier state's exist
     if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
       if(map.options.lua_drag_ref_idx > 0) {
-        handled = map.callback(.drag, .{
+        passthrough = map.callback(.drag, .{
           .{
             .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
             .y = @as(c_int, @intFromFloat(self.wlr_cursor.y))
@@ -108,7 +106,7 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     }
   }
 
-  if(!handled) {
+  if(passthrough) {
     const output = server.seat.focused_output;
     // Exit the switch if no focused output exists
     std.debug.assert(output != null);
@@ -201,7 +199,7 @@ fn handleButton(
     }
   }
 
-  var handled = false;
+  var passthrough = true;
   const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
 
   // Proceed if mousemap for current mouse and modifier state's exist
@@ -210,7 +208,7 @@ fn handleButton(
       .pressed => {
         // Only make callback if a callback function exists
         if(map.options.lua_press_ref_idx > 0) {
-          handled = map.callback(.press, .{
+          passthrough = map.callback(.press, .{
             .{
               .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
               .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y))
@@ -220,7 +218,7 @@ fn handleButton(
       },
       .released => {
         if(map.options.lua_press_ref_idx > 0) {
-          handled = map.callback(.release, .{
+          passthrough = map.callback(.release, .{
             .{
               .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
               .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y))
@@ -234,7 +232,7 @@ fn handleButton(
 
   // If no keymap exists for button event, forward it to a surface
   // TODO: Allow for transparent mousemaps that pass mouse button events anyways
-  if(!handled) {
+  if(passthrough) {
     _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
   }
 }
