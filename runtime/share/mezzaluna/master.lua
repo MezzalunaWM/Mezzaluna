@@ -279,7 +279,6 @@ local master = function()
       mez.input.set_cursor_type("pointer")
     end,
     drag = function(pos, drag)
-      print("running this too!")
       if drag.view ~= nil then
         mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
       end
@@ -300,7 +299,6 @@ local master = function()
       end
     end,
     drag = function(pos, drag)
-      print("Dragging")
       for id, view_start in pairs(move_all_drag) do
         mez.view.set_position(id, view_start.x + pos.x - drag.start.x, view_start.y + pos.y - drag.start.y)
       end
