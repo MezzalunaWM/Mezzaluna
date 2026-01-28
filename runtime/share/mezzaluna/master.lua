@@ -315,12 +315,12 @@ local master = function()
     end,
     drag = function(pos, drag)
       if drag.view ~= nil then
-        -- mez.input.set_cursor_type("pointer")
-        mez.view.set_size(
-          drag.view.id,
-          (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x),
-          (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
-        )
+        local width = (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x)
+        local height = (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
+
+        if width <= 10 then width = 10 end
+        if height <= 10 then height = 10 end
+        mez.view.set_size(drag.view.id, width, height)
       end
     end,
     release = function()
