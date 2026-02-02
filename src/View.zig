@@ -24,6 +24,9 @@ xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 scene_tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
+borders: [4]*wlr.SceneRect,
+border_width: i32, // TODO: move this to some config controlled by lua
+geometry: wlr.Box,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -63,10 +66,13 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     .fullscreen = false,
     .id = @intFromPtr(xdg_toplevel),
     .output = null,
+    .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
 
     .xdg_toplevel = xdg_toplevel,
     .scene_tree = undefined,
     .xdg_toplevel_decoration = null,
+    .borders = undefined,
+    .border_width = 2,
 
     .scene_node_data = .{ .view = self }
   };
@@ -86,6 +92,12 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
   self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
   self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
+
+  for (self.borders, 0..) |_, i| {
+    const color: [4]f32 = .{ 1, 0, 1, 1 };
+    self.borders[i] = try wlr.SceneTree.createSceneRect(self.scene_tree, 0, 0, &color);
+    self.borders[i].node.data = self;
+  }
 
   return self;
 }
@@ -119,11 +131,15 @@ pub fn toggleFullscreen(self: *View) void {
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
   self.scene_tree.node.setPosition(x, y);
+  self.geometry.x = x;
+  self.geometry.y = y;
 }
 
 pub fn setSize(self: *View, width: i32, height: i32) void {
   // This returns a configure serial for verifying the configure
   _ = self.xdg_toplevel.setSize(width, height);
+  self.geometry.width = width;
+  self.geometry.height = height;
 }
 
 // --------- XdgTopLevel event handlers ---------
@@ -212,7 +228,33 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
     // this tells the client that it can start doing things
     view.setSize(0, 0);
+    return; // we do this so that the window can start drawing
   }
+
+  // wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
+  // wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
+  view.scene_tree.node.setPosition(view.geometry.x, view.geometry.y);
+
+  // wlr_scene_rect_set_size(c->border[0], c->geom.width, c->bw);
+  view.borders[0].setSize(view.geometry.width, view.border_width);
+
+  // wlr_scene_rect_set_size(c->border[1], c->geom.width, c->bw);
+  view.borders[1].setSize(view.geometry.width, view.border_width);
+
+  // wlr_scene_rect_set_size(c->border[2], c->bw, c->geom.height - 2 * c->bw);
+  view.borders[2].setSize(view.border_width, view.geometry.height - 2 * view.border_width);
+
+  // wlr_scene_rect_set_size(c->border[3], c->bw, c->geom.height - 2 * c->bw);
+  view.borders[3].setSize(view.border_width, view.geometry.height - 2 * view.border_width);
+
+  // wlr_scene_node_set_position(&c->border[1]->node, 0, c->geom.height - c->bw);
+  view.borders[1].node.setPosition(0, view.geometry.height - view.border_width);
+
+  // wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
+  view.borders[2].node.setPosition(0, view.border_width);
+
+  // wlr_scene_node_set_position(&c->border[3]->node, c->geom.width - c->bw, c->bw);
+  view.borders[3].node.setPosition(view.geometry.width - view.border_width, view.border_width);
 }
 
 // --------- XdgToplevel Event Handlers ---------
