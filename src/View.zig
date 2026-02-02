@@ -72,7 +72,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     .scene_tree = undefined,
     .xdg_toplevel_decoration = null,
     .borders = undefined,
-    .border_width = 2,
+    .border_width = 10,
 
     .scene_node_data = .{ .view = self }
   };
@@ -94,7 +94,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
 
   for (self.borders, 0..) |_, i| {
-    const color: [4]f32 = .{ 1, 0, 1, 1 };
+    const color: [4]f32 = .{ 1, 0, 0, 1 };
     self.borders[i] = try wlr.SceneTree.createSceneRect(self.scene_tree, 0, 0, &color);
     self.borders[i].node.data = self;
   }
@@ -130,16 +130,39 @@ pub fn toggleFullscreen(self: *View) void {
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
-  self.scene_tree.node.setPosition(x, y);
+  if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+
   self.geometry.x = x;
   self.geometry.y = y;
+
+  self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
+
+  self.resize();
 }
 
 pub fn setSize(self: *View, width: i32, height: i32) void {
+  if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+
+  // at the very least the client must be big enough to have borders
+  self.geometry.width = @max(1 + 2 * self.border_width, width);
+  self.geometry.height = @max(1 + 2 * self.border_width, height);
+
   // This returns a configure serial for verifying the configure
-  _ = self.xdg_toplevel.setSize(width, height);
-  self.geometry.width = width;
-  self.geometry.height = height;
+  _ = self.xdg_toplevel.setSize(self.geometry.width, self.geometry.height);
+
+  self.resize();
+}
+
+/// this function handles all things related to sizing and positioning and
+/// should be called after something in the size or position is changed
+fn resize(self: *View) void {
+  self.borders[0].setSize(self.geometry.width, self.border_width);
+  self.borders[1].setSize(self.geometry.width, self.border_width);
+  self.borders[2].setSize(self.border_width, self.geometry.height - 2 * self.border_width);
+  self.borders[3].setSize(self.border_width, self.geometry.height - 2 * self.border_width);
+  self.borders[1].node.setPosition(0, self.geometry.height - self.border_width);
+  self.borders[2].node.setPosition(0, self.border_width);
+  self.borders[3].node.setPosition(self.geometry.width - self.border_width, self.border_width);
 }
 
 // --------- XdgTopLevel event handlers ---------
@@ -226,35 +249,14 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     // before committing we tell the client that we'll handle the decorations
     if (view.xdg_toplevel_decoration) |deco| _ = deco.setMode(.server_side);
 
-    // this tells the client that it can start doing things
-    view.setSize(0, 0);
-    return; // we do this so that the window can start drawing
+    // this tells the client that it can start doing things we don't use our
+    // wrapper here cause we don't want to enforce any of our rules
+    _ = view.xdg_toplevel.setSize(0, 0);
+    return;
   }
 
-  // wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
-  // wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-  view.scene_tree.node.setPosition(view.geometry.x, view.geometry.y);
-
-  // wlr_scene_rect_set_size(c->border[0], c->geom.width, c->bw);
-  view.borders[0].setSize(view.geometry.width, view.border_width);
-
-  // wlr_scene_rect_set_size(c->border[1], c->geom.width, c->bw);
-  view.borders[1].setSize(view.geometry.width, view.border_width);
-
-  // wlr_scene_rect_set_size(c->border[2], c->bw, c->geom.height - 2 * c->bw);
-  view.borders[2].setSize(view.border_width, view.geometry.height - 2 * view.border_width);
-
-  // wlr_scene_rect_set_size(c->border[3], c->bw, c->geom.height - 2 * c->bw);
-  view.borders[3].setSize(view.border_width, view.geometry.height - 2 * view.border_width);
-
-  // wlr_scene_node_set_position(&c->border[1]->node, 0, c->geom.height - c->bw);
-  view.borders[1].node.setPosition(0, view.geometry.height - view.border_width);
-
-  // wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-  view.borders[2].node.setPosition(0, view.border_width);
-
-  // wlr_scene_node_set_position(&c->border[3]->node, c->geom.width - c->bw, c->bw);
-  view.borders[3].node.setPosition(view.geometry.width - view.border_width, view.border_width);
+  // resize on every commit
+  view.resize();
 }
 
 // --------- XdgToplevel Event Handlers ---------
