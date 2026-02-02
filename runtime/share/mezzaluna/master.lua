@@ -88,6 +88,8 @@ local master = function()
     end
   })
 
+  mez.hook.add("OutputStateChange", { callback = tile_all })
+
   mez.hook.add("ViewMapPre", {
     callback = function(v)
       if ctx.tags[ctx.tag_id].master == nil then

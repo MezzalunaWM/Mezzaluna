@@ -282,6 +282,8 @@ fn handleRequestState(
   if (!output.wlr_output.commitState(event.state)) {
     std.log.warn("failed to set output state {}", .{event.state});
   }
+
+  server.events.exec("OutputStateChange", .{});
 }
 
 fn handleFrame(
