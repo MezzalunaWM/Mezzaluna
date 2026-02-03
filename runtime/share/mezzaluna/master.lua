@@ -1,11 +1,3 @@
-mez.input.add_keymap("alt", "g", {
-  press = function ()
-    for _, id in ipairs(mez.view.get_all_ids()) do
-      print(id)
-    end
-  end
-})
-
 local master = function()
   local config = {
     tag_count = 5,
@@ -147,6 +139,7 @@ local master = function()
 
   mez.input.add_keymap("alt|shift", "Return", {
     press = function()
+      print(mez.view.get_focused_id())
       mez.api.spawn("alacritty")
     end,
   })
