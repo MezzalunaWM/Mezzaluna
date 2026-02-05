@@ -33,7 +33,7 @@ Run the binary
 
 ### Default Config
 
-As of now, we have a default configuration located at `./runtime/share/mezzaluna/init.lua` and the basics for a tiler plugin following [dmw's](https://dwm.suckless.org/) "master/stack" layout located at `./runtime/share/mezzaluna/master.lua`.
+As of now, we have a default configuration located at `./runtime/share/mezzaluna/init.lua` and the basics for a tiler plugin following [dwm's](https://dwm.suckless.org/) "master/stack" layout located at `./runtime/share/mezzaluna/master.lua`.
 
 Additionally `mez` will also look in `$XDG_CONFIG/mez` for an `init.lua` to kickstart configuration
 
