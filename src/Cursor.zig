@@ -81,7 +81,7 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
   var passthrough = true;
 
   if (self.mode == .drag) {
-    const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
+    const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
     std.debug.assert(self.drag != null);
 
@@ -200,7 +200,7 @@ fn handleButton(
   }
 
   var passthrough = true;
-  const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
+  const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
   // Proceed if mousemap for current mouse and modifier state's exist
   if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {

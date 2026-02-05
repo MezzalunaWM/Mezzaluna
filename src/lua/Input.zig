@@ -148,9 +148,9 @@ pub fn del_mousemap(L: *zlua.Lua) i32 {
 pub fn get_repeat_info(L: *zlua.Lua) i32 {
   L.newTable();
 
-  L.pushInteger(server.seat.keyboard_group.keyboard.repeat_info.rate);
+  L.pushInteger(server.seat.keyboard_group.wlr_group.keyboard.repeat_info.rate);
   L.setField(-2, "rate");
-  L.pushInteger(server.seat.keyboard_group.keyboard.repeat_info.delay);
+  L.pushInteger(server.seat.keyboard_group.wlr_group.keyboard.repeat_info.delay);
   L.setField(-2, "delay");
 
   return 1;
@@ -167,7 +167,7 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
     L.raiseErrorStr("The delay must be a valid number", .{});
   };
 
-  server.seat.keyboard_group.keyboard.setRepeatInfo(rate, delay);
+  server.seat.keyboard_group.wlr_group.keyboard.setRepeatInfo(rate, delay);
   return 0;
 }
 

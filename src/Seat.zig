@@ -5,6 +5,7 @@ const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 const xkb = @import("xkbcommon");
 
+const KeyboardGroup = @import("KeyboardGroup.zig");
 const Utils =  @import("Utils.zig");
 const Popup = @import("Popup.zig");
 const View =   @import("View.zig");
@@ -30,7 +31,7 @@ wlr_seat: *wlr.Seat,
 focused_surface: ?FocusData,
 focused_output: ?*Output,
 
-keyboard_group: *wlr.KeyboardGroup,
+keyboard_group: *KeyboardGroup,
 keymap: *xkb.Keymap,
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
@@ -57,7 +58,7 @@ pub fn init(self: *Seat) void {
     .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
     .focused_surface = null,
     .focused_output = null,
-    .keyboard_group = try wlr.KeyboardGroup.create(),
+    .keyboard_group = .init(),
     .keymap = keymap.ref(),
   };
   errdefer {
@@ -65,8 +66,8 @@ pub fn init(self: *Seat) void {
     self.wlr_seat.destroy();
   }
 
-  _ = self.keyboard_group.keyboard.setKeymap(self.keymap);
-  self.wlr_seat.setKeyboard(&self.keyboard_group.keyboard);
+  _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.keymap);
+  self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
 
   self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
   self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
@@ -78,7 +79,7 @@ pub fn deinit(self: *Seat) void {
   self.request_set_selection.link.remove();
   self.request_set_primary_selection.link.remove();
 
-  self.keyboard_group.destroy();
+  self.keyboard_group.deinit();
   self.wlr_seat.destroy();
 }
 
