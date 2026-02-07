@@ -23,6 +23,7 @@ output: ?*Output,
 xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 scene_tree: *wlr.SceneTree,
+test_node: *wlr.SceneNode,
 scene_node_data: SceneNodeData,
 borders: [4]*wlr.SceneRect,
 border_width: i32, // TODO: move this to some config controlled by lua
@@ -70,6 +71,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
     .xdg_toplevel = xdg_toplevel,
     .scene_tree = undefined,
+    .test_node = undefined,
     .xdg_toplevel_decoration = null,
     .borders = undefined,
     .border_width = 10,
@@ -92,6 +94,8 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
   self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
   self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
+
+  self.test_node = self.scene_tree.children.first().?;
 
   for (self.borders, 0..) |_, i| {
     const color: [4]f32 = .{ 1, 0, 0, 1 };
@@ -137,25 +141,36 @@ pub fn setPosition(self: *View, x: i32, y: i32) void {
 
   self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
 
-  self.resize();
+  self.resizeBorders();
 }
 
 pub fn setSize(self: *View, width: i32, height: i32) void {
   if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
 
   // at the very least the client must be big enough to have borders
-  self.geometry.width = @max(1 + 2 * self.border_width, width);
-  self.geometry.height = @max(1 + 2 * self.border_width, height);
+  self.geometry.width = @max(
+    1 + 2 * self.border_width,
+    width - 2 * self.border_width,
+  );
+  self.geometry.height = @max(
+    1 + 2 * self.border_width,
+    height - 2 * self.border_width,
+  );
 
   // This returns a configure serial for verifying the configure
   _ = self.xdg_toplevel.setSize(self.geometry.width, self.geometry.height);
 
-  self.resize();
+  self.resizeBorders();
 }
 
 /// this function handles all things related to sizing and positioning and
 /// should be called after something in the size or position is changed
-fn resize(self: *View) void {
+fn resizeBorders(self: *View) void {
+  // set the position of the surface to not clip with the borders
+  self.test_node.setPosition(self.border_width, self.border_width);
+  // FIXME: the surface needs to be resized to not clip on the bottom and right
+  // sides
+
   self.borders[0].setSize(self.geometry.width, self.border_width);
   self.borders[1].setSize(self.geometry.width, self.border_width);
   self.borders[2].setSize(self.border_width, self.geometry.height - 2 * self.border_width);
@@ -256,7 +271,7 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
   }
 
   // resize on every commit
-  view.resize();
+  view.resizeBorders();
 }
 
 // --------- XdgToplevel Event Handlers ---------
