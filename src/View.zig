@@ -147,13 +147,6 @@ fn handleMap(listener: *wl.Listener(void)) void {
   view.xdg_toplevel.events.set_title.add(&view.set_title);
   // view.xdg_toplevel.events.set_parent.add(&view.set_parent);
 
-  const xdg_surface = view.xdg_toplevel.base;
-  server.seat.wlr_seat.keyboardNotifyEnter(
-    xdg_surface.surface,
-    &server.seat.keyboard_group.wlr_group.keyboard.keycodes,
-    &server.seat.keyboard_group.wlr_group.keyboard.modifiers
-  );
-
   view.mapped = true;
   server.events.exec("ViewMapPost", .{view.id});
 }
