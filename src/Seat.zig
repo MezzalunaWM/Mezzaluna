@@ -139,8 +139,8 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
   if(to_focus != null) {
     server.seat.wlr_seat.keyboardNotifyEnter(
       surface.?,
-      &server.seat.wlr_seat.keyboard_state.keyboard.?.keycodes,
-      null
+      &server.seat.keyboard_group.wlr_group.keyboard.keycodes,
+      &server.seat.keyboard_group.wlr_group.keyboard.modifiers
     );
     if(to_focus.? != .layer_surface) {
       if(to_focus.? == .view) to_focus.?.view.focused = true;

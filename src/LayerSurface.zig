@@ -80,8 +80,8 @@ pub fn allowKeyboard(self: *LayerSurface) void {
   if(keyboard_interactive == .exclusive or keyboard_interactive == .on_demand) {
     server.seat.wlr_seat.keyboardNotifyEnter(
       self.wlr_layer_surface.surface,
-      &server.seat.wlr_seat.keyboard_state.keyboard.?.keycodes,
-      null
+      &server.seat.keyboard_group.wlr_group.keyboard.keycodes,
+      &server.seat.keyboard_group.wlr_group.keyboard.modifiers
     );
   }
 }
