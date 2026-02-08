@@ -62,7 +62,7 @@ pub fn init(self: *Seat) void {
     .keymap = keymap.ref(),
   };
   errdefer {
-    self.keyboard_group.destroy();
+    self.keyboard_group.deinit();
     self.wlr_seat.destroy();
   }
 
