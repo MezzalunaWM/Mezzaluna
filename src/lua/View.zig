@@ -14,7 +14,8 @@ fn view_id_err(L: *zlua.Lua) noreturn {
   L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
 }
 
-// ---@alias view_id integer
+// This allows us to differentiate random numbers from ids
+// ---@alias view_id number
 
 // ---Get the ids for all available views
 // ---@return view_id[]?
@@ -33,22 +34,29 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     const output: *Output = @ptrCast(@alignCast(o.output.data.?));
     if (!output.state.enabled) continue;
 
+    // Only search the content and fullscreen layers for views
     const layers = [_]*wlr.SceneTree{
       output.layers.content,
       output.layers.fullscreen,
     };
 
     for(layers) |layer| {
-      if(layer.children.length() == 0) continue;
+      if(layer.children.length() == 0) continue; // No children
+
       if(@intFromPtr(layer) == 0) {
-        std.log.debug("ts is literally a null ptr", .{});
-        continue;
+        std.log.err("ts is literally a null ptr", .{});
+        unreachable;
       }
 
       var view_it = layer.children.iterator(.forward);
 
       while(view_it.next()) |v| {
-        if(v.data == null) continue;
+
+        if(v.data == null) {
+          std.log.err("Unassigned arbitrary data in scene graph", .{});
+          unreachable;
+        }
+
         const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
 
         if(scene_node_data.* == .view) {
@@ -62,12 +70,6 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     }
   }
 
-  return 1;
-}
-
-// TODO: What is this?
-pub fn check(L: *zlua.Lua) i32 {
-  L.pushNil();
   return 1;
 }
 
@@ -197,7 +199,8 @@ pub fn set_focused(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Resize the view by it's top left corner
+// ---Toggle the view to enter fullscreen. Will enter the fullsreen
+//    layer.
 // ---@param view_id view_id 0 maps to focused view
 pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);

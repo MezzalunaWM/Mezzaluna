@@ -90,7 +90,8 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   return self;
 }
 
-/// tell the client that we're removing it
+// Tell the client to close
+// It better behave!
 pub fn close(self: *View) void {
   self.xdg_toplevel.sendClose();
 }
