@@ -14,14 +14,7 @@ pub fn build(b: *std.Build) void {
     else => "/usr/share",
   };
 
-  // If instead your goal is to create an executable, consider if users might
-  // be interested in also being able to embed the core functionality of your
-  // program in their own executable in order to avoid the overhead involved in
-  // subprocessing your CLI tool.
-
-  // The below is copied from tinywl
-  // TODO: Ensure versioning is correct
-  // TODO: Ensure paths for system protocols are correct
+  // Add protocol xml files
   const scanner = Scanner.create(b, .{});
   scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
   scanner.addSystemProtocol("stable/tablet/tablet-v2.xml");
@@ -29,6 +22,7 @@ pub fn build(b: *std.Build) void {
   scanner.addCustomProtocol(b.path("protocols/wlr-layer-shell-unstable-v1.xml"));
   scanner.addCustomProtocol(b.path("protocols/mez-remote-lua-unstable-v1.xml"));
 
+  // Generate protocol code
   scanner.generate("zmez_remote_lua_manager_v1", 1);
   scanner.generate("wl_compositor", 6);
   scanner.generate("wl_subcompositor", 1);
@@ -45,7 +39,7 @@ pub fn build(b: *std.Build) void {
   const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
   const pixman = b.dependency("pixman", .{}).module("pixman");
   const wlroots = b.dependency("wlroots", .{}).module("wlroots");
-  const zlua = b.dependency("zlua", .{ .lang = .luajit }).module("zlua");
+  const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua51 }).module("zlua");
   const clap = b.dependency("clap", .{}).module("clap");
 
   wlroots.addImport("wayland", wayland);
@@ -64,7 +58,7 @@ pub fn build(b: *std.Build) void {
     }),
   });
 
-  mez.linkLibC();
+  mez.root_module.link_libc = true;
 
   mez.root_module.addImport("wayland", wayland);
   mez.root_module.addImport("xkbcommon", xkbcommon);
@@ -72,10 +66,10 @@ pub fn build(b: *std.Build) void {
   mez.root_module.addImport("zlua", zlua);
   mez.root_module.addImport("clap", clap);
 
-  mez.linkSystemLibrary("wayland-server");
-  mez.linkSystemLibrary("xkbcommon");
-  mez.linkSystemLibrary("pixman-1");
-  mez.linkSystemLibrary("libevdev");
+  mez.root_module.linkSystemLibrary("wayland-server", .{});
+  mez.root_module.linkSystemLibrary("xkbcommon", .{});
+  mez.root_module.linkSystemLibrary("pixman-1", .{});
+  mez.root_module.linkSystemLibrary("libevdev", .{});
 
   var ret: u8 = undefined;
   const version = b.runAllowFail(

@@ -6,6 +6,8 @@ const wlr = @import("wlroots");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+
 const Utils = @import("Utils.zig");
 
 const gpa = std.heap.c_allocator;
@@ -13,6 +15,7 @@ const server = &@import("main.zig").server;
 
 mapped: bool,
 focused: bool,
+fullscreen: bool,
 id: u64,
 
 // workspace: Workspace,
@@ -20,6 +23,7 @@ output: ?*Output,
 xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 scene_tree: *wlr.SceneTree,
+scene_node_data: SceneNodeData,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -47,7 +51,7 @@ set_title: wl.Listener(void) = .init(handleSetTitle),
 // Do we need to add this
 // set_parent: wl.Listener(void) = .init(handleSetParent),
 
-pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
+pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   errdefer Utils.oomPanic();
 
   const self = try gpa.create(View);
@@ -56,78 +60,60 @@ pub fn initFromTopLevel(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.* = .{
     .focused = false,
     .mapped = false,
+    .fullscreen = false,
     .id = @intFromPtr(xdg_toplevel),
     .output = null,
 
     .xdg_toplevel = xdg_toplevel,
     .scene_tree = undefined,
     .xdg_toplevel_decoration = null,
+
+    .scene_node_data = .{ .view = self }
   };
 
-  self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
-
   // Add new Toplevel to root of the tree
-  // Later add to spesified output
   if(server.seat.focused_output) |output| {
     self.scene_tree = try output.layers.content.createSceneXdgSurface(xdg_toplevel.base);
     self.output = output;
-  } else {
-    std.log.err("No output to attach new view to", .{});
-    self.scene_tree = try server.root.waiting_room.createSceneXdgSurface(xdg_toplevel.base);
   }
 
-  self.scene_tree.node.data = self;
-  self.xdg_toplevel.base.data = self.scene_tree;
+  self.scene_tree.node.data = &self.scene_node_data;
+  self.xdg_toplevel.base.data = &self.scene_node_data;
 
   self.xdg_toplevel.events.destroy.add(&self.destroy);
   self.xdg_toplevel.base.surface.events.map.add(&self.map);
+  self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
   self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
   self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
+  self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
 
   return self;
 }
 
-pub fn deinit(self: *View) void {
-  self.map.link.remove();
-  self.unmap.link.remove();
-  self.commit.link.remove();
-
-  self.destroy.link.remove();
-  self.request_move.link.remove();
-  self.request_resize.link.remove();
+/// tell the client that we're removing it
+pub fn close(self: *View) void {
+  self.xdg_toplevel.sendClose();
 }
 
-pub fn setFocused(self: *View) void {
-  if (server.seat.wlr_seat.keyboard_state.focused_surface) |previous_surface| {
-    if (previous_surface == self.xdg_toplevel.base.surface) return;
-    if (wlr.XdgSurface.tryFromWlrSurface(previous_surface)) |xdg_surface| {
-      _ = xdg_surface.role_data.toplevel.?.setActivated(false);
+pub fn toggleFullscreen(self: *View) void {
+  self.fullscreen = !self.fullscreen;
+  if(self.output) |output| {
+    if(self.fullscreen and output.fullscreen != self) {
+      // Check to see if another fullscreened view exists, if so replace it
+      if(output.getFullscreenedView()) |view| {
+        view.toggleFullscreen();
+      }
+
+      self.scene_tree.node.reparent(output.layers.fullscreen);
+      self.setPosition(0, 0);
+      self.setSize(output.wlr_output.width, output.wlr_output.height);
+      output.fullscreen = self;
+    } else {
+      self.scene_tree.node.reparent(output.layers.content);
+      output.fullscreen = null;
     }
   }
-
-  self.scene_tree.node.raiseToTop();
-  _ = self.xdg_toplevel.setActivated(true);
-
-  const wlr_keyboard = server.seat.wlr_seat.getKeyboard() orelse return;
-  server.seat.wlr_seat.keyboardNotifyEnter(
-    self.xdg_toplevel.base.surface,
-    wlr_keyboard.keycodes[0..wlr_keyboard.num_keycodes],
-    &wlr_keyboard.modifiers,
-  );
-
-  if(server.seat.focused_view) |prev_view| {
-    prev_view.focused = false;
-  }
-  server.seat.focused_view = self;
-  self.focused = true;
-}
-
-pub fn close(self: *View) void {
-  if(self.focused) {
-    server.seat.focused_view = null;
-  }
-
-  self.xdg_toplevel.sendClose();
+  _ = self.xdg_toplevel.setFullscreen(self.fullscreen);
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
@@ -145,6 +131,15 @@ fn handleMap(listener: *wl.Listener(void)) void {
 
   server.events.exec("ViewMapPre", .{view.id});
 
+  // we're gonna tell the client that it's tiled so it doesn't try anything
+  // stupid
+  _ = view.xdg_toplevel.setTiled(.{
+    .top = true,
+    .bottom = true,
+    .left = true,
+    .right = true,
+  });
+
   view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
   view.xdg_toplevel.events.request_move.add(&view.request_move);
   view.xdg_toplevel.events.request_resize.add(&view.request_resize);
@@ -152,19 +147,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
   view.xdg_toplevel.events.set_title.add(&view.set_title);
   // view.xdg_toplevel.events.set_parent.add(&view.set_parent);
 
-  const xdg_surface = view.xdg_toplevel.base;
-  server.seat.wlr_seat.keyboardNotifyEnter(
-    xdg_surface.surface,
-    server.seat.keyboard_group.keyboard.keycodes[0..server.seat.keyboard_group.keyboard.num_keycodes],
-    &server.seat.keyboard_group.keyboard.modifiers
-  );
-
-  if(view.xdg_toplevel_decoration) |decoration| {
-    _ = decoration.setMode(wlr.XdgToplevelDecorationV1.Mode.server_side);
-  }
-
   view.mapped = true;
-
   server.events.exec("ViewMapPost", .{view.id});
 }
 
@@ -173,17 +156,21 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
   std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
   server.events.exec("ViewUnmapPre", .{view.id});
+  view.mapped = false; // we do this before any work is done so that nobody tries
+                       // any funny business
+
+  if (server.seat.focused_surface) |fs| {
+    if (fs == .view and fs.view == view) {
+      server.seat.focusSurface(null);
+    }
+  }
 
   view.request_fullscreen.link.remove();
   view.request_move.link.remove();
   view.request_resize.link.remove();
   view.set_title.link.remove();
   view.set_app_id.link.remove();
-
-  // Why does this crash mez???
-  // view.ack_configure.link.remove();
-
-  view.mapped = false;
+  view.ack_configure.link.remove();
 
   server.events.exec("ViewUnmapPost", .{view.id});
 }
@@ -212,7 +199,18 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
   // On the first commit, send a configure to tell the client it can proceed
   if (view.xdg_toplevel.base.initial_commit) {
-    view.setSize(640, 360);
+
+    // 5 is the XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION, I'm just not sure where it is in the bindings
+    if (view.xdg_toplevel.base.client.shell.version >= 5) {
+      // the client should know that it can only fullscreen, nothing else
+      _ = view.xdg_toplevel.setWmCapabilities(.{ .fullscreen = true, });
+    }
+
+    // before committing we tell the client that we'll handle the decorations
+    if (view.xdg_toplevel_decoration) |deco| _ = deco.setMode(.server_side);
+
+    // this tells the client that it can start doing things
+    view.setSize(0, 0);
   }
 }
 
@@ -244,7 +242,7 @@ fn handleAckConfigure(
 ) void {
   const view: *View = @fieldParentPtr("ack_configure", listener);
   _ = view;
-  std.log.err("Unimplemented act configure", .{});
+  std.log.err("Unimplemented ack configure", .{});
 }
 
 fn handleRequestFullscreen(
@@ -258,7 +256,8 @@ fn handleRequestMinimize(
   listener: *wl.Listener(void)
 ) void {
   const view: *View = @fieldParentPtr("request_minimize", listener);
-  server.events.exec("ViewRequestFullscreen", .{view.id});
+  server.events.exec("ViewRequestMinimize", .{view.id});
+  std.log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(
@@ -266,6 +265,7 @@ fn handleSetAppId(
 ) void {
   const view: *View = @fieldParentPtr("set_app_id", listener);
   server.events.exec("ViewAppIdUpdate", .{view.id});
+  std.log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(
@@ -273,4 +273,5 @@ fn handleSetTitle(
 ) void {
   const view: *View = @fieldParentPtr("set_title", listener);
   server.events.exec("ViewTitleUpdate", .{view.id});
+  std.log.debug("request_set_title unimplemented", .{});
 }

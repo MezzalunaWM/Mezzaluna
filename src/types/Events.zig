@@ -4,6 +4,8 @@ const std = @import("std");
 
 const Hook = @import("Hook.zig");
 
+const server = &@import("../main.zig").server;
+
 const Node = struct {
   hook: *const Hook,
   node: std.SinglyLinkedList.Node,
@@ -36,8 +38,15 @@ pub fn put(self: *Events, key: []const u8, hook: *const Hook) !void {
   ll.prepend(&data.node);
 }
 
-// TODO: figure out deletion
-// pub fn del(self: *Events, key: ???) !void {}
+pub fn del(self: *Events, key: []const u8, hook: *const Hook) void {
+  if (self.events.get(key)) |e| {
+    var node = e.first;
+    while (node) |n| : (node = n.next) {
+      const data: *Node = @fieldParentPtr("node", n);
+      if (data.hook.options.lua_cb_ref_idx == hook.options.lua_cb_ref_idx) e.remove(n);
+    }
+  }
+}
 
 pub fn exec(self: *Events, event: []const u8, args: anytype) void {
   if (self.events.get(event)) |e| {

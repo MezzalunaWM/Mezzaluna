@@ -3,6 +3,10 @@ const LuaUtils = @This();
 const std = @import("std");
 const zlua = @import("zlua");
 
+const View = @import("../View.zig");
+
+const server = &@import("../main.zig").server;
+
 pub fn coerceNumber(comptime x: type, number: zlua.Number) error{InvalidNumber}!x {
   if (number < std.math.minInt(x) or number > std.math.maxInt(x) or std.math.isNan(number)) {
     return error.InvalidNumber;
@@ -42,4 +46,15 @@ pub fn toStringEx(L: *zlua.Lua) [:0]const u8 {
   L.insert(1);
   L.protectedCall(.{ .args = 1, .results = 1 }) catch return errstr;
   return L.toString(-1) catch errstr;
+}
+
+pub fn viewById(view_id: u64) ?*View {
+  if (view_id == 0) {
+    if(server.seat.focused_surface) |fs| {
+      if(fs == .view) return fs.view;
+    }
+  } else {
+    return server.root.viewById(view_id);
+  }
+  return null;
 }

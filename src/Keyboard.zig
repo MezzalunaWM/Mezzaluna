@@ -53,7 +53,7 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
   self.wlr_keyboard.data = self;
 
   std.log.err("Adding new keyboard {s}", .{device.name orelse "(unnamed)"});
-  if(!server.seat.keyboard_group.addKeyboard(self.wlr_keyboard)) {
+  if(!server.seat.keyboard_group.wlr_group.addKeyboard(self.wlr_keyboard)) {
     std.log.err("Adding new keyboard {s} failed", .{device.name orelse "(unnamed)"});
   }
 
@@ -71,30 +71,60 @@ fn handleModifiers(_: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) 
   server.seat.wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
 }
 
-fn handleKey(_: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
+fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
+  const keyboard: *Keyboard = @fieldParentPtr("key", listener);
   // Translate libinput keycode -> xkbcommon
   const keycode = event.keycode + 8;
 
-  var handled = false;
-  const modifiers = server.seat.keyboard_group.keyboard.getModifiers();
-  if (server.seat.keyboard_group.keyboard.xkb_state) |xkb_state| {
-    for (xkb_state.keyGetSyms(keycode)) |sym| {
-      if (server.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
-        if (event.state == .pressed and map.options.lua_press_ref_idx > 0) {
-          map.callback(false);
-          handled = true;
-        } else if (event.state == .released and map.options.lua_release_ref_idx > 0) {
-          map.callback(true);
-          handled = true;
-        }
-      }
+  var handled: bool = false;
+  const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
+  if (server.seat.keyboard_group.wlr_group.keyboard.xkb_state) |xkb_state| {
+    const keysyms = xkb_state.keyGetSyms(keycode);
+    for (keysyms) |sym| {
+      handled = keypress(modifiers, sym, event.state);
+    }
+
+    // give the keyboard group information about what to repeat and update it
+    if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
+      server.seat.keyboard_group.modifiers = modifiers;
+      server.seat.keyboard_group.keysyms = keysyms;
+      server.seat.keyboard_group.repeat_source.?.timerUpdate(
+        keyboard.wlr_keyboard.repeat_info.delay,
+      ) catch {
+        std.log.warn("failed to update keyboard repeat timer", .{});
+      };
+    } else {
+      server.seat.keyboard_group.modifiers = null;
+      server.seat.keyboard_group.keysyms = null;
     }
   }
 
+  if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
+
+  }
+
   if (!handled) {
-    server.seat.wlr_seat.setKeyboard(&server.seat.keyboard_group.keyboard);
+    server.seat.wlr_seat.setKeyboard(&server.seat.keyboard_group.wlr_group.keyboard);
     server.seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
   }
+}
+
+pub fn keypress(
+  modifiers: wlr.Keyboard.ModifierMask,
+  sym: xkb.Keysym,
+  state: wl.Keyboard.KeyState
+) bool {
+  if (server.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
+    if (state == .pressed and map.options.lua_press_ref_idx > 0) {
+      map.callback(false);
+      return true;
+    } else if (state == .released and map.options.lua_release_ref_idx > 0) {
+      map.callback(true);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 fn handleKeyMap(_: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void {

@@ -1,4 +1,5 @@
 local env_conf = os.getenv("XDG_CONFIG_HOME")
+
 if not env_conf then
   env_conf = os.getenv("HOME")
   if not env_conf then
@@ -11,7 +12,7 @@ end
 package.path = package.path..";"..mez.fs.joinpath(mez.path.runtime, "?.lua")
 mez.inspect = require("inspect").inspect
 
-mez.path.base_config = mez.fs.joinpath(mez.path.runtime, "base_config.lua")
+mez.path.base_config = mez.fs.joinpath(mez.path.runtime, "master.lua")
 
 if not mez.path.config then
   mez.path.config = mez.fs.joinpath(env_conf, "mez", "init.lua")

@@ -11,7 +11,7 @@ const Event = @import("Events.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 const Lua = &@import("../main.zig").lua;
 
-events: std.ArrayList([]const u8), // a list of events
+events: [][]const u8, // a list of events
 options: struct {
   // group: []const u8, // TODO: do we need groups?
   /// This is the location of the callback lua function in the lua registry

@@ -1,7 +1,11 @@
 const std = @import("std");
 const zlua = @import("zlua");
+const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
+const Output = @import("../Output.zig");
 const View = @import("../View.zig");
+const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 const LuaUtils = @import("LuaUtils.zig");
 
 const server = &@import("../main.zig").server;
@@ -15,24 +19,53 @@ fn view_id_err(L: *zlua.Lua) noreturn {
 // ---Get the ids for all available views
 // ---@return view_id[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
-  var it = server.root.scene.tree.children.iterator(.forward);
-  var index: usize = 1;
+  var output_it = server.root.output_layout.outputs.iterator(.forward);
 
+  var index: i32 = 1;
   L.newTable();
 
-  while(it.next()) |node| : (index += 1) {
-    if(node.data == null) continue;
+  while(output_it.next()) |o| {
+    if(o.output.data == null) {
+      std.log.err("Output arbitrary data not assigned", .{});
+      unreachable;
+    }
 
-    const view = @as(*View, @ptrCast(@alignCast(node.data.?)));
+    const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+    if (!output.state.enabled) continue;
 
-    L.pushInteger(@intCast(index));
-    L.pushInteger(@intCast(view.id));
-    L.setTable(-3);
+    const layers = [_]*wlr.SceneTree{
+      output.layers.content,
+      output.layers.fullscreen,
+    };
+
+    for(layers) |layer| {
+      if(layer.children.length() == 0) continue;
+      if(@intFromPtr(layer) == 0) {
+        std.log.debug("ts is literally a null ptr", .{});
+        continue;
+      }
+
+      var view_it = layer.children.iterator(.forward);
+
+      while(view_it.next()) |v| {
+        if(v.data == null) continue;
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
+
+        if(scene_node_data.* == .view) {
+          L.pushInteger(@intCast(index));
+          L.pushInteger(@intCast(scene_node_data.view.id));
+          L.setTable(-3);
+
+          index += 1;
+        }
+      }
+    }
   }
 
   return 1;
 }
 
+// TODO: What is this?
 pub fn check(L: *zlua.Lua) i32 {
   L.pushNil();
   return 1;
@@ -41,9 +74,11 @@ pub fn check(L: *zlua.Lua) i32 {
 // ---Get the id for the focused view
 // ---@return view_id?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-  if(server.seat.focused_view) |view| {
-    L.pushInteger(@intCast(view.id));
-    return 1;
+  if(server.seat.focused_surface) |fs| {
+    if(fs == .view) {
+      L.pushInteger(@intCast(fs.view.id));
+      return 1;
+    }
   }
 
   L.pushNil();
@@ -55,8 +90,7 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
 pub fn close(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.close();
   }
 
@@ -69,16 +103,11 @@ pub fn close(L: *zlua.Lua) i32 {
 // ---@param x number x position for view
 // ---@param y number y position for view
 pub fn set_position(L: *zlua.Lua) i32 {
-  std.log.debug("repositioning", .{});
-
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   const x = LuaUtils.coerceNumber(i32, L.checkNumber(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
   const y = LuaUtils.coerceNumber(i32, L.checkNumber(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
 
-  std.log.debug("position to set: ({d}, {d})", .{x, y});
-
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.setPosition(x, y);
   }
 
@@ -86,10 +115,33 @@ pub fn set_position(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Resize the view by it's top left corner
+// ---Get the position of the view
 // ---@param view_id view_id 0 maps to focused view
-// ---@param width number width for view
-// ---@param height number height for view
+// ---@return { x: integer, y: integer }? Position of the view
+pub fn get_position(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  if (LuaUtils.viewById(view_id)) |v| {
+    L.newTable();
+
+    _ = L.pushString("x");
+    L.pushInteger(@intCast(v.scene_tree.node.x));
+    L.setTable(-3);
+
+    _ = L.pushString("y");
+    L.pushInteger(@intCast(v.scene_tree.node.y));
+    L.setTable(-3);
+
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Set the size of the spesified view. Will be resized relative to
+//    the view's top left corner.
+// ---@param view_id view_id 0 maps to focused view
+// ---@return
 pub fn set_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   // We use u32s here to enforce a minimum size of zero. The call to resize a
@@ -99,8 +151,7 @@ pub fn set_size(L: *zlua.Lua) i32 {
   const width = LuaUtils.coerceNumber(u32, L.checkNumber(2)) catch L.raiseErrorStr("The width must be >= 0 and < inf", .{});
   const height = LuaUtils.coerceNumber(u32, L.checkNumber(3)) catch L.raiseErrorStr("The height must be >= 0 and < inf", .{});
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     v.setSize(@intCast(width), @intCast(height));
   }
 
@@ -108,10 +159,12 @@ pub fn set_size(L: *zlua.Lua) i32 {
   return 1;
 }
 
+// ---Get the size of the view
+// ---@param view_id view_id 0 maps to focused view
+// ---@return { width: integer, height: integer }? Size of the view
 pub fn get_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if (view) |v| {
+  if (LuaUtils.viewById(view_id)) |v| {
     L.newTable();
 
     _ = L.pushString("width");
@@ -135,23 +188,24 @@ pub fn set_focused(L: *zlua.Lua) i32 {
   const view_id: ?c_longlong = L.optInteger(1);
 
   if(view_id == null) {
-    if(server.seat.focused_view != null) {
-      server.seat.focused_view.?.focused = false;
-      server.seat.focused_view = null;
-    }
-    L.pushNil();
-    return 1;
+    server.seat.focusSurface(null);
+  } else if(server.root.viewById(@intCast(view_id.?))) |view| {
+    server.seat.focusSurface(.{ .view = view });
   }
 
-  if (view_id == null) {
-    L.pushNil();
-    return 1;
-  }
+  L.pushNil();
+  return 1;
+}
 
-  if(server.root.viewById(@intCast(view_id.?))) |view| {
-    view.setFocused();
-    L.pushNil();
-    return 1;
+// ---Resize the view by it's top left corner
+// ---@param view_id view_id 0 maps to focused view
+pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  std.log.debug("fullscreen view {d}", .{view_id});
+  if(LuaUtils.viewById(view_id)) |v| {
+    std.log.debug("toggling fullscreen", .{});
+    v.toggleFullscreen();
   }
 
   L.pushNil();
@@ -164,8 +218,7 @@ pub fn set_focused(L: *zlua.Lua) i32 {
 pub fn get_title(L: *zlua.Lua) i32 {
   const view_id: u64 = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     if(v.xdg_toplevel.title == null) {
       L.pushNil();
       return 1;
@@ -185,8 +238,7 @@ pub fn get_title(L: *zlua.Lua) i32 {
 pub fn get_app_id(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-  const view: ?*View = if (view_id == 0) server.seat.focused_view else server.root.viewById(view_id);
-  if(view) |v| {
+  if(LuaUtils.viewById(view_id)) |v| {
     if(v.xdg_toplevel.app_id == null) {
       L.pushNil();
       return 1;
@@ -198,4 +250,84 @@ pub fn get_app_id(L: *zlua.Lua) i32 {
 
   L.pushNil();
   return 1;
+}
+
+// ---Enable or disable a view
+// ---@param view_id view_id 0 maps to focused view
+// ---@param enabled boolean
+pub fn set_enabled(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  if (!L.isBoolean(2)) {
+    L.raiseErrorStr("argument 2 must be a boolean", .{});
+  }
+  const activate = L.toBoolean(2);
+
+  if (LuaUtils.viewById(view_id)) |v| {
+    _ = v.xdg_toplevel.setActivated(activate);
+    return 0;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Check if a view is enabled
+// ---@param view_id view_id 0 maps to focused view
+// ---@return boolean?
+pub fn get_enabled(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  if(LuaUtils.viewById(view_id)) |v| {
+    _ = L.pushBoolean(v.xdg_toplevel.current.activated);
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Set a view you intend to resize
+// ---@param view_id view_id 0 maps to focused view
+// ---@param enable boolean
+pub fn set_resizing(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+  if (!L.isBoolean(2)) {
+    L.raiseErrorStr("argument 2 must be a boolean", .{});
+  }
+  const resizing = L.toBoolean(2);
+
+  if (LuaUtils.viewById(view_id)) |v| {
+    _ = v.xdg_toplevel.setResizing(resizing);
+    return 0;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+// ---Check if a view is resizing
+// ---@param view_id view_id 0 maps to focused view
+// ---@return boolean? nil if view cannot be found
+pub fn get_resizing(L: *zlua.Lua) i32 {
+  const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+  if(LuaUtils.viewById(view_id)) |v| {
+    _ = L.pushBoolean(v.xdg_toplevel.current.resizing);
+    return 1;
+  }
+
+  L.pushNil();
+  return 1;
+}
+
+/// TODO: impl
+/// Setting the wm capabilities is for telling the client what they can request.
+/// This is important to letting the user define whatever type of layout they
+/// wish and have it be as seamless as possbile.
+///
+/// NOTE(squibid): this should be handled by the layout_manager to reduce the
+/// work required by the user
+pub fn setWmCapabilities(L: *zlua.Lua) i32 {
+  _ = L;
+  return 0;
 }

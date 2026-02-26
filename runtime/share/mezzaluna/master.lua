@@ -6,7 +6,7 @@ local master = function()
   local ctx = {
     master_ratio = 0.5,
     tags = {},
-    tag_id = 1
+    tag_id = 1,
   }
 
   local tile_onscreen = function(tag_id, res)
@@ -14,6 +14,7 @@ local master = function()
       return
     end
 
+    mez.view.set_enabled(ctx.tags[tag_id].master, true)
     if #ctx.tags[tag_id].stack == 0 then
       mez.view.set_size(ctx.tags[tag_id].master, res.width, res.height)
       mez.view.set_position(ctx.tags[tag_id].master, 0, 0)
@@ -22,6 +23,7 @@ local master = function()
       mez.view.set_position(ctx.tags[tag_id].master, 0, 0)
 
       for i, stack_id in ipairs(ctx.tags[tag_id].stack) do
+        mez.view.set_enabled(stack_id, true)
         mez.view.set_size(stack_id, res.width * (1 - ctx.master_ratio), res.height / #ctx.tags[tag_id].stack)
         mez.view.set_position(stack_id, res.width * ctx.master_ratio, (res.height / #ctx.tags[tag_id].stack * (i - 1)))
       end
@@ -33,12 +35,9 @@ local master = function()
       return
     end
 
-    mez.view.set_position(ctx.tags[tag_id].master, 0, -res.height)
-    mez.view.set_size(ctx.tags[tag_id].master, res.width, res.height)
-
+    mez.view.set_enabled(ctx.tags[tag_id].master, false)
     for _, view in ipairs(ctx.tags[tag_id].stack) do
-      mez.view.set_position(view, 0, -res.height)
-      mez.view.set_size(view, res.width, res.height)
+      mez.view.set_enabled(view, false)
     end
   end
 
@@ -80,6 +79,8 @@ local master = function()
       print("Doesn't do anything :(")
     end
   })
+
+  mez.hook.add("OutputStateChange", { callback = tile_all })
 
   mez.hook.add("ViewMapPre", {
     callback = function(v)
@@ -124,12 +125,6 @@ local master = function()
     end
   })
 
-  mez.hook.add("ViewPointerMotion", {
-    callback = function (view_id, cursor_x, cursor_y)
-      mez.view.set_focused(view_id)
-    end
-  })
-
   mez.input.add_keymap("alt", "p", {
     press = function()
       mez.api.spawn("wmenu-run")
@@ -144,6 +139,7 @@ local master = function()
 
   mez.input.add_keymap("alt|shift", "Return", {
     press = function()
+      print(mez.view.get_focused_id())
       mez.api.spawn("alacritty")
     end,
   })
@@ -248,38 +244,85 @@ local master = function()
     end
   })
 
+  local fullscreen = function (view_id)
+    mez.view.toggle_fullscreen(view_id)
+    tile_all()
+  end
+
+  mez.input.add_keymap("alt|shift", "F", {
+    press = function() fullscreen(0) end
+  })
+
+  mez.hook.add("ViewRequestFullscreen", {
+    callback = fullscreen
+  })
+
+  mez.hook.add("ViewPointerMotion", {
+    callback = function (view_id, cursor_x, cursor_y)
+      mez.view.set_focused(view_id)
+    end
+  })
+
   for i = 1, 12 do
     mez.input.add_keymap("ctrl|alt", "XF86Switch_VT_"..i, {
       press = function() mez.api.change_vt(i) end
     })
   end
+
+  mez.input.add_mousemap("alt", "BTN_LEFT", {
+    press = function()
+      mez.input.set_cursor_type("pointer")
+    end,
+    drag = function(pos, drag)
+      if drag.view ~= nil then
+        mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
+      end
+    end,
+    release = function()
+      mez.input.set_cursor_type("default")
+    end,
+  }, {})
+
+  -- This is so impractical
+  -- I love it
+  mez.input.add_mousemap("alt|shift", "BTN_LEFT", {
+    press = function()
+      mez.input.set_cursor_type("cross")
+      move_all_drag = {}
+      for _, id in ipairs(mez.view.get_all_ids()) do
+        move_all_drag[id] = mez.view.get_position(id)
+      end
+    end,
+    drag = function(pos, drag)
+      for id, view_start in pairs(move_all_drag) do
+        mez.view.set_position(id, view_start.x + pos.x - drag.start.x, view_start.y + pos.y - drag.start.y)
+      end
+    end,
+    release = function()
+      move_all_drag = nil
+      mez.input.set_cursor_type("default")
+    end
+  })
+
+  mez.input.add_mousemap("alt", "BTN_RIGHT", {
+    press = function()
+      mez.input.set_cursor_type("cross")
+    end,
+    drag = function(pos, drag)
+      if drag.view ~= nil then
+        local width = (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x)
+        local height = (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
+
+        if width <= 10 then width = 10 end
+        if height <= 10 then height = 10 end
+        mez.view.set_size(drag.view.id, width, height)
+      end
+    end,
+    release = function()
+      mez.input.set_cursor_type("default")
+    end
+  })
+
 end
 
 master()
-
-function print_table(tbl, indent, seen)
-    indent = indent or 0
-    seen = seen or {}
-
-    -- Prevent infinite loops from circular references
-    if seen[tbl] then
-        print(string.rep("  ", indent) .. "...(circular reference)")
-        return
-    end
-    seen[tbl] = true
-
-    for key, value in pairs(tbl) do
-        local formatting = string.rep("  ", indent) .. tostring(key) .. ": "
-
-        if type(value) == "table" then
-            print(formatting .. "{")
-            print_table(value, indent + 1, seen)
-            print(string.rep("  ", indent) .. "}")
-        elseif type(value) == "string" then
-            print(formatting .. '"' .. value .. '"')
-        else
-            print(formatting .. tostring(value))
-        end
-    end
-end
-

@@ -5,11 +5,13 @@ const zwlr = @import("wayland").server.zwlr;
 const wlr = @import("wlroots");
 const std = @import("std");
 
-const Server = @import("Server.zig");
 const Utils =  @import("Utils.zig");
+
+const Server = @import("Server.zig");
 const View =   @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-const SceneNodeData = @import("SceneNodeData.zig");
+
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const posix = std.posix;
 const gpa = std.heap.c_allocator;
@@ -17,10 +19,12 @@ const server = &@import("main.zig").server;
 
 focused: bool,
 id: u64,
+fullscreen: ?*View,
 
 wlr_output: *wlr.Output,
 state: wlr.Output.State,
 tree: *wlr.SceneTree,
+scene_node_data: SceneNodeData,
 scene_output: *wlr.SceneOutput,
 
 layers: struct {
@@ -32,6 +36,15 @@ layers: struct {
   overlay: *wlr.SceneTree
 },
 
+layer_scene_node_data: struct {
+  background: SceneNodeData,
+  bottom: SceneNodeData,
+  content: SceneNodeData,
+  top: SceneNodeData,
+  fullscreen: SceneNodeData,
+  overlay: SceneNodeData
+},
+
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
 destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
@@ -41,8 +54,6 @@ destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
 pub fn init(wlr_output: *wlr.Output) ?*Output {
   errdefer Utils.oomPanic();
 
-  server.events.exec("OutputInitPre", .{});
-
   const self = try gpa.create(Output);
 
   self.* = .{
@@ -50,6 +61,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     .id = @intFromPtr(wlr_output),
     .wlr_output = wlr_output,
     .tree = try server.root.scene.tree.createSceneTree(),
+    .fullscreen = null,
     .layers = .{
       .background = try self.tree.createSceneTree(),
       .bottom = try self.tree.createSceneTree(),
@@ -58,7 +70,16 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
       .fullscreen = try self.tree.createSceneTree(),
       .overlay = try self.tree.createSceneTree(),
     },
+    .layer_scene_node_data = .{
+      .background = .{ .output_layer = self.layers.background },
+      .bottom = .{ .output_layer = self.layers.bottom },
+      .content = .{ .output_layer = self.layers.content },
+      .top = .{ .output_layer = self.layers.top },
+      .fullscreen = .{ .output_layer = self.layers.fullscreen },
+      .overlay = .{ .output_layer = self.layers.overlay }
+    },
     .scene_output = try server.root.scene.createSceneOutput(wlr_output),
+    .scene_node_data = SceneNodeData{ .output = self },
     .state = wlr.Output.State.init()
   };
 
@@ -84,11 +105,20 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     return null;
   }
 
+  // TODO: Allow user to define output positions
   const layout_output = try server.root.output_layout.addAuto(self.wlr_output);
   server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
   self.setFocused();
 
-  wlr_output.data = self;
+  self.wlr_output.data = self;
+  self.tree.node.data = &self.scene_node_data;
+
+  self.layers.background.node.data = &self.layer_scene_node_data.background;
+  self.layers.bottom.node.data = &self.layer_scene_node_data.bottom;
+  self.layers.content.node.data = &self.layer_scene_node_data.content;
+  self.layers.top.node.data = &self.layer_scene_node_data.top;
+  self.layers.fullscreen.node.data = &self.layer_scene_node_data.fullscreen;
+  self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
 
   server.events.exec("OutputInitPost", .{self.id});
 
@@ -130,7 +160,6 @@ pub fn configureLayers(self: *Output) void {
   self.wlr_output.effectiveResolution(&output_box.width, &output_box.height);
 
   // Should calculate usable area here for LUA view positioning
-
   for ([_]zwlr.LayerShellV1.Layer{ .background, .bottom, .top, .overlay }) |layer| {
     const tree = blk: {
       const trees = [_]*wlr.SceneTree{
@@ -146,41 +175,98 @@ pub fn configureLayers(self: *Output) void {
     while(it.next()) |node| {
       if(node.data == null) continue;
 
-      const layer_surface: *wlr.LayerSurfaceV1 = @ptrCast(@alignCast(node.data.?));
-      _ = layer_surface.configure(@intCast(output_box.width), @intCast(output_box.height));
+      const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
+      switch (scene_node_data.*) {
+        .layer_surface => {
+          _ = scene_node_data.layer_surface.wlr_layer_surface.configured(
+            @intCast(output_box.width),
+            @intCast(output_box.height)
+          );
+        },
+        else => {
+          std.log.err("Something other than a layer surface found in layer surface scene trees", .{});
+          unreachable;
+        }
+      }
     }
   }
 }
 
-const ViewAtResult = struct {
-    view: *View,
+const SurfaceAtResult = struct {
+    scene_node_data: *SceneNodeData,
     surface: *wlr.Surface,
     sx: f64,
     sy: f64,
 };
 
-pub fn viewAt(self: *Output, lx: f64, ly: f64) ?ViewAtResult {
+pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
   var sx: f64 = undefined;
   var sy: f64 = undefined;
 
-  if(self.layers.content.node.at(lx, ly, &sx, &sy)) |node| {
-    if (node.type != .buffer) return null;
-    const scene_buffer = wlr.SceneBuffer.fromNode(node);
-    const scene_surface = wlr.SceneSurface.tryFromBuffer(scene_buffer) orelse return null;
+  const layers = [_]*wlr.SceneTree{
+    self.layers.top,
+    self.layers.overlay,
+    self.layers.fullscreen,
+    self.layers.content,
+    self.layers.bottom,
+    self.layers.background
+  };
 
-    var it: ?*wlr.SceneTree = node.parent;
+  for(layers) |layer| {
+    const node = layer.node.at(lx, ly, &sx, &sy);
+    if(node == null) continue;
 
-    while (it) |n| : (it = n.node.parent) {
-      if (n.node.data == null) continue;
+    const surface: ?*wlr.Surface = blk: {
+      if (node.?.type == .buffer) {
+        const scene_buffer = wlr.SceneBuffer.fromNode(node.?);
+        if (wlr.SceneSurface.tryFromBuffer(scene_buffer)) |scene_surface| {
+          break :blk scene_surface.surface;
+        }
+      }
+      break :blk null;
+    };
+    if(surface == null) continue;
 
-      const view: *View = @ptrCast(@alignCast(n.node.data.?));
+    const scene_node_data: *SceneNodeData = blk: {
+      var n = node.?;
+      while (true) {
+        if (@as(?*SceneNodeData, @ptrCast(@alignCast(n.data)))) |snd| {
+          break :blk snd;
+        }
+        if (n.parent) |parent_tree| {
+          n = &parent_tree.node;
+        } else {
+          continue;
+        }
+      }
+    };
 
-      return ViewAtResult{
-        .view = view,
-        .surface = scene_surface.surface,
-        .sx = sx,
-        .sy = sy,
-      };
+    switch (scene_node_data.*) {
+      .layer_surface, .view => {
+        return SurfaceAtResult{
+          .scene_node_data = scene_node_data,
+          .surface = surface.?,
+          .sx = sx,
+          .sy = sy,
+        };
+      },
+      else => continue
+    }
+  }
+
+  return null;
+}
+
+pub fn getFullscreenedView(self: *Output) ?*View {
+  if(self.layers.fullscreen.children.length() != 1) {
+    return null;
+  }
+
+  var it = self.layers.fullscreen.children.iterator(.forward);
+  if(it.next().?.data) |data| {
+    const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
+    if(scene_node_data.* == .view) {
+      return scene_node_data.view;
     }
   }
   return null;
@@ -196,6 +282,8 @@ fn handleRequestState(
   if (!output.wlr_output.commitState(event.state)) {
     std.log.warn("failed to set output state {}", .{event.state});
   }
+
+  server.events.exec("OutputStateChange", .{});
 }
 
 fn handleFrame(
@@ -246,9 +334,17 @@ pub fn arrangeLayers(self: *Output) void {
   inline for (@typeInfo(zwlr.LayerShellV1.Layer).@"enum".fields) |comptime_layer| {
     const layer: *wlr.SceneTree = @field(self.layers, comptime_layer.name);
     var it = layer.children.safeIterator(.forward);
+
     while (it.next()) |node| {
-      if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
-        const layer_surface = node_data.data.layer_surface;
+      if(node.data == null) continue;
+
+      // if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
+
+        const layer_surface: *LayerSurface = switch(scene_node_data.*) {
+          .layer_surface => @fieldParentPtr("scene_node_data", scene_node_data),
+          else => continue
+        };
 
         if (!layer_surface.wlr_layer_surface.initialized) continue;
 
@@ -263,7 +359,6 @@ pub fn arrangeLayers(self: *Output) void {
         // const x = layer_surface.scene_layer_surface.tree.node.x;
         // const y = layer_surface.scene_layer_surface.tree.node.y;
         // layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
-      }
     }
   }
 }

@@ -6,12 +6,13 @@ const wlr = @import("wlroots");
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig");
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
 output: *Output,
+scene_node_data: SceneNodeData,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
 scene_layer_surface: *wlr.SceneLayerSurfaceV1,
 
@@ -27,10 +28,17 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
   const self = try gpa.create(LayerSurface);
 
   self.* = .{
-    .output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data)),
+    .output = undefined,
     .wlr_layer_surface = wlr_layer_surface,
     .scene_layer_surface = undefined,
+    .scene_node_data = .{ .layer_surface = self }
   };
+
+  if(wlr_layer_surface.output.?.data == null) {
+    std.log.err("Wlr_output arbitrary data not assigned", .{});
+    unreachable;
+  }
+  self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
   if(server.seat.focused_output) |output| {
     self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {
@@ -45,11 +53,8 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     };
   }
 
-  try SceneNodeData.setData(
-      &self.scene_layer_surface.tree.node,
-      .{ .layer_surface = self },
-  );
-  self.wlr_layer_surface.surface.data = &self.scene_layer_surface.tree.node;
+  self.wlr_layer_surface.surface.data = &self.scene_node_data;
+  self.scene_layer_surface.tree.node.data = &self.scene_node_data;
 
   self.wlr_layer_surface.events.destroy.add(&self.destroy);
   self.wlr_layer_surface.surface.events.map.add(&self.map);
@@ -75,8 +80,8 @@ pub fn allowKeyboard(self: *LayerSurface) void {
   if(keyboard_interactive == .exclusive or keyboard_interactive == .on_demand) {
     server.seat.wlr_seat.keyboardNotifyEnter(
       self.wlr_layer_surface.surface,
-      &server.seat.wlr_seat.keyboard_state.keyboard.?.keycodes,
-      null
+      &server.seat.keyboard_group.wlr_group.keyboard.keycodes,
+      &server.seat.keyboard_group.wlr_group.keyboard.modifiers
     );
   }
 }
@@ -93,15 +98,25 @@ fn handleDestroy(
 fn handleMap(
   listener: *wl.Listener(void)
 ) void {
-  const layer: *LayerSurface = @fieldParentPtr("map", listener);
-  layer.allowKeyboard();
+  const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
+  std.log.debug("layer surface mapped", .{});
+  layer_suraface.output.arrangeLayers();
+  layer_suraface.allowKeyboard();
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
   const layer_surface: *LayerSurface = @fieldParentPtr("unmap", listener);
 
+  if (server.seat.focused_surface) |fs| {
+    if (fs == .layer_surface and fs.layer_surface == layer_surface) {
+      server.seat.focusSurface(null);
+    }
+  }
+
   // FIXME: this crashes mez when killing mez
   layer_surface.output.arrangeLayers();
+
+  // TODO: Idk if this should be deiniting the layer surface entirely
   layer_surface.deinit();
 }
 
