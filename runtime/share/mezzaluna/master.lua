@@ -96,6 +96,15 @@ local master = function()
     end
   })
 
+  mez.hook.add("ViewMapPre", {
+    callback = function(v)
+      mez.view.set_border(v, {
+        color = "#ff0000",
+        width = 4,
+      })
+    end
+  })
+
   mez.hook.add("ViewUnmapPost", {
     callback = function(v)
       if v == ctx.tags[ctx.tag_id].master then

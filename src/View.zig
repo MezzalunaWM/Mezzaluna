@@ -74,7 +74,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     .surface_tree = undefined,
     .xdg_toplevel_decoration = null,
     .borders = undefined,
-    .border_width = 10,
+    .border_width = 0,
 
     .scene_node_data = .{ .view = self }
   };
@@ -97,7 +97,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
   self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
 
   for (self.borders, 0..) |_, i| {
-    const color: [4]f32 = .{ 1, 0, 0, 1 };
+    const color: [4]f32 = .{ 0, 0, 0, 1 };
     self.borders[i] = try wlr.SceneTree.createSceneRect(self.scene_tree, 0, 0, &color);
     self.borders[i].node.data = self;
   }
@@ -109,6 +109,10 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 // It better behave!
 pub fn close(self: *View) void {
   self.xdg_toplevel.sendClose();
+}
+
+pub fn setBorderColor(self: *View, color: *const [4]f32) void {
+  for (self.borders) |border| border.setColor(color);
 }
 
 pub fn toggleFullscreen(self: *View) void {
@@ -169,7 +173,7 @@ pub fn setSize(self: *View, width: i32, height: i32) void {
 
 /// this function handles all things related to sizing and positioning and
 /// should be called after something in the size or position is changed
-fn resizeBorders(self: *View) void {
+pub fn resizeBorders(self: *View) void {
   // set the position of the surface to not clip with the borders
   self.surface_tree.node.setPosition(self.border_width, self.border_width);
 
