@@ -328,42 +328,47 @@ pub fn get_resizing(L: *zlua.Lua) i32 {
 pub fn set_border(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
+    var border_color: ?[4]f32 = null;
+    var width: ?u32 = null;
+
     _ = L.pushString("color");
-    _ = L.getTable(2);
-    if (!L.isString(-1)) L.raiseErrorStr("The color must be a string", .{});
-    const color = L.checkString(-1);
-    const border_color: [4]f32 = color: {
-        errdefer L.raiseErrorStr("The color must be a valid hex string", .{});
+    if (L.getTable(2) != .nil) {
+        if (!L.isString(-1)) L.raiseErrorStr("The color must be a string", .{});
+        const color = L.checkString(-1);
+        border_color = color: {
+            errdefer L.raiseErrorStr("The color must be a valid hex string", .{});
 
-        var start_color_idx: u8 = 0;
-        if (color[0] == '#') start_color_idx = 1;
-        const color_fields = (color.len - start_color_idx) / 2;
+            var start_color_idx: u8 = 0;
+            if (color[0] == '#') start_color_idx = 1;
+            const color_fields = (color.len - start_color_idx) / 2;
 
-        var alpha: ?f32 = null;
-        if (color_fields != 4) {
-            if (color_fields != 3) L.raiseErrorStr("The color must be at least 6 characters long", .{});
-            alpha = 1;
-        }
+            var alpha: ?f32 = null;
+            if (color_fields != 4) {
+                if (color_fields != 3) L.raiseErrorStr("The color must be at least 6 characters long", .{});
+                alpha = 1;
+            }
 
-        const r = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx .. start_color_idx + 2], 16))) / 255.0) * 1000.0) / 1000.0;
-        const g = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 2 .. start_color_idx + 4], 16))) / 255.0) * 1000.0) / 1000.0;
-        const b = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 4 .. start_color_idx + 6], 16))) / 255.0) * 1000.0) / 1000.0;
-        const a = alpha orelse ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 6 .. start_color_idx + 8], 16))) / 255.0) * 1000.0) / 1000.0;
+            const r = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx .. start_color_idx + 2], 16))) / 255.0) * 1000.0) / 1000.0;
+            const g = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 2 .. start_color_idx + 4], 16))) / 255.0) * 1000.0) / 1000.0;
+            const b = ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 4 .. start_color_idx + 6], 16))) / 255.0) * 1000.0) / 1000.0;
+            const a = alpha orelse ((@as(f32, @floatFromInt(try std.fmt.parseInt(u8, color[start_color_idx + 6 .. start_color_idx + 8], 16))) / 255.0) * 1000.0) / 1000.0;
 
-        break :color .{ r, g, b, a };
-    };
+            break :color .{ r, g, b, a };
+        };
+    }
 
     _ = L.pushString("width");
-    _ = L.getTable(2);
-    const width = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch {
-        L.raiseErrorStr("The border width must be >= 0 and < inf", .{});
-    };
+    if (L.getTable(2) != .nil) {
+        width = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch {
+            L.raiseErrorStr("The border width must be >= 0 and < inf", .{});
+        };
+    }
 
     if (LuaUtils.viewById(view_id)) |v| {
-        v.setBorderColor(&border_color);
+        if (border_color != null) v.setBorderColor(&border_color.?);
 
-        if (width != v.border_width) {
-            v.border_width = @intCast(width);
+        if (width != null and width.? != v.border_width) {
+            v.border_width = @intCast(width.?);
             // the size has changed which means we need to update the borders
             v.resizeBorders();
         }
