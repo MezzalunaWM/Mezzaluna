@@ -31,15 +31,10 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
     const type_name = switch (node.type) {
         .tree => "TREE",
         .rect => "RECT",
-        .buffer => "BUFFER"
+        .buffer => "BUFFER",
     };
 
-    writer.print("{s} @ ({d}, {d}) enabled={}", .{
-        type_name,
-        node.x,
-        node.y,
-        node.enabled
-    }) catch unreachable;
+    writer.print("{s} @ ({d}, {d}) enabled={}", .{ type_name, node.x, node.y, node.enabled }) catch unreachable;
 
     // Add associated data if present
     if (node.data) |data| {
@@ -56,7 +51,7 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
                 }) catch unreachable;
             },
             .output_layer => {
-              writer.print(" → Output Layer", .{}) catch unreachable;
+                writer.print(" → Output Layer", .{}) catch unreachable;
             },
             .view => |view| {
                 writer.print(" → View: id={} mapped={} focused={}", .{
@@ -84,7 +79,7 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
                 if (namespace.len > 0) {
                     writer.print(" namespace=\"{s}\"", .{namespace}) catch unreachable;
                 }
-            }
+            },
         }
     }
 
