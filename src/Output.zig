@@ -152,45 +152,6 @@ pub fn setFocused(self: *Output) void {
     self.focused = true;
 }
 
-pub fn configureLayers(self: *Output) void {
-    var output_box: wlr.Box = .{
-        .x = 0,
-        .y = 0,
-        .width = undefined,
-        .height = undefined,
-    };
-    self.wlr_output.effectiveResolution(&output_box.width, &output_box.height);
-
-    // Should calculate usable area here for LUA view positioning
-    for ([_]zwlr.LayerShellV1.Layer{ .background, .bottom, .top, .overlay }) |layer| {
-        const tree = blk: {
-            const trees = [_]*wlr.SceneTree{
-                self.layers.background,
-                self.layers.bottom,
-                self.layers.top,
-                self.layers.overlay,
-            };
-            break :blk trees[@intCast(@intFromEnum(layer))];
-        };
-
-        var it = tree.children.iterator(.forward);
-        while (it.next()) |node| {
-            if (node.data == null) continue;
-
-            const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-            switch (scene_node_data.*) {
-                .layer_surface => {
-                    _ = scene_node_data.layer_surface.wlr_layer_surface.configured(@intCast(output_box.width), @intCast(output_box.height));
-                },
-                else => {
-                    std.log.err("Something other than a layer surface found in layer surface scene trees", .{});
-                    unreachable;
-                },
-            }
-        }
-    }
-}
-
 const SurfaceAtResult = struct {
     scene_node_data: *SceneNodeData,
     surface: *wlr.Surface,
