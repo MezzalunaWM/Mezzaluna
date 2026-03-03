@@ -90,7 +90,6 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
-    std.log.debug("layer surface mapped", .{});
     layer_suraface.output.arrangeLayers();
     layer_suraface.allowKeyboard();
 }

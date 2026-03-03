@@ -38,3 +38,37 @@ pub fn joinpath(L: *zlua.Lua) i32 {
     _ = L.pushString(final_path);
     return 1;
 }
+
+/// ---List sub-directories given an abosolute parent path
+/// ---@param string path
+/// ---@return string[] list of sub directories
+pub fn subdirs(L: *zlua.Lua) i32 {
+    const nargs: i32 = L.getTop();
+    if (nargs != 1) {
+        L.raiseErrorStr("Expected exactly one path", .{});
+        return 0;
+    }
+
+    const path = L.checkString(1);
+
+    var dir = std.fs.openDirAbsoluteZ(path, .{ .iterate = true }) catch {
+        L.raiseErrorStr("Directory does not exist", .{});
+    };
+    defer dir.close();
+    var dir_it = dir.iterate();
+
+    L.newTable();
+
+    var i: i32 = 1;
+    while(dir_it.next() catch {
+        L.raiseErrorStr("An error has occured while getting subdirectories", .{});
+    }) |entry| : (i += 1) {
+        if (entry.kind != .directory and entry.kind != .sym_link ) continue;
+
+        L.pushInteger(i);
+        _ = L.pushString(entry.name);
+        L.setTable(-3);
+    }
+
+    return 1;
+}

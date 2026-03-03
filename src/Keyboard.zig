@@ -52,7 +52,7 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
 
     self.wlr_keyboard.data = self;
 
-    std.log.err("Adding new keyboard {s}", .{device.name orelse "(unnamed)"});
+    std.log.info("Adding new keyboard {s}", .{device.name orelse "(unnamed)"});
     if (!server.seat.keyboard_group.wlr_group.addKeyboard(self.wlr_keyboard)) {
         std.log.err("Adding new keyboard {s} failed", .{device.name orelse "(unnamed)"});
     }
