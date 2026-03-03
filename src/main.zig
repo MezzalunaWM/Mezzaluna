@@ -51,13 +51,13 @@ pub fn main() !void {
         std.process.exit(0);
     }
 
-    var lua_config: Lua.Config = .{ .enabled = true, .str = null };
+    var lua_config: Lua.Config = .{ .enabled = true, .path = null };
     if (res.args.u != null and res.args.clean == 1) {
         std.debug.panic("You cannot set both -u and --clean", .{});
     } else if (res.args.u != null) {
         // this is freed in lua/lua.zig
         const path = try std.fs.cwd().realpathAlloc(gpa, res.args.u.?);
-        lua_config.str = path;
+        lua_config.path = path;
     } else if (res.args.clean == 1) {
         lua_config.enabled = false;
     }

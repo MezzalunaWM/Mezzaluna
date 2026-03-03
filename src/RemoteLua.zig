@@ -37,7 +37,7 @@ pub fn create(client: *wl.Client, version: u32, id: u32) !void {
     };
     errdefer node.L.deinit();
     node.L.openLibs();
-    Lua.openLibs(node.L);
+    Lua.openMezLibs(node.L);
     Lua.loadRuntimeDir(node.L) catch |err| if (err == error.LuaRuntime) {
         std.log.warn("{s}", .{try node.L.toString(-1)});
     };
