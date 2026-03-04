@@ -7,13 +7,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // TODO: this will probably change based on the install paths, make this a var
-    // that can be passed at comptime?
-    const runtime_path_prefix = switch (builtin.mode) {
-        .Debug => "runtime/",
-        else => "/usr/share",
-    };
-
     // Add protocol xml files
     const scanner = Scanner.create(b, .{});
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
@@ -79,6 +72,7 @@ pub fn build(b: *std.Build) void {
     ) catch "dev\n";
 
     const options = b.addOptions();
+    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") orelse "runtime/";
     options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
     options.addOption([]const u8, "version", version);
     mez.root_module.addOptions("config", options);
