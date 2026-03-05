@@ -54,9 +54,15 @@ pub fn main() !void {
     var lua_config: Lua.Config = .{ .enabled = true, .path = null };
     if (res.args.u != null and res.args.clean == 1) {
         std.debug.panic("You cannot set both -u and --clean", .{});
-    } else if (res.args.u != null) {
+    } else if (res.args.u != null) blk: {
         // this is freed in lua/lua.zig
-        const path = try std.fs.cwd().realpathAlloc(gpa, res.args.u.?);
+        const path = std.fs.cwd().realpathAlloc(gpa, res.args.u.?) catch |err| switch (err) {
+            error.FileNotFound => {
+                std.log.err("Path {s} does not exist, and therefore won't be used for the configuration.", .{ res.args.u.? });
+                break :blk;
+            },
+            else => return err,
+        };
         lua_config.path = path;
     } else if (res.args.clean == 1) {
         lua_config.enabled = false;
