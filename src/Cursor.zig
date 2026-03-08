@@ -76,6 +76,15 @@ pub fn deinit(self: *Cursor) void {
 pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
     var passthrough = true;
 
+    const view: ?*View = blk: {
+        if (server.seat.focused_surface) |fs| {
+            if (fs == .view) {
+                break :blk fs.view;
+            }
+        }
+        break :blk null;
+    };
+
     if (self.mode == .drag) {
         const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
@@ -84,7 +93,21 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
         // Proceed if mousemap for current mouse and modifier state's exist
         if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
             if (map.options.lua_drag_ref_idx > 0) {
-                passthrough = map.callback(.drag, .{ .{ .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)), .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)) }, .{ .start = self.drag.?.start, .view = if (self.drag.?.view != null) .{ .id = self.drag.?.view.?.view.id, .dims = self.drag.?.view.?.dims, .offset = self.drag.?.view.?.offset } else null } });
+                passthrough = map.callback(.drag, .{ 
+                    if (view != null) view.?.id else null,
+                    .{ 
+                        .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
+                        .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
+                    }, 
+                    .{ 
+                        .start = self.drag.?.start,
+                        .view = if (self.drag.?.view != null) .{ 
+                            .id = self.drag.?.view.?.view.id,
+                            .dims = self.drag.?.view.?.dims,
+                            .offset = self.drag.?.view.?.offset
+                        } else null
+                    }
+                });
             }
         }
     }
@@ -97,7 +120,10 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
         const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
         if (surfaceAtResult) |surface| {
             if (surface.scene_node_data.* == .view) {
-                server.events.exec("ViewPointerMotion", .{ surface.scene_node_data.view.id, @as(c_int, @intFromFloat(self.wlr_cursor.x)), @as(c_int, @intFromFloat(self.wlr_cursor.y)) });
+                server.events.exec("ViewPointerMotion", .{ 
+                    surface.scene_node_data.view.id,
+                    @as(c_int, @intFromFloat(self.wlr_cursor.x)), @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
+                });
             }
 
             server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
@@ -130,21 +156,35 @@ fn handleMotionAbsolute(
 fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.event.Button) void {
     const cursor: *Cursor = @fieldParentPtr("button", listener);
 
+    const view: ?*View = blk: {
+        if (server.seat.focused_surface) |fs| {
+            if (fs == .view) {
+                break :blk fs.view;
+            }
+        }
+        break :blk null;
+    };
+
     switch (event.state) {
         .pressed => {
             cursor.mode = .drag;
 
-            cursor.drag = .{ .event_code = event.button, .start = .{ .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)), .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) }, .view = null };
+            cursor.drag = .{ 
+                .event_code = event.button, 
+                .start = .{ 
+                    .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
+                    .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
+                },
+                .view = null 
+            };
 
             // Keep track of where the drag started
-            if (server.seat.focused_surface) |fs| {
-                if (fs == .view) {
-                    cursor.drag.?.view = .{
-                        .view = fs.view,
-                        .dims = .{ .width = fs.view.xdg_toplevel.base.geometry.width, .height = fs.view.xdg_toplevel.base.geometry.height },
-                        .offset = .{ .x = cursor.drag.?.start.x - fs.view.scene_tree.node.x, .y = cursor.drag.?.start.y - fs.view.scene_tree.node.y },
-                    };
-                }
+            if(view) |v| {
+                cursor.drag.?.view = .{
+                    .view = v,
+                    .dims = .{ .width = v.xdg_toplevel.base.geometry.width, .height = v.xdg_toplevel.base.geometry.height },
+                    .offset = .{ .x = cursor.drag.?.start.x - v.scene_tree.node.x, .y = cursor.drag.?.start.y - v.scene_tree.node.y },
+                };
             }
         },
         .released => {
@@ -172,20 +212,27 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
                 // Only make callback if a callback function exists
                 if (map.options.lua_press_ref_idx > 0) {
                     passthrough = map.callback(.press, .{
-                        .{ .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)), .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) },
+                        if (view != null) view.?.id else null,
+                        .{ 
+                            .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
+                            .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
+                        },
                     });
                 }
             },
             .released => {
+                // Only make callback if a callback function exists
                 if (map.options.lua_press_ref_idx > 0) {
                     passthrough = map.callback(.release, .{
-                        .{ .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)), .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) },
+                        if (view != null) view.?.id else null,
+                        .{ 
+                            .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
+                            .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
+                        },
                     });
                 }
             },
-            else => {
-                unreachable;
-            },
+            else => unreachable
         }
     }
 

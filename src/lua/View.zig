@@ -207,11 +207,11 @@ pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
     std.log.debug("fullscreen view {d}", .{view_id});
     if (LuaUtils.viewById(view_id)) |v| {
         std.log.debug("toggling fullscreen", .{});
-        v.toggleFullscreen();
+        L.pushBoolean(v.toggleFullscreen());
+        return 1;
     }
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 // ---Get the title of the view
@@ -265,7 +265,6 @@ pub fn set_enabled(L: *zlua.Lua) i32 {
     const activate = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        std.log.debug("setting view {d} to be {s}", .{v.id, if (activate) "enabled" else "disabled"});
         v.scene_tree.node.setEnabled(activate);
         return 0;
     }
@@ -281,7 +280,7 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        _ = L.pushBoolean(v.xdg_toplevel.current.activated);
+        _ = L.pushBoolean(v.scene_tree.node.enabled);
         return 1;
     }
 
@@ -325,7 +324,7 @@ pub fn get_resizing(L: *zlua.Lua) i32 {
 
 // ---Set the borders of a view
 // ---@param view_id view_id 0 maps to focused view
-/// ---@param options table options for the view's borders
+// ---@param options table options for the view's borders
 pub fn set_border(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -375,6 +374,18 @@ pub fn set_border(L: *zlua.Lua) i32 {
         }
 
         return 0;
+    }
+
+    return 0;
+}
+
+// ---Raise view to render above other views
+// ---@param view_id view_id 0 maps to focused view
+pub fn raise_to_top(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        v.scene_tree.node.raiseToTop();
     }
 
     return 0;

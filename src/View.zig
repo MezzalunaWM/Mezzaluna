@@ -113,13 +113,13 @@ pub fn setBorderColor(self: *View, color: *const [4]f32) void {
     for (self.borders) |border| border.setColor(color);
 }
 
-pub fn toggleFullscreen(self: *View) void {
+pub fn toggleFullscreen(self: *View) bool {
     self.fullscreen = !self.fullscreen;
     if (self.output) |output| {
         if (self.fullscreen and output.fullscreen != self) {
             // Check to see if another fullscreened view exists, if so replace it
             if (output.getFullscreenedView()) |view| {
-                view.toggleFullscreen();
+                _ = view.toggleFullscreen();
             }
 
             self.scene_tree.node.reparent(output.layers.fullscreen);
@@ -132,6 +132,7 @@ pub fn toggleFullscreen(self: *View) void {
         }
     }
     _ = self.xdg_toplevel.setFullscreen(self.fullscreen);
+    return self.fullscreen;
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
