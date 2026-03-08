@@ -145,6 +145,15 @@ pub fn init(self: *Server) void {
     self.events.exec("ServerStartPost", .{});
 }
 
+pub fn run(self: *Server) void {
+    const event_loop = self.wl_server.getEventLoop();
+
+    while (true) {
+        self.wl_server.flushClients();
+        event_loop.dispatch(-1) catch break;
+    }
+}
+
 pub fn deinit(self: *Server) noreturn {
     self.new_input.link.remove();
     self.new_output.link.remove();
