@@ -105,8 +105,8 @@ pub fn close(L: *zlua.Lua) i32 {
 // ---@param y number y position for view
 pub fn set_position(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const x = LuaUtils.coerceNumber(i32, L.checkNumber(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
-    const y = LuaUtils.coerceNumber(i32, L.checkNumber(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
+    const x = LuaUtils.coerceInteger(i32, L.checkInteger(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
+    const y = LuaUtils.coerceInteger(i32, L.checkInteger(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
 
     if (LuaUtils.viewById(view_id)) |v| {
         v.setPosition(x, y);
@@ -149,8 +149,8 @@ pub fn set_size(L: *zlua.Lua) i32 {
     // toplevel requires a i32, which doesn't make too much sense as there's an
     // assertion in the code enforcing that both the width and height are greater
     // than or equal to zero.
-    const width = LuaUtils.coerceNumber(u32, L.checkNumber(2)) catch L.raiseErrorStr("The width must be >= 0 and < inf", .{});
-    const height = LuaUtils.coerceNumber(u32, L.checkNumber(3)) catch L.raiseErrorStr("The height must be >= 0 and < inf", .{});
+    const width = LuaUtils.coerceInteger(u32, L.checkInteger(2)) catch L.raiseErrorStr("The width must be >= 0 and < inf", .{});
+    const height = LuaUtils.coerceInteger(u32, L.checkInteger(3)) catch L.raiseErrorStr("The height must be >= 0 and < inf", .{});
 
     if (LuaUtils.viewById(view_id)) |v| {
         v.setSize(@intCast(width), @intCast(height));
@@ -186,7 +186,7 @@ pub fn get_size(L: *zlua.Lua) i32 {
 // ---Remove focus from current view, and set to given id
 // ---@param view_id view_id Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
-    const view_id: ?c_longlong = L.optInteger(1);
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if (view_id == null) {
         server.seat.focusSurface(null);
@@ -218,7 +218,7 @@ pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
 // ---@param view_id view_id 0 maps to focused view
 // ---@return string?
 pub fn get_title(L: *zlua.Lua) i32 {
-    const view_id: u64 = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if (LuaUtils.viewById(view_id)) |v| {
         if (v.xdg_toplevel.title == null) {

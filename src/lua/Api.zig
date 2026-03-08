@@ -37,20 +37,13 @@ pub fn exit(L: *zlua.Lua) i32 {
 /// ---Change to a different virtual terminal
 /// ---@param vt_num integer virtual terminal number to switch to
 pub fn change_vt(L: *zlua.Lua) i32 {
-    const vt_num = num: {
-        const res = LuaUtils.coerceInteger(c_uint, L.checkInteger(1)) catch |err| break :num err;
-        if (res < 1) break :num error.InvalidInteger;
-        break :num res;
-    } catch L.raiseErrorStr("The vt number must be >= 1 and < inf", .{});
+    const vt_num = LuaUtils.coerceInteger(c_uint, L.checkInteger(1)) catch L.raiseErrorStr("The vt number must be >= 1 and < inf", .{});
 
     if (server.session) |session| {
-        std.log.debug("Changing virtual terminal to {d}", .{vt_num});
-        wlr.Session.changeVt(session, vt_num) catch {
+        session.changeVt(vt_num) catch {
             L.raiseErrorStr("Failed to switch vt", .{});
         };
-    } else {
-        L.raiseErrorStr("Mez has not been initialized yet", .{});
-    }
+    } else L.raiseErrorStr("Mez has not been initialized yet", .{});
 
     L.pushNil();
     return 1;
