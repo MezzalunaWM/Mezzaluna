@@ -199,13 +199,11 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
 fn handleHoldBegin(listener: *wl.Listener(*wlr.Pointer.event.HoldBegin), event: *wlr.Pointer.event.HoldBegin) void {
     _ = listener;
     _ = event;
-    std.log.err("Unimplemented cursor start hold", .{});
 }
 
 fn handleHoldEnd(listener: *wl.Listener(*wlr.Pointer.event.HoldEnd), event: *wlr.Pointer.event.HoldEnd) void {
     _ = listener;
     _ = event;
-    std.log.err("Unimplemented cursor end hold", .{});
 }
 
 fn handleAxis(

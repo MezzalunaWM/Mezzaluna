@@ -301,7 +301,6 @@ fn handleAckConfigure(
 ) void {
     const view: *View = @fieldParentPtr("ack_configure", listener);
     _ = view;
-    std.log.err("Unimplemented ack configure", .{});
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {

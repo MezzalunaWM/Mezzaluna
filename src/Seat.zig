@@ -11,6 +11,7 @@ const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
+const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const server = &@import("main.zig").server;
 
@@ -127,11 +128,32 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
         // Clear the focus if applicable
         switch (current_focus) {
             .layer_surface => {}, // IDK if we actually have to clear any focus here
-            else => {
+            .view => {
                 if (wlr.XdgSurface.tryFromWlrSurface(current_surface)) |xdg_surface| {
+                    const view_id: ?u64 = blk: {
+                        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xdg_surface.data.?));
+                        if(scene_node_data.* == .view) {
+                            break :blk scene_node_data.view.id;
+                        } else {
+                            break :blk null;
+                        }
+                    };
+
+                    if(view_id) |v| {
+                        // ViewRemoveFocusPre is fired before a view's focus is removed
+                        // ---@param view_id number
+                        server.events.exec("ViewRemoveFocusPre", .{v});
+                    }
+
                     _ = xdg_surface.role_data.toplevel.?.setActivated(false);
+
+                    if(view_id) |v| {
+                        // ViewRemoveFocusPost is fired after a view's focus is removed
+                        // ---@param view_id number
+                        server.events.exec("ViewRemoveFocusPost", .{v});
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -140,7 +162,28 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
         if (to_focus.? != .layer_surface) {
             if (to_focus.? == .view) to_focus.?.view.focused = true;
             if (wlr.XdgSurface.tryFromWlrSurface(surface.?)) |xdg_surface| {
-                _ = xdg_surface.role_data.toplevel.?.setActivated(true);
+                    const view_id: ?u64 = blk: {
+                        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xdg_surface.data.?));
+                        if(scene_node_data.* == .view) {
+                            break :blk scene_node_data.view.id;
+                        } else {
+                            break :blk null;
+                        }
+                    };
+
+                    if(view_id) |v| {
+                        // ViewSetFocusPre is fired before a view is focused
+                        // ---@param view_id number
+                        server.events.exec("ViewSetFocusPre", .{v});
+                    }
+
+                    _ = xdg_surface.role_data.toplevel.?.setActivated(true);
+
+                    if(view_id) |v| {
+                        // ViewSetFocusPost is fired after a view is focused
+                        // ---@param view_id number
+                        server.events.exec("ViewSetFocusPost", .{v});
+                    }
             }
         }
     }

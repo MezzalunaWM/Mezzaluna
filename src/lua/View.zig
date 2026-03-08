@@ -265,7 +265,8 @@ pub fn set_enabled(L: *zlua.Lua) i32 {
     const activate = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        _ = v.xdg_toplevel.setActivated(activate);
+        std.log.debug("setting view {d} to be {s}", .{v.id, if (activate) "enabled" else "disabled"});
+        v.scene_tree.node.setEnabled(activate);
         return 0;
     }
 
