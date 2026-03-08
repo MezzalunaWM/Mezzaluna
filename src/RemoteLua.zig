@@ -11,6 +11,7 @@ const mez = wayland.server.zmez;
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
+const lua = &@import("main.zig").lua;
 
 node: std.DoublyLinkedList.Node,
 remote_lua_v1: *mez.RemoteLuaV1,
@@ -33,13 +34,7 @@ pub fn create(client: *wl.Client, version: u32, id: u32) !void {
     node.* = .{
         .remote_lua_v1 = remote_lua_v1,
         .node = .{},
-        .L = try zlua.Lua.init(gpa),
-    };
-    errdefer node.L.deinit();
-    node.L.openLibs();
-    Lua.openMezLibs(node.L);
-    Lua.loadRuntimeDir(node.L) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try node.L.toString(-1)});
+        .L = lua.state,
     };
     // TODO: replace stdout and stderr with buffers we can send to the clients
 
@@ -97,8 +92,6 @@ fn handleDestroy(_: *mez.RemoteLuaV1, remote_lua: *RemoteLua) void {
         if (remote_lua.node.next) |n| n.prev.? = p;
         p.next = remote_lua.node.next;
     } else server.remote_lua_clients.first = remote_lua.node.next;
-
-    remote_lua.L.deinit();
     gpa.destroy(remote_lua);
 }
 
