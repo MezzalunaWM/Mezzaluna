@@ -186,7 +186,7 @@ pub fn get_size(L: *zlua.Lua) i32 {
 // ---Remove focus from current view, and set to given id
 // ---@param view_id view_id Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const view_id: ?c_longlong = L.optInteger(1);
 
     if (view_id == null) {
         server.seat.focusSurface(null);
