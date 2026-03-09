@@ -16,6 +16,7 @@ const Keymap = @import("types/Keymap.zig");
 const Mousemap = @import("types/Mousemap.zig");
 const Hook = @import("types/Hook.zig");
 const Events = @import("types/Events.zig");
+const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
@@ -53,6 +54,7 @@ mousemaps: std.AutoHashMap(u64, Mousemap),
 hooks: std.AutoHashMap(i32, *Hook),
 events: Events,
 remote_lua_clients: std.DoublyLinkedList,
+async_callbacks: std.AutoHashMap(usize, *Async.AsyncData),
 
 // Backend listeners
 new_input: wl.Listener(*wlr.InputDevice) = .init(handleNewInput),
@@ -113,6 +115,7 @@ pub fn init(self: *Server) void {
         .hooks = .init(gpa),
         .events = try .init(gpa),
         .remote_lua_clients = .{},
+        .async_callbacks = .init(gpa),
     };
 
     self.renderer.initServer(wl_server) catch {
@@ -212,6 +215,8 @@ pub fn deinit(self: *Server) noreturn {
     self.wl_server.destroy();
 
     self.xev_event_loop.deinit();
+
+    self.async_callbacks.deinit();
 
     std.log.debug("Exiting mez succesfully", .{});
     std.process.exit(0);

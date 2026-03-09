@@ -11,7 +11,7 @@ const gpa = std.heap.c_allocator;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
 
-const AsyncData = struct {
+pub const AsyncData = struct {
     lua_cb_ref_idx: i32,
     timeout: u32,
     once: bool,
@@ -34,8 +34,23 @@ const AsyncData = struct {
     }
 
     pub fn deinit(self: *AsyncData) void {
-        self.timer.deinit(server.xev_event_loop);
-        gpa.destroy(self);
+        var c_cancel: xev.Completion = undefined;
+        // welcome to callback hell
+        self.timer.cancel(&server.xev_event_loop, &self.completion, &c_cancel, AsyncData, self, &struct {
+            fn callback(
+                userdata: ?*AsyncData,
+                _: *xev.Loop,
+                _: *xev.Completion,
+                _: xev.Timer.CancelError!void,
+            ) xev.CallbackAction {
+                // do the rest of the takedown after the timer has been canceled
+                const s: *AsyncData = userdata.?;
+                s.timer.deinit();
+                _ = server.async_callbacks.remove(@intFromPtr(s));
+                gpa.destroy(s);
+                return .disarm;
+            }
+        }.callback);
     }
 };
 
@@ -43,8 +58,12 @@ fn asyncCallback(
     userdata: ?*AsyncData,
     loop: *xev.Loop,
     c: *xev.Completion,
-    _: xev.Timer.RunError!void,
+    v: xev.Timer.RunError!void,
 ) xev.CallbackAction {
+    // don't continue if there's an error
+    v catch |err| switch (err) {
+        else => return .disarm,
+    };
     const self: *AsyncData = userdata.?;
 
     const t = Lua.state.rawGetIndex(zlua.registry_index, self.lua_cb_ref_idx);
@@ -60,9 +79,9 @@ fn asyncCallback(
 
     // we reset the timer to be run again in the future
     if (!self.once) {
-        var c_cancel: xev.Completion = .{};
+        var c_cancel: xev.Completion = undefined;
         self.timer.reset(loop, c, &c_cancel, self.timeout, AsyncData, userdata, &asyncCallback);
-    }
+    } else self.deinit();
 
     return .disarm;
 }
@@ -76,6 +95,7 @@ fn asyncCallback(
 /// ---@param (number|async_options)? options if a number this must be the
 /// --- timeout in milliseconds if nil defaults to 0 milliseconds aka run as
 /// --- soon as possible. This always runs once unless specified otherwise.
+/// ---@return id used for canceling the async function
 pub fn run(L: *zlua.Lua) i32 {
     const async: *AsyncData = .init();
 
@@ -107,5 +127,19 @@ pub fn run(L: *zlua.Lua) i32 {
     }
 
     async.timer.run(&server.xev_event_loop, &async.completion, async.timeout, AsyncData, async, asyncCallback);
+
+    const id = @intFromPtr(async);
+    server.async_callbacks.put(id, async) catch Utils.oomPanic();
+    L.pushInteger(@intCast(id));
+    return 1;
+}
+
+/// ---cancel an upcoming timer
+/// ---@param number id
+pub fn cancel(L: *zlua.Lua) i32 {
+    const id = LuaUtils.coerceInteger(usize, L.checkInteger(1)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
+    const self = server.async_callbacks.get(id) orelse return 0;
+    self.deinit();
+
     return 0;
 }
