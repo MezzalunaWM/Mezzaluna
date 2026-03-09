@@ -94,5 +94,5 @@ pub fn main() !void {
     };
 
     std.log.info("Starting server", .{});
-    server.wl_server.run();
+    server.run();
 }

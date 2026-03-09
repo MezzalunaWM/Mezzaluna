@@ -28,6 +28,10 @@
             .url = "https://github.com/Hejsil/zig-clap/archive/refs/tags/0.11.0.tar.gz",
             .hash = "clap-0.11.0-oBajB-HnAQDPCKYzwF7rO3qDFwRcD39Q0DALlTSz5H7e",
         },
+        .libxev = .{
+            .url = "git+https://github.com/mitchellh/libxev#7e7d2f2ab4700544657f8ec268715c8ef320d839",
+            .hash = "libxev-0.0.0-86vtcwE9EwB942iWRnaNMXHv3n0BeLAs_tVhrs5cT8cQ",
+        },
     },
     .paths = .{
         "build.zig",
