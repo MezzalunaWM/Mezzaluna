@@ -425,6 +425,9 @@ M.setup = function()
 	mez.input.add_mousemap("alt", "BTN_MIDDLE", { press = function(view_id) M.make_tile(view_id) end })
 
 	mez.input.add_mousemap("alt", "BTN_RIGHT", {
+    press = function()
+      -- noop, just prevents clients from getting the right click and opening a menu
+    end,
 		drag = function(_, pos, drag)
 			if drag.view ~= nil then
 				local width = (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x)
