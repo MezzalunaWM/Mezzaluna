@@ -29,7 +29,7 @@ Install the binary
 zig build install --prefix /usr
 ```
 
-Install the binary
+Uninstall the binary
 ```
 zig build remove --prefix /usr
 ```
@@ -44,7 +44,7 @@ Additionally `mez` will also look in `$XDG_CONFIG/mez` for an `init.lua` to kick
 
 ### Custom Config
 
-Although a default configuration is provided, you are, of course, encouraged to get creative with how your desktop experience behaves! To add custom functionality and plugins, Mezzaluna has a similar Lua configuration API to [Neovim](https://neovim.io). 
+Although a default configuration is provided, you are, of course, encouraged to get creative with how your desktop experience behaves! To add custom functionality and plugins, Mezzaluna has a similar Lua configuration API to [Neovim](https://neovim.io).
 
 #### Interacting with Windows
 

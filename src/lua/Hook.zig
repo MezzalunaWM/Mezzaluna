@@ -3,12 +3,119 @@ const Hook = @This();
 const std = @import("std");
 const zlua = @import("zlua");
 
-const THook = @import("../types/Hook.zig");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const RemoteLua = @import("../RemoteLua.zig");
 
 const gpa = std.heap.c_allocator;
 const server = &@import("../main.zig").server;
+const Lua = &@import("../main.zig").lua;
+
+pub const Events = struct {
+    const Node = struct {
+        hook: *const HookData,
+        node: std.SinglyLinkedList.Node,
+    };
+
+    events: std.StringHashMap(*std.SinglyLinkedList),
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) !Events {
+        return Events{
+            .allocator = allocator,
+            .events = .init(allocator),
+        };
+    }
+
+    pub fn put(self: *Events, key: []const u8, hook: *const HookData) !void {
+        var ll: *std.SinglyLinkedList = undefined;
+        if (self.events.get(key)) |sll| {
+            ll = sll;
+        } else {
+            ll = try self.allocator.create(std.SinglyLinkedList);
+            ll.* = .{};
+            try self.events.put(key, ll);
+        }
+        const data = try self.allocator.create(Node);
+        data.* = .{
+            .hook = hook,
+            .node = .{},
+        };
+        ll.prepend(&data.node);
+    }
+
+    pub fn del(self: *Events, key: []const u8, hook: *const HookData) void {
+        if (self.events.get(key)) |e| {
+            var node = e.first;
+            while (node) |n| : (node = n.next) {
+                const data: *Node = @fieldParentPtr("node", n);
+                if (data.hook.options.lua_cb_ref_idx == hook.options.lua_cb_ref_idx) e.remove(n);
+            }
+        }
+    }
+
+    pub fn exec(self: *Events, event: []const u8, args: anytype) void {
+        if (self.events.get(event)) |e| {
+            var node = e.first;
+            while (node) |n| : (node = n.next) {
+                const data: *Node = @fieldParentPtr("node", n);
+                data.hook.callback(args);
+            }
+        }
+    }
+};
+
+pub const HookData = struct {
+    events: [][]const u8, // a list of events
+    options: struct {
+        // group: []const u8, // TODO: do we need groups?
+        once: bool,
+        /// This is the location of the callback lua function in the lua registry
+        lua_cb_ref_idx: i32,
+    },
+
+    pub fn init() *HookData {
+        const self = gpa.create(HookData) catch Utils.oomPanic();
+        return self;
+    }
+
+    pub fn deinit(self: *HookData) void {
+        for (self.events) |value| {
+            server.events.del(value, self);
+        }
+        _ = server.hooks.remove(self.options.lua_cb_ref_idx);
+        gpa.destroy(self);
+    }
+
+    pub fn callback(self: *const HookData, args: anytype) void {
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+
+        const t = Lua.state.rawGetIndex(zlua.registry_index, self.options.lua_cb_ref_idx);
+        if (t != zlua.LuaType.function) {
+            RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");
+            Lua.state.pop(1);
+            return;
+        }
+
+        // allow passing any arguments to the lua hook
+        var i: u8 = 0;
+        inline for (args, 1..) |field, k| {
+            try Lua.state.pushAny(field);
+            i = k;
+        }
+
+        Lua.state.protectedCall(.{ .args = i }) catch {
+            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
+        };
+        Lua.state.pop(-1);
+
+        if (self.options.once) @constCast(self).deinit();
+    }
+};
 
 /// ---Create a new hook on an event
 /// ---@param events string|string[]
@@ -17,7 +124,8 @@ const server = &@import("../main.zig").server;
 pub fn add(L: *zlua.Lua) i32 {
     L.checkType(2, .table);
 
-    var hook: *THook = gpa.create(THook) catch Utils.oomPanic();
+    var hook: *HookData = .init();
+    errdefer hook.deinit();
 
     // We support both a string and a table of strings as the first value of
     // add. Regardless of which type is passed in we create an arraylist of
@@ -46,6 +154,12 @@ pub fn add(L: *zlua.Lua) i32 {
         hook.options.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
+    _ = L.pushString("once");
+    _ = L.getTable(2);
+    if (L.isBoolean(-1)) {
+        hook.options.once = L.toBoolean(-1);
+    }
+
     // TEST: this should be safe as the lua_cb_ref_idx's should never be the same
     // but that all really depends on the implementation of the hashmap
     server.hooks.put(hook.options.lua_cb_ref_idx, hook) catch Utils.oomPanic();
@@ -66,9 +180,6 @@ pub fn del(L: *zlua.Lua) i32 {
     const hook = server.hooks.get(hook_id);
     if (hook == null) L.raiseErrorStr("hook {} does not exist", .{hook_id});
 
-    for (hook.?.events) |value| {
-        server.events.del(value, hook.?);
-    }
-    L.pushBoolean(server.hooks.remove(hook_id));
-    return 1;
+    hook.?.deinit();
+    return 0;
 }

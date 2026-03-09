@@ -16,6 +16,7 @@ pub const AsyncData = struct {
     timeout: u32,
     once: bool,
 
+    cancel_completion: xev.Completion,
     completion: xev.Completion,
     timer: xev.Timer,
 
@@ -27,6 +28,7 @@ pub const AsyncData = struct {
             .lua_cb_ref_idx = undefined,
 
             .completion = undefined,
+            .cancel_completion = undefined,
             .timer = xev.Timer.init() catch Lua.raiseErrorStr("failed to create timer for event loop", .{}),
         };
 
@@ -34,9 +36,8 @@ pub const AsyncData = struct {
     }
 
     pub fn deinit(self: *AsyncData) void {
-        var c_cancel: xev.Completion = undefined;
         // welcome to callback hell
-        self.timer.cancel(&server.xev_event_loop, &self.completion, &c_cancel, AsyncData, self, &struct {
+        self.timer.cancel(&server.xev_event_loop, &self.completion, &self.cancel_completion, AsyncData, self, &struct {
             fn callback(
                 userdata: ?*AsyncData,
                 _: *xev.Loop,
@@ -45,8 +46,8 @@ pub const AsyncData = struct {
             ) xev.CallbackAction {
                 // do the rest of the takedown after the timer has been canceled
                 const s: *AsyncData = userdata.?;
-                s.timer.deinit();
                 _ = server.async_callbacks.remove(@intFromPtr(s));
+                s.timer.deinit();
                 gpa.destroy(s);
                 return .disarm;
             }
@@ -78,6 +79,10 @@ fn asyncCallback(
         self.deinit();
         return .disarm;
     };
+
+    // we need to call the wayland event loop to draw anything that might've
+    // been updated by the lua code
+    server.dispatchEvents(loop);
 
     // we reset the timer to be run again in the future
     if (!self.once) {

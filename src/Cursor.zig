@@ -10,7 +10,7 @@ const xkb = @import("xkbcommon");
 
 const View = @import("View.zig");
 const Utils = @import("Utils.zig");
-const Mousemap = @import("types/Mousemap.zig");
+const Mousemap = @import("lua/Input.zig").MousemapData;
 const c = @import("C.zig").c;
 
 const server = &@import("main.zig").server;
@@ -213,13 +213,13 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
         .pressed => {
             self.mode = .drag;
 
-            self.drag = .{ 
-                .event_code = event.button, 
-                .start = .{ 
+            self.drag = .{
+                .event_code = event.button,
+                .start = .{
                     .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
-                    .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
+                    .y = @as(c_int, @intFromFloat(self.wlr_cursor.y))
                 },
-                .view = null 
+                .view = null
             };
 
             // Keep track of where the drag started

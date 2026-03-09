@@ -12,10 +12,8 @@ const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
-const Keymap = @import("types/Keymap.zig");
-const Mousemap = @import("types/Mousemap.zig");
-const Hook = @import("types/Hook.zig");
-const Events = @import("types/Events.zig");
+const Input = @import("lua/Input.zig");
+const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
@@ -49,10 +47,10 @@ seat: Seat,
 cursor: Cursor,
 
 // Lua data
-keymaps: std.AutoHashMap(u64, Keymap),
-mousemaps: std.AutoHashMap(u64, Mousemap),
-hooks: std.AutoHashMap(i32, *Hook),
-events: Events,
+keymaps: std.AutoHashMap(u64, Input.KeymapData),
+mousemaps: std.AutoHashMap(u64, Input.MousemapData),
+hooks: std.AutoHashMap(i32, *Hook.HookData),
+events: Hook.Events,
 remote_lua_clients: std.DoublyLinkedList,
 async_callbacks: std.AutoHashMap(usize, *Async.AsyncData),
 
@@ -165,36 +163,36 @@ pub fn terminate(self: *Server) void {
 }
 
 pub fn run(self: *Server) void {
-    const timer = xev.Timer.init() catch unreachable;
-    defer timer.deinit();
-
     // this polls the wayland event loop file descriptor to check for any
     // events we need to handle
     const stream = xev.Stream.initFd(self.event_loop.getFd());
     defer stream.deinit();
 
-    var c: xev.Completion = undefined;
-    stream.poll(&self.xev_event_loop, &c, .read, Server, self, &waylandEventTimer);
+    var stream_c: xev.Completion = undefined;
+    stream.poll(&self.xev_event_loop, &stream_c, .read, Server, self, &struct {
+        fn callback(
+            userdata: ?*Server,
+            loop: *xev.Loop,
+            _: *xev.Completion,
+            _: xev.Stream,
+            _: xev.PollError!xev.PollEvent,
+        ) xev.CallbackAction {
+            const s: *Server = userdata.?;
+            if (!s.running) loop.stop();
+            s.dispatchEvents(loop);
+            return .rearm;
+        }
+    }.callback);
 
-    self.xev_event_loop.run(.until_done) catch unreachable;
+    self.xev_event_loop.run(.until_done) catch |err| {
+        std.log.err("Failed to run wayland event loop: {}", .{ err });
+    };
 }
 
-fn waylandEventTimer(
-    userdata: ?*Server,
-    loop: *xev.Loop,
-    _: *xev.Completion,
-    _: xev.Stream,
-    _: xev.PollError!xev.PollEvent,
-) xev.CallbackAction {
-    const self: *Server = userdata.?;
-
-    if (!self.running) loop.stop();
-
+pub fn dispatchEvents(self: *Server, loop: *xev.Loop) void {
     // dispatch events then tell the clients that there's stuff for them to do
     self.event_loop.dispatch(0) catch loop.stop();
     self.wl_server.flushClients();
-
-    return .rearm;
 }
 
 pub fn deinit(self: *Server) noreturn {
