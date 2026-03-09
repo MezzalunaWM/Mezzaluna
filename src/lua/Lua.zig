@@ -13,6 +13,7 @@ const Hook = @import("Hook.zig");
 const View = @import("View.zig");
 const Output = @import("Output.zig");
 const Remote = @import("Remote.zig");
+const Async = @import("Async.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -125,6 +126,11 @@ pub fn openMezLibs(self: *zlua.Lua) void {
         const remote_funcs = zlua.fnRegsFromType(Remote);
         LuaUtils.newLib(self, remote_funcs);
         self.setField(-2, "remote");
+    }
+    {
+        const async_funcs = zlua.fnRegsFromType(Async);
+        LuaUtils.newLib(self, async_funcs);
+        self.setField(-2, "async");
     }
 }
 

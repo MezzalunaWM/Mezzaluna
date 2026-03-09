@@ -28,7 +28,7 @@ pub fn spawn(L: *zlua.Lua) i32 {
 
 /// ---Exit mezzaluna
 pub fn exit(L: *zlua.Lua) i32 {
-    server.wl_server.terminate();
+    server.terminate();
 
     L.pushNil();
     return 1;
