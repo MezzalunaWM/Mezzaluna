@@ -5,13 +5,13 @@ const zlua = @import("zlua");
 const xkb = @import("xkbcommon");
 const wlr = @import("wlroots");
 
-const Keymap = @import("../types/Keymap.zig");
-const Mousemap = @import("../types/Mousemap.zig");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const RemoteLua = @import("../RemoteLua.zig");
 
 const c = @import("../C.zig").c;
 const server = &@import("../main.zig").server;
+const Lua = &@import("../main.zig").lua;
 
 fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     var it = std.mem.splitScalar(u8, modStr, '|');
@@ -27,12 +27,104 @@ fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     return modifiers;
 }
 
+pub const KeymapData = struct {
+    modifier: wlr.Keyboard.ModifierMask,
+    keycode: xkb.Keysym,
+    options: struct {
+        repeat: bool,
+        /// This is the location of the on press lua function in the lua registry
+        lua_press_ref_idx: i32,
+        /// This is the location of the on release lua function in the lua registry
+        lua_release_ref_idx: i32,
+    },
+
+    pub fn callback(self: *const KeymapData, release: bool) void {
+        const lua_ref_idx = if (release) self.options.lua_release_ref_idx else self.options.lua_press_ref_idx;
+
+        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        if (t != zlua.LuaType.function) {
+            RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
+            Lua.state.pop(1);
+            return;
+        }
+
+        Lua.state.protectedCall(.{ .args = 0, .results = 0 }) catch {
+            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
+        };
+        Lua.state.pop(-1);
+    }
+
+    pub fn hash(modifier: wlr.Keyboard.ModifierMask, keycode: xkb.Keysym) u64 {
+        const mod_val: u32 = @bitCast(modifier);
+        const key_val: u32 = @intFromEnum(keycode);
+        return (@as(u64, mod_val) << 32) | @as(u64, key_val);
+    }
+};
+
+pub const MousemapData = struct {
+    modifier: wlr.Keyboard.ModifierMask,
+    event_code: i32,
+    options: struct {
+        /// This is the location of the on press lua function in the lua registry
+        lua_press_ref_idx: i32,
+        /// This is the location of the on release lua function in the lua registry
+        lua_release_ref_idx: i32,
+        /// This is the location of the on drag lua function in the lua registry
+        lua_drag_ref_idx: i32,
+    },
+
+    pub const MousemapState = enum { press, drag, release };
+
+    // Returns true if mouse input should be passed through
+    pub fn callback(self: *const MousemapData, state: MousemapState, args: anytype) bool {
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+
+        const lua_ref_idx = switch (state) {
+            .press => self.options.lua_press_ref_idx,
+            .release => self.options.lua_release_ref_idx,
+            .drag => self.options.lua_drag_ref_idx,
+        };
+
+        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        if (t != zlua.LuaType.function) {
+            RemoteLua.sendNewLogEntry("Failed to call mousemap, it doesn't have a callback.");
+            Lua.state.pop(1);
+            return false;
+        }
+
+        // allow passing any arguments to the lua hook
+        var i: u8 = 0;
+        inline for (args, 1..) |field, k| {
+            try Lua.state.pushAny(field);
+            i = k;
+        }
+
+        Lua.state.protectedCall(.{ .args = i, .results = 1 }) catch {
+            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
+        };
+
+        const ret = if (Lua.state.isBoolean(-1)) Lua.state.toBoolean(-1) else false;
+        Lua.state.pop(-1);
+        return ret;
+    }
+
+    pub fn hash(modifier: wlr.Keyboard.ModifierMask, event_code: i32) u64 {
+        const mod_val: u32 = @bitCast(modifier);
+        const button_val: u32 = @bitCast(event_code);
+        return (@as(u64, mod_val) << 32) | @as(u64, button_val);
+    }
+};
+
 /// ---Create a new keymap
 /// ---@param string modifiers
 /// ---@param string keys
 /// ---@param table options
 pub fn add_keymap(L: *zlua.Lua) i32 {
-    var keymap: Keymap = undefined;
+    var keymap: KeymapData = undefined;
     keymap.options.repeat = true;
 
     const mod = L.checkString(1);
@@ -57,7 +149,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     _ = L.getTable(3);
     keymap.options.repeat = L.isNil(-1) or L.toBoolean(-1);
 
-    const hash = Keymap.hash(keymap.modifier, keymap.keycode);
+    const hash = KeymapData.hash(keymap.modifier, keymap.keycode);
     server.keymaps.put(hash, keymap) catch Utils.oomPanic();
 
     L.pushNil();
@@ -69,7 +161,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 /// ---@param string libevdev button name (ex. "BTN_LEFT", "BTN_RIGHT")
 /// ---@param table options
 pub fn add_mousemap(L: *zlua.Lua) i32 {
-    var mousemap: Mousemap = undefined;
+    var mousemap: MousemapData = undefined;
 
     const mod = L.checkString(1);
     mousemap.modifier = parse_modkeys(mod);
@@ -95,7 +187,7 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
         mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
-    const hash = Mousemap.hash(mousemap.modifier, mousemap.event_code);
+    const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
     server.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
 
     L.pushNil();
@@ -109,7 +201,7 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
     L.checkType(1, .string);
     L.checkType(2, .string);
 
-    var keymap: Keymap = undefined;
+    var keymap: KeymapData = undefined;
     const mod = L.checkString(1);
 
     keymap.modifier = parse_modkeys(mod);
@@ -117,7 +209,7 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
     const key = L.checkString(2);
 
     keymap.keycode = xkb.Keysym.fromName(key, .no_flags);
-    _ = server.keymaps.remove(Keymap.hash(keymap.modifier, keymap.keycode));
+    _ = server.keymaps.remove(KeymapData.hash(keymap.modifier, keymap.keycode));
 
     L.pushNil();
     return 1;
@@ -130,14 +222,14 @@ pub fn del_mousemap(L: *zlua.Lua) i32 {
     L.checkType(1, .string);
     L.checkType(2, .string);
 
-    var mousemap: Mousemap = undefined;
+    var mousemap: MousemapData = undefined;
     const mod = L.checkString(1);
     mousemap.modifier = parse_modkeys(mod);
 
     const button = L.checkString(2);
     mousemap.event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
 
-    _ = server.mousemaps.remove(Mousemap.hash(mousemap.modifier, mousemap.event_code));
+    _ = server.mousemaps.remove(MousemapData.hash(mousemap.modifier, mousemap.event_code));
 
     L.pushNil();
     return 1;

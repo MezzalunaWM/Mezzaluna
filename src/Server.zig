@@ -12,10 +12,8 @@ const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
-const Keymap = @import("types/Keymap.zig");
-const Mousemap = @import("types/Mousemap.zig");
-const Hook = @import("types/Hook.zig");
-const Events = @import("types/Events.zig");
+const Input = @import("lua/Input.zig");
+const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
@@ -49,10 +47,10 @@ seat: Seat,
 cursor: Cursor,
 
 // Lua data
-keymaps: std.AutoHashMap(u64, Keymap),
-mousemaps: std.AutoHashMap(u64, Mousemap),
-hooks: std.AutoHashMap(i32, *Hook),
-events: Events,
+keymaps: std.AutoHashMap(u64, Input.KeymapData),
+mousemaps: std.AutoHashMap(u64, Input.MousemapData),
+hooks: std.AutoHashMap(i32, *Hook.HookData),
+events: Hook.Events,
 remote_lua_clients: std.DoublyLinkedList,
 async_callbacks: std.AutoHashMap(usize, *Async.AsyncData),
 
