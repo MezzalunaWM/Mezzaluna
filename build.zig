@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 const Scanner = @import("wayland").Scanner;
 
 pub fn build(b: *std.Build) void {
+    const options = b.addOptions();
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -73,16 +75,48 @@ pub fn build(b: *std.Build) void {
         .Inherit,
     ) catch "dev\n";
 
-    const options = b.addOptions();
-    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") orelse "runtime/";
+    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") 
+        orelse b.pathJoin(&.{b.install_prefix, "share"});
     options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
+
     options.addOption([]const u8, "version", version);
     mez.root_module.addOptions("config", options);
 
+    std.debug.print("runtime_path_prefix: {s}\n", .{runtime_path_prefix});
+
+    // Installs a bin to prefix/bin/mez
     b.installArtifact(mez);
+
+    // Installs runtime to prefix/share/mez
+    b.installDirectory(.{
+        .source_dir = b.path("runtime"),
+        .install_dir = .prefix,
+        .install_subdir = b.pathJoin(&.{"share", "mez", "runtime"}),
+    });
 
     const run_step = b.step("run", "Run the compositor");
     const run_cmd = b.addRunArtifact(mez);
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
+
+    // Test when zig build install is not broken
+    // const uninstall_runtime = b.addSystemCommand(&.{
+    //     "rm",
+    //     "-rf",
+    //     b.fmt("{s}/share/mez", .{b.install_prefix})
+    // });
+    // b.getUninstallStep().dependOn(&uninstall_runtime.step);
+
+    const remove_step = b.step("remove", "Uninstall the zig binary");
+    const uninstall_runtime = b.addSystemCommand(&.{
+        "rm",
+        "-rf",
+        b.fmt("{s}/share/mez", .{b.install_prefix})
+    });
+    const uninstall_bin = b.addSystemCommand(&.{
+        "rm",
+        b.fmt("{s}/bin/mez", .{b.install_prefix})
+    });
+    remove_step.dependOn(&uninstall_runtime.step);
+    remove_step.dependOn(&uninstall_bin.step);
 }

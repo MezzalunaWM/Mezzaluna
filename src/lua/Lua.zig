@@ -22,9 +22,10 @@ state: *zlua.Lua,
 pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     const path_dir = try std.fs.path.joinZ(gpa, &[_][]const u8{
         config.runtime_path_prefix,
-        "share",
-        "mezzaluna",
+        "mez",
+        "runtime",
     });
+    std.debug.print("path_dir: {s}\n", .{path_dir});
     defer gpa.free(path_dir);
 
     {
@@ -151,6 +152,7 @@ pub fn init(self: *Lua, cfg: Config) !void {
         defer gpa.free(path);
         try setBaseConfig(self.state, path);
     }
+
     loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
         std.log.warn("{s}", .{try self.state.toString(-1)});
     };
