@@ -97,10 +97,11 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    const uninstall_runtime = b.addSystemCommand(&.{
-        "rm",
-        "-rf",
-        b.fmt("{s}/share/mez", .{b.install_prefix})
-    });
-    b.getUninstallStep().dependOn(&uninstall_runtime.step);
+    // Test when zig build install is not broken
+    // const uninstall_runtime = b.addSystemCommand(&.{
+    //     "rm",
+    //     "-rf",
+    //     b.fmt("{s}/share/mez", .{b.install_prefix})
+    // });
+    // b.getUninstallStep().dependOn(&uninstall_runtime.step);
 }
