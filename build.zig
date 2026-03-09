@@ -73,10 +73,14 @@ pub fn build(b: *std.Build) void {
         .Inherit,
     ) catch "dev\n";
 
-    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") orelse "runtime/";
+    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") 
+        orelse b.pathJoin(&.{b.install_prefix, "share"});
     options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
+
     options.addOption([]const u8, "version", version);
     mez.root_module.addOptions("config", options);
+
+    std.debug.print("runtime_path_prefix: {s}\n", .{runtime_path_prefix});
 
     // Installs a bin to prefix/bin/mez
     b.installArtifact(mez);
@@ -85,7 +89,7 @@ pub fn build(b: *std.Build) void {
     b.installDirectory(.{
         .source_dir = b.path("runtime"),
         .install_dir = .prefix,
-        .install_subdir = "share/mez",
+        .install_subdir = b.pathJoin(&.{"share", "mez", "runtime"}),
     });
 
     const run_step = b.step("run", "Run the compositor");
@@ -93,7 +97,10 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    // Install script
-    // Uninstall script
-    // Runtime should go into /usr/share or a buildtime flag
+    const uninstall_runtime = b.addSystemCommand(&.{
+        "rm",
+        "-rf",
+        b.fmt("{s}/share/mez", .{b.install_prefix})
+    });
+    b.getUninstallStep().dependOn(&uninstall_runtime.step);
 }
