@@ -28,8 +28,9 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
 
     {
         _ = try self.getGlobal("mez");
+        defer self.pop(1);
         _ = self.getField(-1, "path");
-        defer self.pop(2);
+        defer self.pop(1);
         _ = self.pushString(path_dir);
         self.setField(-2, "runtime");
     }
@@ -47,37 +48,18 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
 }
 
 pub fn setBaseConfig(self: *zlua.Lua, path: []const u8) !void {
-    {
-        _ = try self.getGlobal("mez");
-        _ = self.getField(-1, "path");
-        defer self.pop(2);
-        const new_path = try std.fs.path.join(gpa, &[_][]const u8{ path, "init.lua" });
-        defer gpa.free(new_path);
-        _ = self.pushString(new_path);
-        self.setField(-2, "config");
-    }
-    {
-        _ = try self.getGlobal("mez");
-        _ = self.getField(-1, "path");
-        defer self.pop(2);
-        const cur_path = self.toString(-1) catch "";
-
-        const unsentinel: []const u8 = std.mem.span(cur_path.ptr);
-        const new_path = try std.mem.concat(gpa, u8, &[_][]const u8{
-            unsentinel,
-            ";",
-            path,
-        });
-        defer gpa.free(new_path);
-        _ = self.pushString(new_path);
-        _ = self.setField(-2, "path");
-    }
+    _ = try self.getGlobal("mez");
+    defer self.pop(1);
+    _ = self.getField(-1, "path");
+    defer self.pop(1);
+    _ = self.pushString(path);
+    self.setField(-2, "config");
 }
 
 fn loadBaseConfig(self: *zlua.Lua) !void {
     const lua_path = "mez.path.base_config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Base config path not found. is your runtime dir setup?", .{});
+        std.log.err("Base config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
@@ -91,7 +73,7 @@ fn loadBaseConfig(self: *zlua.Lua) !void {
 fn loadConfigDir(self: *zlua.Lua) !void {
     const lua_path = "mez.path.config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Config path not found. is your runtime dir setup?", .{});
+        std.log.err("Config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
@@ -102,54 +84,52 @@ fn loadConfigDir(self: *zlua.Lua) !void {
     try self.doFile(path);
 }
 
-pub fn openLibs(self: *zlua.Lua) void {
+pub fn openMezLibs(self: *zlua.Lua) void {
+    self.newTable();
+    defer _ = self.setGlobal("mez");
     {
         self.newTable();
-        defer _ = self.setGlobal("mez");
-        {
-            self.newTable();
-            defer _ = self.setField(-2, "path");
-        }
-        {
-            const fs_funcs = zlua.fnRegsFromType(Fs);
-            LuaUtils.newLib(self, fs_funcs);
-            self.setField(-2, "fs");
-        }
-        {
-            const input_funcs = zlua.fnRegsFromType(Input);
-            LuaUtils.newLib(self, input_funcs);
-            self.setField(-2, "input");
-        }
-        {
-            const hook_funcs = zlua.fnRegsFromType(Hook);
-            LuaUtils.newLib(self, hook_funcs);
-            self.setField(-2, "hook");
-        }
-        {
-            const api_funcs = zlua.fnRegsFromType(Api);
-            LuaUtils.newLib(self, api_funcs);
-            self.setField(-2, "api");
-        }
-        {
-            const view_funcs = zlua.fnRegsFromType(View);
-            LuaUtils.newLib(self, view_funcs);
-            self.setField(-2, "view");
-        }
-        {
-            const output_funcs = zlua.fnRegsFromType(Output);
-            LuaUtils.newLib(self, output_funcs);
-            self.setField(-2, "output");
-        }
-        {
-            const remote_funcs = zlua.fnRegsFromType(Remote);
-            LuaUtils.newLib(self, remote_funcs);
-            self.setField(-2, "remote");
-        }
+        defer _ = self.setField(-2, "path");
+    }
+    {
+        const fs_funcs = zlua.fnRegsFromType(Fs);
+        LuaUtils.newLib(self, fs_funcs);
+        self.setField(-2, "fs");
+    }
+    {
+        const input_funcs = zlua.fnRegsFromType(Input);
+        LuaUtils.newLib(self, input_funcs);
+        self.setField(-2, "input");
+    }
+    {
+        const hook_funcs = zlua.fnRegsFromType(Hook);
+        LuaUtils.newLib(self, hook_funcs);
+        self.setField(-2, "hook");
+    }
+    {
+        const api_funcs = zlua.fnRegsFromType(Api);
+        LuaUtils.newLib(self, api_funcs);
+        self.setField(-2, "api");
+    }
+    {
+        const view_funcs = zlua.fnRegsFromType(View);
+        LuaUtils.newLib(self, view_funcs);
+        self.setField(-2, "view");
+    }
+    {
+        const output_funcs = zlua.fnRegsFromType(Output);
+        LuaUtils.newLib(self, output_funcs);
+        self.setField(-2, "output");
+    }
+    {
+        const remote_funcs = zlua.fnRegsFromType(Remote);
+        LuaUtils.newLib(self, remote_funcs);
+        self.setField(-2, "remote");
     }
 }
 
 pub const Config = struct {
-    str: ?[]const u8,
+    path: ?[]const u8,
     enabled: bool,
 };
 pub fn init(self: *Lua, cfg: Config) !void {
@@ -157,9 +137,14 @@ pub fn init(self: *Lua, cfg: Config) !void {
     errdefer self.state.deinit();
     self.state.openLibs();
 
-    openLibs(self.state);
+    openMezLibs(self.state);
 
-    if (!cfg.enabled) try setBaseConfig(self.state, "");
+    if (!cfg.enabled) {
+        try setBaseConfig(self.state, "");
+    } else if (cfg.path) |path| {
+        defer gpa.free(path);
+        try setBaseConfig(self.state, path);
+    }
     loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
         std.log.warn("{s}", .{try self.state.toString(-1)});
     };
@@ -168,10 +153,6 @@ pub fn init(self: *Lua, cfg: Config) !void {
         std.log.warn("{s}", .{try self.state.toString(-1)});
     };
 
-    if (cfg.str) |path| {
-        defer gpa.free(path);
-        try setBaseConfig(self.state, path);
-    }
     if (cfg.enabled) {
         loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
             std.log.warn("{s}", .{try self.state.toString(-1)});

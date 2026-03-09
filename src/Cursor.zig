@@ -32,10 +32,11 @@ mode: enum { normal, drag } = .normal,
 drag: ?struct {
     event_code: u32,
     start: struct { x: c_int, y: c_int },
-    view: ?struct { view: *View, dims: struct { width: c_int, height: c_int }, offset: struct {
-        x: c_int,
-        y: c_int,
-    } },
+    view: ?struct {
+        view: *View,
+        dims: struct { width: c_int, height: c_int },
+        offset: struct { x: c_int, y: c_int },
+    },
 },
 
 pub fn init(self: *Cursor) void {
@@ -73,8 +74,21 @@ pub fn deinit(self: *Cursor) void {
     self.x_cursor_manager.destroy();
 }
 
-pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
-    var passthrough = true;
+pub fn processCursorMotion(
+    self: *Cursor,
+    time_msec: u32,
+    device: *wlr.InputDevice,
+    delta_x: f64,
+    delta_y: f64,
+    unaccel_dx: f64,
+    unaccel_dy: f64,
+) void {
+    // these will be used later when the relative pointer manager is setup
+    _ = unaccel_dx;
+    _ = unaccel_dy;
+
+    // process the cursor motion
+    self.wlr_cursor.move(device, delta_x, delta_y);
 
     const view: ?*View = blk: {
         if (server.seat.focused_surface) |fs| {
@@ -93,46 +107,45 @@ pub fn processCursorMotion(self: *Cursor, time_msec: u32) void {
         // Proceed if mousemap for current mouse and modifier state's exist
         if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
             if (map.options.lua_drag_ref_idx > 0) {
-                passthrough = map.callback(.drag, .{ 
+                const passthrough = map.callback(.drag, .{
                     if (view != null) view.?.id else null,
-                    .{ 
+                    .{
                         .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
-                        .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
-                    }, 
-                    .{ 
+                        .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
+                    },
+                    .{
                         .start = self.drag.?.start,
-                        .view = if (self.drag.?.view != null) .{ 
+                        .view = if (self.drag.?.view != null) .{
                             .id = self.drag.?.view.?.view.id,
                             .dims = self.drag.?.view.?.dims,
-                            .offset = self.drag.?.view.?.offset
-                        } else null
+                            .offset = self.drag.?.view.?.offset,
+                        } else null,
                     }
                 });
+                if (!passthrough) return;
             }
         }
     }
 
-    if (passthrough) {
-        const output = server.seat.focused_output;
-        // Exit the switch if no focused output exists
-        std.debug.assert(output != null);
+    const output = server.seat.focused_output;
+    // Exit the switch if no focused output exists
+    std.debug.assert(output != null);
 
-        const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
-        if (surfaceAtResult) |surface| {
-            if (surface.scene_node_data.* == .view) {
-                server.events.exec("ViewPointerMotion", .{ 
-                    surface.scene_node_data.view.id,
-                    @as(c_int, @intFromFloat(self.wlr_cursor.x)), @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
-                });
-            }
-
-            server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
-            server.seat.wlr_seat.pointerNotifyMotion(time_msec, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
-        } else {
-            // This may not be necessary, remove if no bugs
-            server.seat.wlr_seat.pointerClearFocus();
-            self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
+    const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
+    if (surfaceAtResult) |surface| {
+        if (surface.scene_node_data.* == .view) {
+            server.events.exec("ViewPointerMotion", .{
+                surface.scene_node_data.view.id,
+                @as(c_int, @intFromFloat(self.wlr_cursor.x)),
+                @as(c_int, @intFromFloat(self.wlr_cursor.y)),
+            });
         }
+
+        server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
+        server.seat.wlr_seat.pointerNotifyMotion(time_msec, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
+    } else {
+        server.seat.wlr_seat.pointerClearFocus();
+        self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
     }
 }
 
@@ -141,20 +154,51 @@ fn handleMotion(
     _: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
-    server.cursor.wlr_cursor.move(event.device, event.delta_x, event.delta_y);
-    server.cursor.processCursorMotion(event.time_msec);
+    server.cursor.processCursorMotion(
+        event.time_msec,
+        event.device,
+        event.delta_x,
+        event.delta_y,
+        event.unaccel_dx,
+        event.unaccel_dy,
+    );
 }
 
 fn handleMotionAbsolute(
-    _: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
+    listener: *wl.Listener(*wlr.Pointer.event.MotionAbsolute),
     event: *wlr.Pointer.event.MotionAbsolute,
 ) void {
-    server.cursor.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
-    server.cursor.processCursorMotion(event.time_msec);
+    const self: *Cursor = @fieldParentPtr("motion_absolute", listener);
+    // comment from dwl:
+    // This event is forwarded by the cursor when a pointer emits an _absolute_
+    // motion event, from 0..1 on each axis. This happens, for example, when
+    // wlroots is running under a Wayland window rather than KMS+DRM, and you
+    // move the mouse over the window. You could enter the window from any edge,
+    // so we have to warp the mouse there. Also, some hardware emits these events.
+
+    // move the cursor when it doesn't order its events
+    if (event.time_msec == 0) {
+        self.wlr_cursor.warpAbsolute(event.device, event.x, event.y);
+    }
+
+    var layout_x: f64 = 0;
+    var layout_y: f64 = 0;
+    self.wlr_cursor.absoluteToLayoutCoords(event.device, event.x, event.y, &layout_x, &layout_y);
+
+    const delta_x = layout_x - self.wlr_cursor.x;
+    const delta_y = layout_y - self.wlr_cursor.y;
+    server.cursor.processCursorMotion(
+        event.time_msec,
+        event.device,
+        delta_x,
+        delta_y,
+        delta_x, // absolute motions do not decelerate
+        delta_y,
+    );
 }
 
 fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.event.Button) void {
-    const cursor: *Cursor = @fieldParentPtr("button", listener);
+    const self: *Cursor = @fieldParentPtr("button", listener);
 
     const view: ?*View = blk: {
         if (server.seat.focused_surface) |fs| {
@@ -167,77 +211,87 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
 
     switch (event.state) {
         .pressed => {
-            cursor.mode = .drag;
+            self.mode = .drag;
 
-            cursor.drag = .{ 
+            self.drag = .{ 
                 .event_code = event.button, 
                 .start = .{ 
-                    .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
-                    .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
+                    .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
+                    .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)) 
                 },
                 .view = null 
             };
 
             // Keep track of where the drag started
             if(view) |v| {
-                cursor.drag.?.view = .{
+                self.drag.?.view = .{
                     .view = v,
                     .dims = .{ .width = v.xdg_toplevel.base.geometry.width, .height = v.xdg_toplevel.base.geometry.height },
-                    .offset = .{ .x = cursor.drag.?.start.x - v.scene_tree.node.x, .y = cursor.drag.?.start.y - v.scene_tree.node.y },
+                    .offset = .{ .x = self.drag.?.start.x - v.scene_tree.node.x, .y = self.drag.?.start.y - v.scene_tree.node.y },
                 };
             }
         },
         .released => {
-            cursor.mode = .normal;
+            self.mode = .normal;
 
             // How do we do this on the lua side
-            // if(cursor.drag.view) |view| {
+            // if(self.drag.view) |view| {
             //   _ = view.xdg_toplevel.setResizing(false);
             // }
 
-            cursor.drag.?.view = null;
+            self.drag.?.view = null;
         },
         else => {
             std.log.err("Invalid/Unimplemented pointer button event type", .{});
         },
     }
 
+    // run this as late as possible that way we can use the current drag info
+    // in the release callback
+    defer if (event.state == .released) {
+        self.mode = .normal;
+        self.drag.?.view = null; // the drag is over, don't keep any information
+    };
+
+    // by default we pass the mouse clicks through to the client
     var passthrough = true;
-    const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
     // Proceed if mousemap for current mouse and modifier state's exist
+    const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
     if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
+        const args = .{
+            if (view != null) view.?.id else null,
+            .{
+                .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
+                .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
+            },
+            .{
+                .start = self.drag.?.start,
+                .view = if (self.drag.?.view != null) .{
+                    .id = self.drag.?.view.?.view.id,
+                    .dims = self.drag.?.view.?.dims,
+                    .offset = self.drag.?.view.?.offset,
+                } else null,
+            }
+        };
         switch (event.state) {
             .pressed => {
-                // Only make callback if a callback function exists
+                // Only call callback if a callback function exists
                 if (map.options.lua_press_ref_idx > 0) {
-                    passthrough = map.callback(.press, .{
-                        if (view != null) view.?.id else null,
-                        .{ 
-                            .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
-                            .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
-                        },
-                    });
+                    passthrough = map.callback(.press, args);
                 }
             },
             .released => {
-                // Only make callback if a callback function exists
-                if (map.options.lua_press_ref_idx > 0) {
-                    passthrough = map.callback(.release, .{
-                        if (view != null) view.?.id else null,
-                        .{ 
-                            .x = @as(c_int, @intFromFloat(cursor.wlr_cursor.x)),
-                            .y = @as(c_int, @intFromFloat(cursor.wlr_cursor.y)) 
-                        },
-                    });
+                // Only call callback if a callback function exists
+                if (map.options.lua_release_ref_idx > 0) {
+                    passthrough = map.callback(.release, args);
                 }
             },
-            else => unreachable
+            else => undefined
         }
     }
 
     // If no keymap exists for button event, forward it to a surface
-    // TODO: Allow for transparent mousemaps that pass mouse button events anyways
     if (passthrough) {
         _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }

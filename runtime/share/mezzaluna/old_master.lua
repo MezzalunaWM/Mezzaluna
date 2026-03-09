@@ -279,8 +279,10 @@ local master = function()
   end
 
   mez.input.add_mousemap("alt", "BTN_LEFT", {
-    press = function()
-      mez.input.set_cursor_type("pointer")
+    press = function(_, drag)
+      if drag.view ~= nil then
+        mez.input.set_cursor_type("pointer")
+      end
     end,
     drag = function(pos, drag)
       if drag.view ~= nil then
@@ -295,8 +297,10 @@ local master = function()
   -- This is so impractical
   -- I love it
   mez.input.add_mousemap("alt|shift", "BTN_LEFT", {
-    press = function()
-      mez.input.set_cursor_type("cross")
+    press = function(_, drag)
+      if drag.view ~= nil then
+        mez.input.set_cursor_type("cross")
+      end
       move_all_drag = {}
       for _, id in ipairs(mez.view.get_all_ids()) do
         move_all_drag[id] = mez.view.get_position(id)
@@ -314,8 +318,11 @@ local master = function()
   })
 
   mez.input.add_mousemap("alt", "BTN_RIGHT", {
-    press = function()
-      mez.input.set_cursor_type("cross")
+    press = function(_, drag)
+      if drag.view ~= nil then
+        mez.input.set_cursor_type("cross")
+        mez.view.set_resizing(drag.view.id, true)
+      end
     end,
     drag = function(pos, drag)
       if drag.view ~= nil then
@@ -327,7 +334,10 @@ local master = function()
         mez.view.set_size(drag.view.id, width, height)
       end
     end,
-    release = function()
+    release = function(_, drag)
+      if drag.view ~= nil then
+        mez.view.set_resizing(drag.view.id, false)
+      end
       mez.input.set_cursor_type("default")
     end
   })

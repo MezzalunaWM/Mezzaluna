@@ -8,7 +8,12 @@ const View = @import("../View.zig");
 const server = &@import("../main.zig").server;
 
 pub fn coerceNumber(comptime x: type, number: zlua.Number) error{InvalidNumber}!x {
-    if (number < std.math.minInt(x) or number > std.math.maxInt(x) or std.math.isNan(number)) {
+    const size = switch (@typeInfo(x)) {
+        .int => .{ std.math.minInt(x), std.math.maxInt(x) },
+        .float => .{ std.math.floatMin(x), std.math.floatMax(x) },
+        else => unreachable,
+    };
+    if (number < size.@"0" or number > size.@"1" or std.math.isNan(number)) {
         return error.InvalidNumber;
     }
     switch (@typeInfo(x)) {

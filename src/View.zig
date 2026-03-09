@@ -26,7 +26,7 @@ scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
 borders: [4]*wlr.SceneRect,
-border_width: i32, // TODO: move this to some config controlled by lua
+border_width: i32,
 geometry: wlr.Box, // The total geometry including borders
 
 // Surface Listeners
@@ -93,6 +93,13 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
     self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
     self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
+
+    self.xdg_toplevel.events.request_fullscreen.add(&self.request_fullscreen);
+    self.xdg_toplevel.events.request_move.add(&self.request_move);
+    self.xdg_toplevel.events.request_resize.add(&self.request_resize);
+    self.xdg_toplevel.events.set_app_id.add(&self.set_app_id);
+    self.xdg_toplevel.events.set_title.add(&self.set_title);
+    // self.xdg_toplevel.events.set_parent.add(&self.set_parent);
 
     for (self.borders, 0..) |_, i| {
         const color: [4]f32 = .{ 0, 0, 0, 1 };
@@ -199,13 +206,6 @@ fn handleMap(listener: *wl.Listener(void)) void {
         .right = true,
     });
 
-    view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
-    view.xdg_toplevel.events.request_move.add(&view.request_move);
-    view.xdg_toplevel.events.request_resize.add(&view.request_resize);
-    view.xdg_toplevel.events.set_app_id.add(&view.set_app_id);
-    view.xdg_toplevel.events.set_title.add(&view.set_title);
-    // view.xdg_toplevel.events.set_parent.add(&view.set_parent);
-
     view.mapped = true;
     server.events.exec("ViewMapPost", .{view.id});
 }
@@ -224,13 +224,6 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
-    view.request_fullscreen.link.remove();
-    view.request_move.link.remove();
-    view.request_resize.link.remove();
-    view.set_title.link.remove();
-    view.set_app_id.link.remove();
-    view.ack_configure.link.remove();
-
     server.events.exec("ViewUnmapPost", .{view.id});
 }
 
@@ -238,12 +231,22 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("destroy", listener);
 
     // Remove decorations
+    for (view.borders) |b| {
+        b.node.destroy();
+    }
 
+    // remove listeners
+    view.destroy.link.remove();
+    view.ack_configure.link.remove();
     view.map.link.remove();
     view.unmap.link.remove();
     view.commit.link.remove();
-    view.destroy.link.remove();
     view.new_popup.link.remove();
+    view.request_fullscreen.link.remove();
+    view.request_move.link.remove();
+    view.request_resize.link.remove();
+    view.set_title.link.remove();
+    view.set_app_id.link.remove();
 
     view.xdg_toplevel.base.surface.data = null;
 
