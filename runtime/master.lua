@@ -8,6 +8,7 @@ local M = {}
 
 local utils = {}
 
+---Find view ID within all tags
 ---@param view_id number
 ---@return "master" | "floating" | "stacking" | nil view_type
 ---@return number | nil tag_index
@@ -65,6 +66,7 @@ local default_config = {
 ---@field tags MasterTag[]
 ---@field master_ratio number
 
+---Tile all of the master and stack windows for a tag
 ---@param tag_id number
 M.tile_tag = function(tag_id)
 	local tag = M.state.tags[tag_id]
@@ -102,6 +104,7 @@ M.tile_tag = function(tag_id)
 	end
 end
 
+---Add the id of a new view
 ---@param view_id number
 M.add_view = function(view_id)
 	local tag = M.state.tags[M.state.tag_id]
@@ -117,6 +120,8 @@ M.add_view = function(view_id)
 	M.tile_tag(M.state.tag_id)
 end
 
+---Move the focus in a tag to the next view
+---Order is master -> stack -> floating -> master
 M.focus_next = function()
 	local view_id = mez.view.get_focused_id()
 	local type, tag_idx, view_idx = utils.find_view(view_id)
@@ -153,6 +158,8 @@ M.focus_next = function()
 	end
 end
 
+---Move the focus in a tag to the previous view
+---Order is master -> floating -> stack -> master
 M.focus_prev = function()
 	local view_id = mez.view.get_focused_id()
 	local type, tag_idx, view_idx = utils.find_view(view_id)
@@ -187,6 +194,7 @@ M.focus_prev = function()
 	end
 end
 
+---Remove a view_id from the layout
 ---@param view_id number
 M.remove_view = function(view_id)
   if view_id == 0 then view_id = mez.view.get_focused_id() end
@@ -221,6 +229,8 @@ M.remove_view = function(view_id)
 	M.tile_tag(tag_idx)
 end
 
+---Switch to a tag by enabling all views for 1 tag,
+---and disabling all the views for the old tag
 ---@param tag_idx number
 M.tag_enable = function (tag_idx)
 	---@param t number
@@ -270,6 +280,7 @@ M.tag_enable = function (tag_idx)
 	M.state.tag_id = tag_idx
 end
 
+---Move a stack window to the master, and vice versa
 ---@param view_id number
 M.zoom = function (view_id)
 	if view_id == 0 then view_id = mez.view.get_focused_id() end
@@ -286,6 +297,7 @@ M.zoom = function (view_id)
 	M.tile_tag(tag_idx)
 end
 
+---Modify the master stack ratio
 ---@param delta number The amount of change the master/stack ratio by
 M.change_ratio = function (delta)
 	M.state.master_ratio = M.state.master_ratio + delta
@@ -295,6 +307,7 @@ M.change_ratio = function (delta)
 	M.tile_tag(M.state.tag_id)
 end
 
+---Move a view from tiling to floating
 ---@param view_id number
 M.make_float = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
@@ -322,6 +335,7 @@ M.make_float = function (view_id)
 	M.tile_tag(tag_idx)
 end
 
+---Move a view from floating to tiling
 ---@param view_id number
 M.make_tile = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
@@ -436,7 +450,6 @@ M.setup = function()
 			end
 		end
 	})
-
 
 	mez.hook.add("OutputStateChange", { callback = function ()
 		for i = 1, M.config.tag_count do
