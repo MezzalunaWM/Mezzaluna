@@ -1,8 +1,6 @@
 mez.input.add_keymap("alt", "g", {
   press = function ()
-    for _, id in ipairs(mez.view.get_all_ids()) do
-      print(id)
-    end
+    mez.input.send_pointer_button("press")
   end
 })
 

@@ -133,10 +133,10 @@ pub fn send_key(L: *zlua.Lua) i32 {
 
   const keysym = xkb.Keysym.fromName(key, .no_flags);
 
-  server.seat.wlr_seat.keyboardSendKey(
+  server.seat.wlr_seat.keyboardNotifyKey(
     getTimeMs(),
     keysym.toUTF32(),
-    pressed,
+    .pressed,
   );
 
   return 0;
@@ -146,7 +146,8 @@ pub fn send_pointer_motion(L: *zlua.Lua) i32 {
   const sx = L.checkNumber(1);
   const sy = L.checkNumber(2);
 
-  server.seat.wlr_seat.pointerSendMotion(getTimeMs(), sx, sy);
+  server.seat.wlr_seat.pointerNotifyMotion(getTimeMs(), sx, sy);
+  server.seat.wlr_seat.pointerNotifyFrame();
 
   return 0;
 }
@@ -160,10 +161,23 @@ pub fn send_pointer_button(L: *zlua.Lua) i32 {
     pressed = .pressed;
   } if (std.mem.eql(u8, state, "release")) {
     pressed = .released;
+  } else {
+    return 0;
   }
 
   const mousesym = c.libevdev_event_code_from_name(c.EV_KEY, button);
-  _ = server.seat.wlr_seat.pointerSendButton(0, @intCast(mousesym), pressed);
+  _ = server.seat.wlr_seat.pointerNotifyButton(getTimeMs(), @intCast(mousesym), pressed);
 
+  return 0;
+}
+
+// ---@param x number x position of cursor
+// ---@param y number y position of cursor
+pub fn warp_pointer(L: *zlua.Lua) i32 {
+  const x = L.checkNumber(1);
+  const y = L.checkNumber(2);
+
+  server.seat.wlr_seat.pointerWarp(x, y);
+  server.seat.wlr_seat.pointerNotifyFrame();
   return 0;
 }
