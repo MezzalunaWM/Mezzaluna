@@ -69,9 +69,23 @@ pub const HookData = struct {
     events: [][]const u8, // a list of events
     options: struct {
         // group: []const u8, // TODO: do we need groups?
+        once: bool,
         /// This is the location of the callback lua function in the lua registry
         lua_cb_ref_idx: i32,
     },
+
+    pub fn init() *HookData {
+        const self = gpa.create(HookData) catch Utils.oomPanic();
+        return self;
+    }
+
+    pub fn deinit(self: *HookData) void {
+        for (self.events) |value| {
+            server.events.del(value, self);
+        }
+        _ = server.hooks.remove(self.options.lua_cb_ref_idx);
+        gpa.destroy(self);
+    }
 
     pub fn callback(self: *const HookData, args: anytype) void {
         const ArgsType = @TypeOf(args);
@@ -98,6 +112,8 @@ pub const HookData = struct {
             RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
         };
         Lua.state.pop(-1);
+
+        if (self.options.once) @constCast(self).deinit();
     }
 };
 
@@ -108,7 +124,8 @@ pub const HookData = struct {
 pub fn add(L: *zlua.Lua) i32 {
     L.checkType(2, .table);
 
-    var hook = gpa.create(HookData) catch Utils.oomPanic();
+    var hook: *HookData = .init();
+    errdefer hook.deinit();
 
     // We support both a string and a table of strings as the first value of
     // add. Regardless of which type is passed in we create an arraylist of
@@ -137,6 +154,12 @@ pub fn add(L: *zlua.Lua) i32 {
         hook.options.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
+    _ = L.pushString("once");
+    _ = L.getTable(2);
+    if (L.isBoolean(-1)) {
+        hook.options.once = L.toBoolean(-1);
+    }
+
     // TEST: this should be safe as the lua_cb_ref_idx's should never be the same
     // but that all really depends on the implementation of the hashmap
     server.hooks.put(hook.options.lua_cb_ref_idx, hook) catch Utils.oomPanic();
@@ -157,9 +180,6 @@ pub fn del(L: *zlua.Lua) i32 {
     const hook = server.hooks.get(hook_id);
     if (hook == null) L.raiseErrorStr("hook {} does not exist", .{hook_id});
 
-    for (hook.?.events) |value| {
-        server.events.del(value, hook.?);
-    }
-    L.pushBoolean(server.hooks.remove(hook_id));
-    return 1;
+    hook.?.deinit();
+    return 0;
 }
