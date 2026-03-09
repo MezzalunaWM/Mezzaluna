@@ -79,6 +79,10 @@ fn asyncCallback(
         return .disarm;
     };
 
+    // we need to call the wayland event loop to draw anything that might've
+    // been updated by the lua code
+    server.dispatchEvents(&server.xev_event_loop);
+
     // we reset the timer to be run again in the future
     if (!self.once) {
         var c_cancel: xev.Completion = undefined;

@@ -171,29 +171,30 @@ pub fn run(self: *Server) void {
     defer stream.deinit();
 
     var stream_c: xev.Completion = undefined;
-    stream.poll(&self.xev_event_loop, &stream_c, .read, Server, self, &waylandEventCallback);
+    stream.poll(&self.xev_event_loop, &stream_c, .read, Server, self, &struct {
+        fn callback(
+            userdata: ?*Server,
+            loop: *xev.Loop,
+            _: *xev.Completion,
+            _: xev.Stream,
+            _: xev.PollError!xev.PollEvent,
+        ) xev.CallbackAction {
+            const s: *Server = userdata.?;
+            if (!s.running) loop.stop();
+            s.dispatchEvents(loop);
+            return .rearm;
+        }
+    }.callback);
 
     self.xev_event_loop.run(.until_done) catch |err| {
         std.log.err("Failed to run wayland event loop: {}", .{ err });
     };
 }
 
-fn waylandEventCallback(
-    userdata: ?*Server,
-    loop: *xev.Loop,
-    _: *xev.Completion,
-    _: xev.Stream,
-    _: xev.PollError!xev.PollEvent,
-) xev.CallbackAction {
-    const self: *Server = userdata.?;
-
-    if (!self.running) loop.stop();
-
+pub fn dispatchEvents(self: *Server, loop: *xev.Loop) void {
     // dispatch events then tell the clients that there's stuff for them to do
     self.event_loop.dispatch(0) catch loop.stop();
     self.wl_server.flushClients();
-
-    return .rearm;
 }
 
 pub fn deinit(self: *Server) noreturn {
