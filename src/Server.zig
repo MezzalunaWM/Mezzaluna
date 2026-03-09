@@ -3,6 +3,7 @@ const Server = @This();
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const xev = @import("xev");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
@@ -31,6 +32,8 @@ backend: *wlr.Backend,
 event_loop: *wl.EventLoop,
 session: ?*wlr.Session,
 remote_lua_manager: ?*RemoteLuaManager,
+running: bool,
+xev_event_loop: xev.Loop,
 
 shm: *wlr.Shm,
 xdg_shell: *wlr.XdgShell,
@@ -90,6 +93,8 @@ pub fn init(self: *Server) void {
             std.log.err("Allocator create failed, exiting with 5", .{});
             std.process.exit(5);
         },
+        .running = true,
+        .xev_event_loop = try .init(.{}),
         .xdg_shell = try wlr.XdgShell.create(wl_server, 2),
         .layer_shell = try wlr.LayerShellV1.create(wl_server, 4),
         .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
@@ -145,13 +150,48 @@ pub fn init(self: *Server) void {
     self.events.exec("ServerStartPost", .{});
 }
 
-pub fn run(self: *Server) void {
-    const event_loop = self.wl_server.getEventLoop();
+/// libwayland uses a bool which the event loop checks to see if the server
+/// should be running, this is not included in our bindings, so we maintain our
+/// own.
+pub fn terminate(self: *Server) void {
+    // we still call as libwayland does write some information to a fd about
+    // termination
+    self.wl_server.terminate();
 
-    while (true) {
-        self.wl_server.flushClients();
-        event_loop.dispatch(-1) catch break;
-    }
+    self.running = false;
+}
+
+pub fn run(self: *Server) void {
+    const timer = xev.Timer.init() catch unreachable;
+    defer timer.deinit();
+
+    // this polls the wayland event loop file descriptor to check for any
+    // events we need to handle
+    const stream = xev.Stream.initFd(self.event_loop.getFd());
+    defer stream.deinit();
+
+    var c: xev.Completion = undefined;
+    stream.poll(&self.xev_event_loop, &c, .read, Server, self, &waylandEventTimer);
+
+    self.xev_event_loop.run(.until_done) catch unreachable;
+}
+
+fn waylandEventTimer(
+    userdata: ?*Server,
+    loop: *xev.Loop,
+    _: *xev.Completion,
+    _: xev.Stream,
+    _: xev.PollError!xev.PollEvent,
+) xev.CallbackAction {
+    const self: *Server = userdata.?;
+
+    if (!self.running) loop.stop();
+
+    // dispatch events then tell the clients that there's stuff for them to do
+    self.event_loop.dispatch(0) catch loop.stop();
+    self.wl_server.flushClients();
+
+    return .rearm;
 }
 
 pub fn deinit(self: *Server) noreturn {
@@ -170,6 +210,8 @@ pub fn deinit(self: *Server) noreturn {
 
     self.wl_server.destroyClients();
     self.wl_server.destroy();
+
+    self.xev_event_loop.deinit();
 
     std.log.debug("Exiting mez succesfully", .{});
     std.process.exit(0);

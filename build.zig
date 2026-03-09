@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) void {
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
     const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua51 }).module("zlua");
     const clap = b.dependency("clap", .{}).module("clap");
+    const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize }).module("xev");
 
     wlroots.addImport("wayland", wayland);
     wlroots.addImport("xkbcommon", xkbcommon);
@@ -58,6 +59,7 @@ pub fn build(b: *std.Build) void {
     mez.root_module.addImport("wlroots", wlroots);
     mez.root_module.addImport("zlua", zlua);
     mez.root_module.addImport("clap", clap);
+    mez.root_module.addImport("xev", xev);
 
     mez.root_module.linkSystemLibrary("wayland-server", .{});
     mez.root_module.linkSystemLibrary("xkbcommon", .{});
