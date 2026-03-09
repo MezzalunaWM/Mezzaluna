@@ -1,3 +1,4 @@
+//! mez.fs
 const Fs = @This();
 
 const std = @import("std");

@@ -1,3 +1,4 @@
+//! mez.hook
 const Hook = @This();
 
 const std = @import("std");

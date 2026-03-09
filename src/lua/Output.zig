@@ -1,3 +1,4 @@
+//! mez.output
 const std = @import("std");
 const zlua = @import("zlua");
 

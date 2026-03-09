@@ -1,3 +1,4 @@
+//! mez.view
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
