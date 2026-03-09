@@ -119,4 +119,6 @@ pub fn build(b: *std.Build) void {
     });
     remove_step.dependOn(&uninstall_runtime.step);
     remove_step.dependOn(&uninstall_bin.step);
+
+    // const doc_gen_step = b.step("doc-gen", "Generate documentation for the lua api");
 }

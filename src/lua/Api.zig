@@ -22,8 +22,7 @@ pub fn spawn(L: *zlua.Lua) i32 {
         else => L.raiseErrorStr("Unable to spawn process child process", .{}),
     };
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Exit mezzaluna
@@ -44,14 +43,6 @@ pub fn change_vt(L: *zlua.Lua) i32 {
             L.raiseErrorStr("Failed to switch vt", .{});
         };
     } else L.raiseErrorStr("Mez has not been initialized yet", .{});
-
-    L.pushNil();
-    return 1;
-}
-
-/// --- Print the scene tree for debugging
-pub fn print_scene(L: *zlua.Lua) i32 {
-    @import("../Debug.zig").debugPrintSceneTree();
 
     L.pushNil();
     return 1;
