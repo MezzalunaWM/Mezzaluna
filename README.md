@@ -29,6 +29,11 @@ Install the binary
 zig build install --prefix /usr
 ```
 
+Install the binary
+```
+zig build remove --prefix /usr
+```
+
 ## Configuration
 
 ### Default Config
