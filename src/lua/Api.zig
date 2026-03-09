@@ -15,7 +15,7 @@ const server = &@import("../main.zig").server;
 pub fn spawn(L: *zlua.Lua) i32 {
     const cmd = L.checkString(1);
 
-    var child = std.process.Child.init(&[_][]const u8{ "/bin/sh", "-c", cmd }, gpa);
+    var child = std.process.Child.init(&[_][]const u8{ cmd }, gpa);
     child.env_map = env_map;
     child.spawn() catch |err| switch (err) {
         error.OutOfMemory => Utils.oomPanic(),
