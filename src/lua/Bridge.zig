@@ -1,3 +1,5 @@
+//! mez.bridge
+
 const Bridge = @This();
 
 const std = @import("std");

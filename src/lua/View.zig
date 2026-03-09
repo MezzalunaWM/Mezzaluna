@@ -15,10 +15,8 @@ fn view_id_err(L: *zlua.Lua) noreturn {
   L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
 }
 
-// ---@alias view_id integer
-
-// ---Get the ids for all available views
-// ---@return view_id[]?
+/// ---Get the ids for all available views
+/// ---@return integer[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
   var output_it = server.root.output_layout.outputs.iterator(.forward);
 
@@ -72,8 +70,8 @@ pub fn check(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the id for the focused view
-// ---@return view_id?
+/// ---Get the id for the focused view
+/// ---@return integer?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
   if(server.seat.focused_surface) |fs| {
     if(fs == .view) {
@@ -86,8 +84,8 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Close the view with view_id
-// ---@param view_id view_id 0 maps to focused view
+/// ---Close the view with view_id
+/// ---@param view_id integer 0 maps to focused view
 pub fn close(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -99,10 +97,10 @@ pub fn close(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---position the view by it's top left corner
-// ---@param view_id view_id 0 maps to focused view
-// ---@param x number x position for view
-// ---@param y number y position for view
+/// ---position the view by it's top left corner
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param x number x position for view
+/// ---@param y number y position for view
 pub fn set_position(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   const x = LuaUtils.coerceNumber(i32, L.checkNumber(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
@@ -116,9 +114,9 @@ pub fn set_position(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the position of the view
-// ---@param view_id view_id 0 maps to focused view
-// ---@return { x: integer, y: integer }? Position of the view
+/// ---Get the position of the view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return { x: integer, y: integer }? Position of the view
 pub fn get_position(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   if (LuaUtils.viewById(view_id)) |v| {
@@ -139,10 +137,8 @@ pub fn get_position(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Set the size of the spesified view. Will be resized relative to
-//    the view's top left corner.
-// ---@param view_id view_id 0 maps to focused view
-// ---@return
+/// ---Set the size of the spesified view. Will be resized relative to the view's top left corner.
+/// ---@param view_id integer 0 maps to focused view
 pub fn set_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   // We use u32s here to enforce a minimum size of zero. The call to resize a
@@ -160,9 +156,9 @@ pub fn set_size(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the size of the view
-// ---@param view_id view_id 0 maps to focused view
-// ---@return { width: integer, height: integer }? Size of the view
+/// ---Get the size of the view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return { width: integer, height: integer }? Size of the view
 pub fn get_size(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   if (LuaUtils.viewById(view_id)) |v| {
@@ -183,8 +179,8 @@ pub fn get_size(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Remove focus from current view, and set to given id
-// ---@param view_id view_id Id of the view to be focused, or nil to remove focus
+/// ---Remove focus from current view, and set to given id
+/// ---@param view_id integer Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
   const view_id: ?c_longlong = L.optInteger(1);
 
@@ -198,8 +194,8 @@ pub fn set_focused(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Resize the view by it's top left corner
-// ---@param view_id view_id 0 maps to focused view
+/// ---Resize the view by it's top left corner
+/// ---@param view_id integer 0 maps to focused view
 pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -213,9 +209,9 @@ pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the title of the view
-// ---@param view_id view_id 0 maps to focused view
-// ---@return string?
+/// ---Get the title of the view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return string?
 pub fn get_title(L: *zlua.Lua) i32 {
   const view_id: u64 = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -233,9 +229,9 @@ pub fn get_title(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Get the app_id of the view
-// ---@param view_id view_id 0 maps to focused view
-// ---@return string?
+/// ---Get the app_id of the view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return string?
 pub fn get_app_id(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -253,9 +249,9 @@ pub fn get_app_id(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Enable or disable a view
-// ---@param view_id view_id 0 maps to focused view
-// ---@param enabled boolean
+/// ---Enable or disable a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param enabled boolean
 pub fn set_enabled(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   if (!L.isBoolean(2)) {
@@ -272,9 +268,9 @@ pub fn set_enabled(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Check if a view is enabled
-// ---@param view_id view_id 0 maps to focused view
-// ---@return boolean?
+/// ---Check if a view is enabled
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return boolean?
 pub fn get_enabled(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -287,9 +283,9 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Set a view you intend to resize
-// ---@param view_id view_id 0 maps to focused view
-// ---@param enable boolean
+/// ---Set a view you intend to resize
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param enable boolean
 pub fn set_resizing(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
   if (!L.isBoolean(2)) {
@@ -306,9 +302,9 @@ pub fn set_resizing(L: *zlua.Lua) i32 {
   return 1;
 }
 
-// ---Check if a view is resizing
-// ---@param view_id view_id 0 maps to focused view
-// ---@return boolean? nil if view cannot be found
+/// ---Check if a view is resizing
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return boolean? nil if view cannot be found
 pub fn get_resizing(L: *zlua.Lua) i32 {
   const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
