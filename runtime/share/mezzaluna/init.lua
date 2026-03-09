@@ -20,6 +20,7 @@ end
 -- allow plugin loading in .local/share/mez/plugins
 local plugin_dir = mez.fs.joinpath(env_data, "plugins")
 
+os.execute("mkdir -p " .. plugin_dir)
 for _, plugin_name in ipairs(mez.fs.subdirs(plugin_dir)) do
   package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?", "init.lua")
   package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?.lua")
