@@ -104,4 +104,17 @@ pub fn build(b: *std.Build) void {
     //     b.fmt("{s}/share/mez", .{b.install_prefix})
     // });
     // b.getUninstallStep().dependOn(&uninstall_runtime.step);
+
+    const remove_step = b.step("remove", "Uninstall the zig binary");
+    const uninstall_runtime = b.addSystemCommand(&.{
+        "rm",
+        "-rf",
+        b.fmt("{s}/share/mez", .{b.install_prefix})
+    });
+    const uninstall_bin = b.addSystemCommand(&.{
+        "rm",
+        b.fmt("{s}/bin/mez", .{b.install_prefix})
+    });
+    remove_step.dependOn(&uninstall_runtime.step);
+    remove_step.dependOn(&uninstall_bin.step);
 }
