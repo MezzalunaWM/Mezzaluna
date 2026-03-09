@@ -165,21 +165,20 @@ pub fn terminate(self: *Server) void {
 }
 
 pub fn run(self: *Server) void {
-    const timer = xev.Timer.init() catch unreachable;
-    defer timer.deinit();
-
     // this polls the wayland event loop file descriptor to check for any
     // events we need to handle
     const stream = xev.Stream.initFd(self.event_loop.getFd());
     defer stream.deinit();
 
-    var c: xev.Completion = undefined;
-    stream.poll(&self.xev_event_loop, &c, .read, Server, self, &waylandEventTimer);
+    var stream_c: xev.Completion = undefined;
+    stream.poll(&self.xev_event_loop, &stream_c, .read, Server, self, &waylandEventCallback);
 
-    self.xev_event_loop.run(.until_done) catch unreachable;
+    self.xev_event_loop.run(.until_done) catch |err| {
+        std.log.err("Failed to run wayland event loop: {}", .{ err });
+    };
 }
 
-fn waylandEventTimer(
+fn waylandEventCallback(
     userdata: ?*Server,
     loop: *xev.Loop,
     _: *xev.Completion,
