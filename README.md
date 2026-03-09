@@ -19,14 +19,14 @@ Clone The Repository
 git clone https://github.com/MezzalunaWM/Mezzaluna
 ```
 
-Build with Zig
+Build and run
 ```
 zig build
 ```
 
-Run the binary
+Install the binary
 ```
-./zig-out/bin/mez
+zig build install --prefix /usr
 ```
 
 ## Configuration
