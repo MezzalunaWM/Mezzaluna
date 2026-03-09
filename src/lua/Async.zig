@@ -75,6 +75,8 @@ fn asyncCallback(
 
     Lua.state.protectedCall(.{ .args = 0 }) catch {
         RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
+        self.deinit();
+        return .disarm;
     };
 
     // we reset the timer to be run again in the future
