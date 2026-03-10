@@ -166,14 +166,6 @@ pub fn setSize(self: *View, width: i32, height: i32) void {
         self.geometry.height - 2 * self.border_width,
     );
 
-    // clip the surface tree to the size of the view
-    self.surface_tree.node.subsurfaceTreeSetClip(&wlr.Box{
-        .x = 0,
-        .y = 0,
-        .width = self.geometry.width,
-        .height = self.geometry.height,
-    });
-
     self.resizeBorders();
 }
 
@@ -182,6 +174,14 @@ pub fn setSize(self: *View, width: i32, height: i32) void {
 pub fn resizeBorders(self: *View) void {
     // set the position of the surface to not clip with the borders
     self.surface_tree.node.setPosition(self.border_width, self.border_width);
+
+    // clip the surface tree to the size of the view
+    self.surface_tree.node.subsurfaceTreeSetClip(&wlr.Box{
+        .x = self.xdg_toplevel.base.geometry.x,
+        .y = self.xdg_toplevel.base.geometry.y,
+        .width = self.geometry.width - 2 * self.border_width,
+        .height = self.geometry.height - 2 * self.border_width,
+    });
 
     self.borders[0].setSize(self.geometry.width, self.border_width);
     self.borders[1].setSize(self.geometry.width, self.border_width);
