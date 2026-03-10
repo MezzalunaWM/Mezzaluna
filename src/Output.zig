@@ -26,6 +26,7 @@ state: wlr.Output.State,
 tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
 scene_output: *wlr.SceneOutput,
+non_exclusive_area: wlr.Box,
 
 layers: struct {
     background: *wlr.SceneTree,
@@ -61,6 +62,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
         .wlr_output = wlr_output,
         .tree = try server.root.scene.tree.createSceneTree(),
         .fullscreen = null,
+        .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
         .layers = .{
             .background = try self.tree.createSceneTree(),
@@ -235,6 +237,8 @@ fn handleRequestState(
     if (!output.wlr_output.commitState(event.state)) {
         std.log.warn("failed to set output state {}", .{event.state});
     }
+    // make sure the layers are behaving
+    arrangeLayers(output);
 
     server.events.exec("OutputStateChange", .{});
 }
@@ -277,6 +281,7 @@ pub fn arrangeLayers(self: *Output) void {
         .height = undefined,
     };
     self.wlr_output.effectiveResolution(&full_box.width, &full_box.height);
+    self.non_exclusive_area = full_box;
 
     inline for (@typeInfo(zwlr.LayerShellV1.Layer).@"enum".fields) |comptime_layer| {
         const layer: *wlr.SceneTree = @field(self.layers, comptime_layer.name);
@@ -300,7 +305,10 @@ pub fn arrangeLayers(self: *Output) void {
             // need to? Clients can do quite a bit of nasty stuff and taking
             // exclusive focus isn't even that bad.
 
-            layer_surface.scene_layer_surface.configure(&full_box, &full_box);
+            layer_surface.scene_layer_surface.configure(
+                &full_box,
+                &self.non_exclusive_area,
+            );
 
             // TEST: are these calls useless?
             // const x = layer_surface.scene_layer_surface.tree.node.x;

@@ -81,8 +81,16 @@ pub fn main() !void {
     env_map = try std.process.getEnvMap(gpa);
     try env_map.put("WAYLAND_DISPLAY", socket);
 
+    // tell the kernel to reap the children
+    var act = std.posix.Sigaction{
+        .handler = .{ .handler = std.posix.SIG.IGN },
+        .mask = std.posix.sigemptyset(),
+        .flags = std.posix.SA.NOCLDWAIT,
+    };
+    std.posix.sigaction(std.posix.SIG.CHLD, &act, null);
+
     if (res.args.c) |cmd| {
-        var child = std.process.Child.init(&[_][]const u8{ "/bin/sh", "-c", cmd }, gpa);
+        var child = std.process.Child.init(&[_][]const u8{ cmd }, gpa);
         child.env_map = &env_map;
         try child.spawn();
     }
