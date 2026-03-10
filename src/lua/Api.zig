@@ -11,12 +11,34 @@ const gpa = std.heap.c_allocator;
 const env_map = &@import("../main.zig").env_map;
 const server = &@import("../main.zig").server;
 
-/// ---Spawn new application via the shell command
-/// ---@param cmd string Command to be run by a shell
+/// ---Spawn new application via the shell command. If you wish to pass in args
+/// ---to your command then you must use a table of strings.
+/// ---@param cmd []string|string Command to be run by a shell
 pub fn spawn(L: *zlua.Lua) i32 {
-    const cmd = L.checkString(1);
+    const t = L.typeOf(1);
+    const command = switch (t) {
+        .string => &[_][]const u8{ L.checkString(1) },
+        .table => blk: {
+            const list = gpa.alloc([]const u8, L.objectLen(1)) catch Utils.oomPanic();
 
-    var child = std.process.Child.init(&[_][]const u8{ cmd }, gpa);
+            var i: u32 = 0;
+            L.pushNil();
+            while (L.next(1)) : (i += 1) {
+                const s = L.toString(-1) catch L.raiseErrorStr("Unable to spawn process child process", .{});
+                list[i] = gpa.dupe(u8, s) catch Utils.oomPanic();
+                L.pop(1);  // remove value, keep key for next iteration
+            }
+
+            break :blk list;
+        },
+        else => L.raiseErrorStr("Must pass a string or table", .{}),
+    };
+    defer if (t == .table) {
+        for (command) |v| gpa.free(v);
+        gpa.free(command);
+    };
+
+    var child = std.process.Child.init(command, gpa);
     child.env_map = env_map;
     child.spawn() catch |err| switch (err) {
         error.OutOfMemory => Utils.oomPanic(),
