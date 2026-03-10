@@ -13,6 +13,8 @@ const Utils = @import("Utils.zig");
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
+pub const Backend = enum { wayland, x11 };
+
 mapped: bool,
 focused: bool,
 fullscreen: bool,
@@ -55,8 +57,9 @@ set_title: wl.Listener(void) = .init(handleSetTitle),
 // Do we need to add this
 // set_parent: wl.Listener(void) = .init(handleSetParent),
 
-pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
+pub fn init(xdg_toplevel: *wlr.XdgToplevel, backend: Backend) *View {
     errdefer Utils.oomPanic();
+    _ = backend;
 
     const self = try gpa.create(View);
     errdefer gpa.destroy(self);

@@ -25,6 +25,7 @@ const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
 wl_server: *wl.Server,
+xwayland: *wlr.Xwayland,
 compositor: *wlr.Compositor,
 renderer: *wlr.Renderer,
 backend: *wlr.Backend,
@@ -64,6 +65,9 @@ new_xdg_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(h
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleNewLayerSurface),
 request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .init(handleRequestActivate),
 
+xwayland_ready: wl.Listener(void) = .init(handleXwaylandReady),
+new_xwayland_surface: wl.Listener(*wlr.XwaylandSurface) = .init(handleNewXwaylandSurface),
+
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
 
@@ -87,6 +91,7 @@ pub fn init(self: *Server) void {
 
     self.* = .{
         .wl_server = wl_server,
+        .xwayland = try wlr.Xwayland.create(self.wl_server, self.compositor, true),
         .backend = backend,
         .renderer = renderer,
         .allocator = wlr.Allocator.autocreate(backend, renderer) catch {
@@ -147,6 +152,10 @@ pub fn init(self: *Server) void {
     self.xdg_toplevel_decoration_manager.events.new_toplevel_decoration.add(&self.new_xdg_toplevel_decoration);
     self.layer_shell.events.new_surface.add(&self.new_layer_surface);
     self.xdg_activation.events.request_activate.add(&self.request_activate);
+
+    // Add xwayland listeners
+    self.xwayland.events.new_surface.add(&self.new_xwayland_surface);
+    self.xwayland.events.ready.add(&self.xwayland_ready);
 
     self.events.exec("ServerStartPost", .{});
 }
@@ -242,7 +251,7 @@ fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
 }
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {
-    _ = View.init(xdg_toplevel);
+    _ = View.init(xdg_toplevel, .wayland);
 }
 
 fn handleNewXdgToplevelDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
@@ -289,4 +298,23 @@ fn handleRequestActivate(
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
+}
+
+fn handleXwaylandReady(
+    listener: *wl.Listener(void),
+) void {
+    const self: *Server = @fieldParentPtr("xwayland_ready", listener);
+    self.xwayland.setSeat(self.seat.wlr_seat);
+
+    // TODO: set the cursor to match wayland
+}
+
+fn handleNewXwaylandSurface(
+    listener: *wl.Listener(*wlr.XwaylandSurface),
+    event: *wlr.XwaylandSurface,
+) void {
+    _ = listener;
+    _ = event;
+
+    // _ = View.init(xdg_toplevel, .wayland);
 }

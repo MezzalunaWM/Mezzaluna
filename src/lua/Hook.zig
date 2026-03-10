@@ -55,7 +55,7 @@ pub const Events = struct {
         }
     }
 
-    pub fn exec(self: *Events, event: []const u8, args: anytype) void {
+    pub fn exec(self: *Events, comptime event: []const u8, args: anytype) void {
         if (self.events.get(event)) |e| {
             var node = e.first;
             while (node) |n| : (node = n.next) {

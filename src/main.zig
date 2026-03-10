@@ -80,6 +80,7 @@ pub fn main() !void {
 
     env_map = try std.process.getEnvMap(gpa);
     try env_map.put("WAYLAND_DISPLAY", socket);
+    try env_map.put("DISPLAY", std.mem.span(server.xwayland.display_name)); // xwayland
 
     // tell the kernel to reap the children
     var act = std.posix.Sigaction{
