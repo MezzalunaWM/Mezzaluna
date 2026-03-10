@@ -108,19 +108,14 @@ pub fn processCursorMotion(
         if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
             if (map.options.lua_drag_ref_idx > 0) {
                 const passthrough = map.callback(.drag, .{
-                    if (view != null) view.?.id else null,
-                    .{
+                    if (view != null) view.?.id else null, // view_id
+                    .{ // pos
                         .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                         .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
                     },
-                    .{
-                        .start = self.drag.?.start,
-                        .view = if (self.drag.?.view != null) .{
-                            .id = self.drag.?.view.?.view.id,
-                            .dims = self.drag.?.view.?.dims,
-                            .offset = self.drag.?.view.?.offset,
-                        } else null,
-                    }
+                    self.drag.?.start, // start
+                    // TODO: Do we really need an offset , is it necessary
+                    if (self.drag.?.view != null) self.drag.?.view.?.offset else null, // offset
                 });
                 if (!passthrough) return;
             }
@@ -260,20 +255,15 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
     const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
     if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
         const args = .{
-            if (view != null) view.?.id else null,
-            .{
+            if (view != null) view.?.id else null, // view_id
+            .{ // pos
                 .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                 .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
             },
-            .{
-                .start = self.drag.?.start,
-                .view = if (self.drag.?.view != null) .{
-                    .id = self.drag.?.view.?.view.id,
-                    .dims = self.drag.?.view.?.dims,
-                    .offset = self.drag.?.view.?.offset,
-                } else null,
-            }
+            self.drag.?.start, // start
+            if (self.drag.?.view != null) self.drag.?.view.?.offset else null
         };
+
         switch (event.state) {
             .pressed => {
                 // Only call callback if a callback function exists

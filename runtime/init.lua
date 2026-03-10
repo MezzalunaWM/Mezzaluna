@@ -1,3 +1,5 @@
+---@module "mez_types"
+
 local env_conf = os.getenv("XDG_CONFIG_HOME")
 if not env_conf then
   env_conf = os.getenv("HOME")
@@ -28,6 +30,7 @@ end
 
 -- allow loading files in the runtime directory
 package.path = package.path .. ";" .. mez.fs.joinpath(mez.path.runtime, "?.lua")
+
 mez.inspect = require("inspect").inspect
 
 mez.path.base_config = mez.fs.joinpath(mez.path.runtime, "base_config.lua")

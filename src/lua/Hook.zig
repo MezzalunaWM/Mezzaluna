@@ -1,3 +1,4 @@
+//! mez.hook
 const Hook = @This();
 
 const std = @import("std");
@@ -118,9 +119,9 @@ pub const HookData = struct {
 };
 
 /// ---Create a new hook on an event
-/// ---@param events string|string[]
-/// ---@param options table
-/// ---@return number id
+/// ---@param events (string | string[])
+/// ---@param options { callback: fun(...), once: boolean? }
+/// ---@return number hook id
 pub fn add(L: *zlua.Lua) i32 {
     L.checkType(2, .table);
 
@@ -172,7 +173,7 @@ pub fn add(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Create an existing hook
+/// ---Remove an existing hook
 /// ---@param id number
 /// ---@return boolean has it been deleted
 pub fn del(L: *zlua.Lua) i32 {

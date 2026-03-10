@@ -1,3 +1,4 @@
+//! mez.input
 const Input = @This();
 
 const std = @import("std");
@@ -120,9 +121,9 @@ pub const MousemapData = struct {
 };
 
 /// ---Create a new keymap
-/// ---@param string modifiers
-/// ---@param string keys
-/// ---@param table options
+/// ---@param modifiers string 
+/// ---@param keys string 
+/// ---@param options table { press: fun(), repeat: fun(), release: fun() }
 pub fn add_keymap(L: *zlua.Lua) i32 {
     var keymap: KeymapData = undefined;
     keymap.options.repeat = true;
@@ -156,10 +157,20 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     return 1;
 }
 
+/// ---@class Position
+/// ---@field x number
+/// ---@field y number
+
+/// ---@alias MousemapFunc fun(
+/// --- view_id: integer,
+/// --- pos: Position,
+/// --- start: Position,
+/// --- offset: Position): boolean?
+
 /// ---Create a new mousemap
-/// ---@param string modifiers
-/// ---@param string libevdev button name (ex. "BTN_LEFT", "BTN_RIGHT")
-/// ---@param table options
+/// ---@param modifiers string 
+/// ---@param btn_name string button name (ex. "BTN_LEFT", "BTN_RIGHT")
+/// ---@param options { press: MousemapFunc?, drag: MousemapFunc?, release: MousemapFunc? }
 pub fn add_mousemap(L: *zlua.Lua) i32 {
     var mousemap: MousemapData = undefined;
 
@@ -195,8 +206,8 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 }
 
 /// ---Remove an existing keymap
-/// ---@param string modifiers
-/// ---@param string keys
+/// ---@param modifiers string 
+/// ---@param keys string 
 pub fn del_keymap(L: *zlua.Lua) i32 {
     L.checkType(1, .string);
     L.checkType(2, .string);
@@ -216,8 +227,8 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 }
 
 /// ---Remove an existing mousemap
-/// ---@param string modifiers
-/// ---@param string button
+/// ---@param modifiers string 
+/// ---@param button string 
 pub fn del_mousemap(L: *zlua.Lua) i32 {
     L.checkType(1, .string);
     L.checkType(2, .string);
@@ -249,8 +260,8 @@ pub fn get_repeat_info(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the repeat information
-/// ---@param integer rate
-/// ---@param integer delay
+/// ---@param rate integer 
+/// ---@param delay integer 
 pub fn set_repeat_info(L: *zlua.Lua) i32 {
     const rate = LuaUtils.coerceInteger(i32, L.checkInteger(1)) catch {
         L.raiseErrorStr("The rate must be a valid number", .{});
@@ -264,7 +275,7 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the cursor type
-/// ---@param string cursor name
+/// ---@param cursor string name
 pub fn set_cursor_type(L: *zlua.Lua) i32 {
     const name = L.checkString(1);
     server.cursor.wlr_cursor.setXcursor(server.cursor.x_cursor_manager, name);

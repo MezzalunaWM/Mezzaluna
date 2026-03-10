@@ -1,3 +1,4 @@
+//! mez.fs
 const Fs = @This();
 
 const std = @import("std");
@@ -9,7 +10,7 @@ const Utils = @import("../Utils.zig");
 const gpa = std.heap.c_allocator;
 
 /// ---Join any number of paths into one path
-/// ---@vararg string paths to join
+/// ---@param ... string Paths to join
 /// ---@return string?
 pub fn joinpath(L: *zlua.Lua) i32 {
     const nargs: i32 = L.getTop();
@@ -40,7 +41,7 @@ pub fn joinpath(L: *zlua.Lua) i32 {
 }
 
 /// ---List sub-directories given an abosolute parent path
-/// ---@param string path
+/// ---@param path string 
 /// ---@return string[] list of sub directories
 pub fn subdirs(L: *zlua.Lua) i32 {
     const nargs: i32 = L.getTop();

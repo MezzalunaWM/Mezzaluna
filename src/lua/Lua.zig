@@ -87,6 +87,21 @@ fn loadConfigDir(self: *zlua.Lua) !void {
 }
 
 pub fn openMezLibs(self: *zlua.Lua) void {
+  // This is the start of ziglua docgen. My idea of how this will work right now
+  // is that we're going to create a lua stack at comptime and then follow
+  // (when told) the stack till it's done being created at which point we will
+  // take all the functions (and variables) that we found and create a lua file
+  // with a '---@meta' heading.
+  //
+  // Now this has two big parts:
+  //  1. the comptime lua stack
+  //  2. function signatures, this will require either:
+  //    a) the user to provide a luadoc comment above their function (this would
+  //       require us to create a luadoc compiler as we need to generate a function
+  //       "declaration")
+  //    b) full comptime parsing of the code to see what values are pulled off of
+  //       and put back onto the lua stack, I think this will be much harder, but
+  //       would also make the users job much easier
     self.newTable();
     defer _ = self.setGlobal("mez");
     {

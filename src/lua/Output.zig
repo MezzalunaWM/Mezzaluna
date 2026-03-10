@@ -1,3 +1,4 @@
+//! mez.output
 const std = @import("std");
 const zlua = @import("zlua");
 
@@ -10,9 +11,8 @@ fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
 }
 
-/// ---@alias output_id integer
 /// ---Get the ids for all available outputs
-/// ---@return output_id[]?
+/// ---@return integer[]
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var it = server.root.scene.outputs.iterator(.forward);
     var index: usize = 1;
@@ -33,7 +33,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the id for the focused output
-/// ---@return output_id?
+/// ---@return integer?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
     if (server.seat.focused_output) |output| {
         L.pushInteger(@intCast(output.id));
@@ -45,7 +45,7 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
 }
 
 /// ---Get refresh rate for the output
-/// ---@param output_id output_id 0 maps to focused output
+/// ---@param output_id integer 0 maps to focused output
 /// ---@return integer?
 pub fn get_rate(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
@@ -61,7 +61,7 @@ pub fn get_rate(L: *zlua.Lua) i32 {
 }
 
 /// ---Get resolution in pixels of the output
-/// ---@param output_id output_id 0 maps to focused output
+/// ---@param output_id integer 0 maps to focused output
 /// ---@return { width: integer, height: integer }?
 pub fn get_resolution(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
@@ -86,7 +86,7 @@ pub fn get_resolution(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the serial for the output
-/// ---@param output_id output_id 0 maps to focused output
+/// ---@param output_id integer 0 maps to focused output
 /// ---@return string?
 pub fn get_serial(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
@@ -107,7 +107,7 @@ pub fn get_serial(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the make for the output
-/// ---@param output_id output_id 0 maps to focused output
+/// ---@param output_id integer 0 maps to focused output
 /// ---@return string?
 pub fn get_make(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
@@ -128,8 +128,8 @@ pub fn get_make(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the model for the output
-/// ---@param output_id output_id 0 maps to focused output
-/// ---@return stirng?
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return string?
 pub fn get_model(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -149,8 +149,8 @@ pub fn get_model(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the description for the output
-/// ---@param output_id output_id 0 maps to focused output
-/// ---@return stirng?
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return string?
 pub fn get_description(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -170,8 +170,8 @@ pub fn get_description(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the name of the output
-/// ---@param output_id output_id 0 maps to focused output
-/// ---@return stirng
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return string 
 pub fn get_name(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 

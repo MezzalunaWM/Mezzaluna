@@ -1,3 +1,5 @@
+---@module "mez_types"
+
 local master = require("master")
 master.setup()
 

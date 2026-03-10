@@ -82,8 +82,6 @@ pub fn build(b: *std.Build) void {
     options.addOption([]const u8, "version", version);
     mez.root_module.addOptions("config", options);
 
-    std.debug.print("runtime_path_prefix: {s}\n", .{runtime_path_prefix});
-
     // Installs a bin to prefix/bin/mez
     b.installArtifact(mez);
 

@@ -1,3 +1,4 @@
+//! mez.remote
 const Remote = @This();
 
 const std = @import("std");
