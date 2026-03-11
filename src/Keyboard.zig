@@ -41,7 +41,7 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
 
     // TODO: configure this via lua later
     // Should handle this error here
-    if (!self.wlr_keyboard.setKeymap(server.seat.keymap)) return error.SetKeymapFailed;
+    if (!self.wlr_keyboard.setKeymap(server.seat.xkb_keymap)) return error.SetKeymapFailed;
     self.wlr_keyboard.setRepeatInfo(25, 600);
 
     self.wlr_keyboard.events.modifiers.add(&self.modifiers);
@@ -78,28 +78,40 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
 
     var handled: bool = false;
     const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
-    if (server.seat.keyboard_group.wlr_group.keyboard.xkb_state) |xkb_state| {
-        const keysyms = xkb_state.keyGetSyms(keycode);
-        for (keysyms) |sym| {
-            handled = keypress(modifiers, sym, event.state);
+    // TODO: We should check against other layers besides 0, hyprland does this according to jippity
+    const level_keysyms = server.seat.xkb_keymap.keyGetSymsByLevel(keycode, 0, 0);
+    const state_keysyms = blk: {
+        if(keyboard.wlr_keyboard.xkb_state) |xkb_state| {
+            break :blk xkb_state.keyGetSyms(keycode);
         }
+        break :blk null;
+    };
 
-        // give the keyboard group information about what to repeat and update it
-        if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
-            server.seat.keyboard_group.modifiers = modifiers;
-            server.seat.keyboard_group.keysyms = keysyms;
-            server.seat.keyboard_group.repeat_source.?.timerUpdate(
-                keyboard.wlr_keyboard.repeat_info.delay,
-            ) catch {
-                std.log.warn("failed to update keyboard repeat timer", .{});
-            };
-        } else {
-            server.seat.keyboard_group.modifiers = null;
-            server.seat.keyboard_group.keysyms = null;
+    for (level_keysyms) |sym| {
+        handled = keypress(modifiers, sym, event.state);
+        if(handled) break;
+    }
+
+    if(!handled and state_keysyms != null) {
+        for (state_keysyms.?) |sym| {
+            handled = keypress(modifiers, sym, event.state);
+            if(handled) break;
         }
     }
 
-    if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {}
+    // give the keyboard group information about what to repeat and update it
+    if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
+        server.seat.keyboard_group.modifiers = modifiers;
+        server.seat.keyboard_group.keysyms = level_keysyms;
+        server.seat.keyboard_group.repeat_source.?.timerUpdate(
+            keyboard.wlr_keyboard.repeat_info.delay,
+        ) catch {
+            std.log.warn("failed to update keyboard repeat timer", .{});
+        };
+    } else {
+        server.seat.keyboard_group.modifiers = null;
+        server.seat.keyboard_group.keysyms = null;
+    }
 
     if (!handled) {
         server.seat.wlr_seat.setKeyboard(&server.seat.keyboard_group.wlr_group.keyboard);

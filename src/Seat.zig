@@ -33,7 +33,7 @@ focused_surface: ?FocusData,
 focused_output: ?*Output,
 
 keyboard_group: *KeyboardGroup,
-keymap: *xkb.Keymap,
+xkb_keymap: *xkb.Keymap,
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),
@@ -49,25 +49,25 @@ pub fn init(self: *Seat) void {
     };
     defer xkb_context.unref();
 
-    const keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
+    const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
         std.log.err("Unable to create a xkb keymap, exiting", .{});
         std.process.exit(8);
     };
-    defer keymap.unref();
+    defer xkb_keymap.unref();
 
     self.* = .{
         .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
         .focused_surface = null,
         .focused_output = null,
         .keyboard_group = .init(),
-        .keymap = keymap.ref(),
+        .xkb_keymap = xkb_keymap.ref(),
     };
     errdefer {
         self.keyboard_group.deinit();
         self.wlr_seat.destroy();
     }
 
-    _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.keymap);
+    _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.xkb_keymap);
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);

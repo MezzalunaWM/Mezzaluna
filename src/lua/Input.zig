@@ -19,7 +19,7 @@ fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     var modifiers = wlr.Keyboard.ModifierMask{};
     while (it.next()) |m| {
         inline for (std.meta.fields(@TypeOf(modifiers))) |f| {
-            if (f.type == bool and std.mem.eql(u8, m, f.name)) {
+            if (f.type == bool and std.ascii.eqlIgnoreCase(m, f.name)) {
                 @field(modifiers, f.name) = true;
             }
         }
@@ -30,7 +30,7 @@ fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
 
 pub const KeymapData = struct {
     modifier: wlr.Keyboard.ModifierMask,
-    keycode: xkb.Keysym,
+    keysym: xkb.Keysym,
     options: struct {
         repeat: bool,
         /// This is the location of the on press lua function in the lua registry
@@ -121,8 +121,8 @@ pub const MousemapData = struct {
 };
 
 /// ---Create a new keymap
-/// ---@param modifiers string 
-/// ---@param keys string 
+/// ---@param modifiers string
+/// ---@param keys string
 /// ---@param options table { press: fun(), repeat: fun(), release: fun() }
 pub fn add_keymap(L: *zlua.Lua) i32 {
     var keymap: KeymapData = undefined;
@@ -132,7 +132,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     keymap.modifier = parse_modkeys(mod);
 
     const key = L.checkString(2);
-    keymap.keycode = xkb.Keysym.fromName(key, .no_flags);
+    keymap.keysym = xkb.Keysym.fromName(key, .no_flags);
 
     _ = L.pushString("press");
     _ = L.getTable(3);
@@ -150,25 +150,45 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     _ = L.getTable(3);
     keymap.options.repeat = L.isNil(-1) or L.toBoolean(-1);
 
-    const hash = KeymapData.hash(keymap.modifier, keymap.keycode);
+    const hash = KeymapData.hash(keymap.modifier, keymap.keysym);
     server.keymaps.put(hash, keymap) catch Utils.oomPanic();
 
     L.pushNil();
     return 1;
 }
 
+/// ---Remove an existing keymap
+/// ---@param modifiers string
+/// ---@param keys string
+pub fn del_keymap(L: *zlua.Lua) i32 {
+    L.checkType(1, .string);
+    L.checkType(2, .string);
+
+    var keymap: KeymapData = undefined;
+    const mod = L.checkString(1);
+
+    keymap.modifier = parse_modkeys(mod);
+
+    const key = L.checkString(2);
+
+    keymap.keysym = xkb.Keysym.fromName(key, .no_flags);
+    _ = server.keymaps.remove(KeymapData.hash(keymap.modifier, keymap.keysym));
+
+    L.pushNil();
+    return 1;
+}
+
+
 /// ---@class Position
 /// ---@field x number
 /// ---@field y number
-
 /// ---@alias MousemapFunc fun(
 /// --- view_id: integer,
 /// --- pos: Position,
 /// --- start: Position,
 /// --- offset: Position): boolean?
-
 /// ---Create a new mousemap
-/// ---@param modifiers string 
+/// ---@param modifiers string
 /// ---@param btn_name string button name (ex. "BTN_LEFT", "BTN_RIGHT")
 /// ---@param options { press: MousemapFunc?, drag: MousemapFunc?, release: MousemapFunc? }
 pub fn add_mousemap(L: *zlua.Lua) i32 {
@@ -205,30 +225,9 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Remove an existing keymap
-/// ---@param modifiers string 
-/// ---@param keys string 
-pub fn del_keymap(L: *zlua.Lua) i32 {
-    L.checkType(1, .string);
-    L.checkType(2, .string);
-
-    var keymap: KeymapData = undefined;
-    const mod = L.checkString(1);
-
-    keymap.modifier = parse_modkeys(mod);
-
-    const key = L.checkString(2);
-
-    keymap.keycode = xkb.Keysym.fromName(key, .no_flags);
-    _ = server.keymaps.remove(KeymapData.hash(keymap.modifier, keymap.keycode));
-
-    L.pushNil();
-    return 1;
-}
-
 /// ---Remove an existing mousemap
-/// ---@param modifiers string 
-/// ---@param button string 
+/// ---@param modifiers string
+/// ---@param button string
 pub fn del_mousemap(L: *zlua.Lua) i32 {
     L.checkType(1, .string);
     L.checkType(2, .string);
@@ -260,8 +259,8 @@ pub fn get_repeat_info(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the repeat information
-/// ---@param rate integer 
-/// ---@param delay integer 
+/// ---@param rate integer
+/// ---@param delay integer
 pub fn set_repeat_info(L: *zlua.Lua) i32 {
     const rate = LuaUtils.coerceInteger(i32, L.checkInteger(1)) catch {
         L.raiseErrorStr("The rate must be a valid number", .{});

@@ -442,13 +442,9 @@ M.setup = function(config)
 	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.set_fullscreen(0) end })
 
 	for i = 1, M.config.tag_count do
-		mez.input.add_keymap(M.config.mod_key, i, { press = function () M.tag_enable(i) end })
+		mez.input.add_keymap(M.config.mod_key, tostring(i), { press = function () M.tag_enable(i) end })
+		-- mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), { press = function () M.send_view(0, i) end })
 	end
-
-  -- Wow this is ass
-	--  for i, k in ipairs({"exclam", "at", "numbersign", "dollar", "percent"}) do
-	-- 	mez.input.add_keymap(M.config.mod_key.."|shift", k, { press = function () M.send_view(0, i) end })
-	-- end
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_LEFT", {
 		press = function(view_id) M.make_float(view_id) end,
