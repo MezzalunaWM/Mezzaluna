@@ -79,6 +79,7 @@ pub fn main() !void {
     const socket = try server.wl_server.addSocketAuto(&buf);
 
     env_map = try std.process.getEnvMap(gpa);
+    env_map.remove("DISPLAY"); // prevent x11 clients from trying to spawn outside of mez
     try env_map.put("WAYLAND_DISPLAY", socket);
 
     // tell the kernel to reap the children
