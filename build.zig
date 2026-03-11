@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     const scanner = Scanner.create(b, .{});
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
     scanner.addSystemProtocol("stable/tablet/tablet-v2.xml");
+    scanner.addSystemProtocol("staging/cursor-shape/cursor-shape-v1.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
     scanner.addCustomProtocol(b.path("protocols/wlr-layer-shell-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocols/mez-remote-lua-unstable-v1.xml"));
@@ -29,6 +30,7 @@ pub fn build(b: *std.Build) void {
     scanner.generate("xdg_wm_base", 7);
     scanner.generate("zwp_tablet_manager_v2", 2);
     scanner.generate("zwlr_layer_shell_v1", 5);
+    scanner.generate("wp_cursor_shape_manager_v1", 1);
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
     const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
@@ -75,7 +77,7 @@ pub fn build(b: *std.Build) void {
         .Inherit,
     ) catch "dev\n";
 
-    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir") 
+    const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir")
         orelse b.pathJoin(&.{b.install_prefix, "share"});
     options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
 

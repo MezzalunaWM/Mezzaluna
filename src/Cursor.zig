@@ -17,6 +17,7 @@ const server = &@import("main.zig").server;
 
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
+cursor_shape_manager: *wlr.CursorShapeManagerV1,
 
 motion: wl.Listener(*wlr.Pointer.event.Motion) = .init(handleMotion),
 motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) = .init(handleMotionAbsolute),
@@ -25,6 +26,8 @@ axis: wl.Listener(*wlr.Pointer.event.Axis) = .init(handleAxis),
 frame: wl.Listener(*wlr.Cursor) = .init(handleFrame),
 hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) = .init(handleHoldBegin),
 hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) = .init(handleHoldEnd),
+
+request_set_cursor_shape: wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShape) = .init(handleCursorShape),
 
 mode: enum { normal, drag } = .normal,
 
@@ -45,6 +48,7 @@ pub fn init(self: *Cursor) void {
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
         .x_cursor_manager = try wlr.XcursorManager.create(null, 24),
+        .cursor_shape_manager = try wlr.CursorShapeManagerV1.create(server.wl_server, 1),
         .drag = null,
     };
 
@@ -59,6 +63,8 @@ pub fn init(self: *Cursor) void {
     self.wlr_cursor.events.frame.add(&self.frame);
     self.wlr_cursor.events.hold_begin.add(&self.hold_begin);
     self.wlr_cursor.events.hold_end.add(&self.hold_end);
+
+    self.cursor_shape_manager.events.request_set_shape.add(&self.request_set_cursor_shape);
 }
 
 pub fn deinit(self: *Cursor) void {
@@ -313,4 +319,14 @@ fn handleAxis(
 
 fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
     server.seat.wlr_seat.pointerNotifyFrame();
+}
+
+fn handleCursorShape(
+    listener: *wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShape),
+    event: *wlr.CursorShapeManagerV1.event.RequestSetShape,
+) void {
+    const self: *Cursor = @fieldParentPtr("request_set_cursor_shape", listener);
+    if (event.seat_client == server.seat.wlr_seat.pointer_state.focused_client) {
+        self.wlr_cursor.setXcursor(self.x_cursor_manager, wlr.CursorShapeManagerV1.shapeName(event.shape));
+    }
 }
