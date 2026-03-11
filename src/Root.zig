@@ -21,10 +21,12 @@ scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
 output_layout: *wlr.OutputLayout,
 output_manager: *wlr.OutputManagerV1,
+output_power_manager: *wlr.OutputPowerManagerV1,
 
 // listeners
 output_manager_apply: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerApply),
 output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerTest),
+output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleOutputPowerManagerSet),
 
 pub fn init(self: *Root) void {
     std.log.info("Creating root of mezzaluna\n", .{});
@@ -41,6 +43,7 @@ pub fn init(self: *Root) void {
         .scene = scene,
         .scene_node_data = .{ .root = self },
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
+        .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
@@ -49,6 +52,7 @@ pub fn init(self: *Root) void {
 
     self.output_manager.events.apply.add(&self.output_manager_apply);
     self.output_manager.events.@"test".add(&self.output_manager_test);
+    self.output_power_manager.events.set_mode.add(&self.output_power_manager_set);
 }
 
 pub fn deinit(self: *Root) void {
@@ -173,4 +177,16 @@ fn outputManagerConfigure(config: *wlr.OutputConfigurationV1, apply: bool) void 
     if (success) {
         config.sendSucceeded();
     } else config.sendFailed();
+}
+
+fn handleOutputPowerManagerSet(
+    _: *wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode),
+    event: *wlr.OutputPowerManagerV1.event.SetMode
+) void {
+    const output: *Output = @fieldParentPtr("wlr_output", &event.output);
+    var state: wlr.Output.State = .init();
+    defer state.finish();
+
+    state.setEnabled(event.mode == .on);
+    _ = output.wlr_output.commitState(&state);
 }
