@@ -2,4 +2,4 @@
 zig-out/
 convert
 
-./runtime/mez_types.lua
+runtime/mez_types.lua
