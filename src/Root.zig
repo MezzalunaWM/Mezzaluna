@@ -15,12 +15,16 @@ const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const Utils = @import("Utils.zig");
 
-scene: *wlr.Scene,
 scene_node_data: SceneNodeData,
 
+scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
-
 output_layout: *wlr.OutputLayout,
+output_manager: *wlr.OutputManagerV1,
+
+// listeners
+output_manager_apply: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerApply),
+output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerTest),
 
 pub fn init(self: *Root) void {
     std.log.info("Creating root of mezzaluna\n", .{});
@@ -36,11 +40,15 @@ pub fn init(self: *Root) void {
     self.* = .{
         .scene = scene,
         .scene_node_data = .{ .root = self },
+        .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_layout = output_layout,
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
 
     self.scene.tree.node.data = &self.scene_node_data;
+
+    self.output_manager.events.apply.add(&self.output_manager_apply);
+    self.output_manager.events.@"test".add(&self.output_manager_test);
 }
 
 pub fn deinit(self: *Root) void {
@@ -110,4 +118,59 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
     }
 
     return null;
+}
+
+fn handleOutputManagerApply(
+    _: *wl.Listener(*wlr.OutputConfigurationV1),
+    config: *wlr.OutputConfigurationV1
+) void {
+    outputManagerConfigure(config, true);
+}
+
+fn handleOutputManagerTest(
+    _: *wl.Listener(*wlr.OutputConfigurationV1),
+    config: *wlr.OutputConfigurationV1
+) void {
+    outputManagerConfigure(config, false);
+}
+
+/// if apply is false we test the output instead
+fn outputManagerConfigure(config: *wlr.OutputConfigurationV1, apply: bool) void {
+    // by default we will tell the client this worked, if we encounter an error
+    // we keep going, but tell the client that we did not succeed.
+    var success = true;
+    defer config.destroy();
+
+    var iter = config.heads.iterator(.forward);
+    while (iter.next()) |head| {
+        const output: *Output = @fieldParentPtr("wlr_output", &head.state.output);
+        var state: wlr.Output.State = .init();
+        defer state.finish();
+
+        state.setEnabled(head.state.enabled);
+
+        // TEST: further configuration only happens if the output is enabled
+        // if (state.enabled) {
+            if (head.state.mode) |mode| {
+                state.setMode(mode);
+            } else {
+                state.setCustomMode(
+                    head.state.custom_mode.width,
+                    head.state.custom_mode.height,
+                    head.state.custom_mode.refresh,
+                );
+            }
+
+            state.setTransform(head.state.transform);
+            state.setScale(head.state.scale);
+            state.setAdaptiveSyncEnabled(head.state.adaptive_sync_enabled);
+        // }
+
+        success &= if (apply) output.wlr_output.commitState(&state)
+            else output.wlr_output.testState(&state);
+    }
+
+    if (success) {
+        config.sendSucceeded();
+    } else config.sendFailed();
 }

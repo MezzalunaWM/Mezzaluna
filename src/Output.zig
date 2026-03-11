@@ -236,7 +236,18 @@ fn handleRequestState(
 
     if (!output.wlr_output.commitState(event.state)) {
         std.log.warn("failed to set output state {}", .{event.state});
+        // nothing should've changed, so we don't do anything
+        return;
     }
+
+    // update the config with all monitors and send it to the output_manager
+    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+    var iter = server.root.scene.outputs.iterator(.forward);
+    while (iter.next()) |out| {
+        _ = wlr.OutputConfigurationV1.Head.create(config, out.output) catch Utils.oomPanic();
+    }
+    server.root.output_manager.setConfiguration(config);
+
     // make sure the layers are behaving
     arrangeLayers(output);
 
