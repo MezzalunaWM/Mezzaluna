@@ -87,22 +87,29 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         break :blk null;
     };
 
+    var syms: []const xkb.Keysym = undefined;
     for (level_keysyms) |sym| {
         handled = keypress(modifiers, sym, event.state);
-        if(handled) break;
+        if(handled) {
+            syms = level_keysyms;
+            break;
+        }
     }
 
     if(!handled and state_keysyms != null) {
         for (state_keysyms.?) |sym| {
             handled = keypress(modifiers, sym, event.state);
-            if(handled) break;
+            if(handled) {
+                syms = state_keysyms.?;
+                break;
+            }
         }
     }
 
     // give the keyboard group information about what to repeat and update it
     if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
         server.seat.keyboard_group.modifiers = modifiers;
-        server.seat.keyboard_group.keysyms = level_keysyms;
+        server.seat.keyboard_group.keysyms = syms;
         server.seat.keyboard_group.repeat_source.?.timerUpdate(
             keyboard.wlr_keyboard.repeat_info.delay,
         ) catch {
