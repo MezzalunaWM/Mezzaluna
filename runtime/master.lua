@@ -1,7 +1,4 @@
----@module 'master'
-
 ---@class Master
----@field default_config MasterConfig
 ---@field config MasterConfig
 ---@field state MasterState
 local M = {}
@@ -39,7 +36,29 @@ utils.find_view = function(view_id)
 	return nil, nil, nil
 end
 
+---Merge two tables
+---@param t1 table
+---@param t2 table
+---@return table
+utils.table_merge = function(t1, t2)
+  for k, v in pairs(t2) do
+    if type(v) == "table" then
+      if type(t1[k]) == "table" then
+        t1[k] = utils.table_merge(t1[k], v)
+      else
+        t1[k] = utils.table_merge({}, v)
+      end
+    else
+      if t1[k] == nil then
+        t1[k] = v
+      end
+    end
+  end
+  return t1
+end
+
 ---@class MasterConfig
+---@field mod_key string
 ---@field master_ratio number
 ---@field tag_count number
 ---@field focus_on_spawn boolean
@@ -47,6 +66,7 @@ end
 ---@field screen_gap number
 ---@field tile_gap number
 local default_config = {
+  mod_key = "alt",
 	master_ratio = 0.5,
 	tag_count = 5,
 	focus_on_spawn = true,
@@ -388,9 +408,12 @@ M.send_view = function (view_id, tag_id)
   M.tile_tag(tag_id)
 end
 
-M.setup = function()
+---@param config MasterConfig
+M.setup = function(config)
   --- Take a user config
-	M.config = default_config
+  M.config = utils.table_merge(config or {}, default_config)
+
+  print(M.config.mod_key)
 
 	M.state = {
 		tag_id = 1,
@@ -411,43 +434,44 @@ M.setup = function()
 	mez.hook.add("ViewMapPre", { callback = function(view_id) M.add_view(view_id) end })
 	mez.hook.add("ViewUnmapPost", { callback = function(view_id) M.remove_view(view_id) end })
 
-	mez.input.add_keymap("alt", "j", { press = function () M.focus_next() end })
-	mez.input.add_keymap("alt", "k", { press = function () M.focus_prev() end })
-	mez.input.add_keymap("alt", "Return", { press = function () M.zoom(0) end })
-	mez.input.add_keymap("alt", "h", { press = function () M.change_ratio(-0.05) end })
-	mez.input.add_keymap("alt", "l", { press = function () M.change_ratio(0.05) end })
-	mez.input.add_keymap("alt|shift", "F", { press = function () M.set_fullscreen(0) end })
+	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
+	mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })
+	mez.input.add_keymap(M.config.mod_key, "Return", { press = function () M.zoom(0) end })
+	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.05) end })
+	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.05) end })
+	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.set_fullscreen(0) end })
 
 	for i = 1, M.config.tag_count do
-		mez.input.add_keymap("alt", i, { press = function () M.tag_enable(i) end })
+		mez.input.add_keymap(M.config.mod_key, i, { press = function () M.tag_enable(i) end })
 	end
 
   -- Wow this is ass
 	--  for i, k in ipairs({"exclam", "at", "numbersign", "dollar", "percent"}) do
-	-- 	mez.input.add_keymap("alt|shift", k, { press = function () M.send_view(0, i) end })
+	-- 	mez.input.add_keymap(M.config.mod_key.."|shift", k, { press = function () M.send_view(0, i) end })
 	-- end
 
-	mez.input.add_mousemap("alt", "BTN_LEFT", {
+	mez.input.add_mousemap(M.config.mod_key, "BTN_LEFT", {
 		press = function(view_id) M.make_float(view_id) end,
-		drag = function(_, pos, drag)
-			if drag.view ~= nil then
-				mez.view.set_position(drag.view.id, pos.x - drag.view.offset.x, pos.y - drag.view.offset.y)
+		drag = function(view_id, pos, start, offset)
+			if offset ~= nil then
+				mez.view.set_position(view_id, pos.x - offset.x, pos.y - offset.y)
 			end
 		end
 	})
 
-	mez.input.add_mousemap("alt", "BTN_MIDDLE", { press = function(view_id) M.make_tile(view_id) end })
+	mez.input.add_mousemap(M.config.mod_key, "BTN_MIDDLE", { press = function(view_id) M.make_tile(view_id) end })
 
-	mez.input.add_mousemap("alt", "BTN_RIGHT", {
+	mez.input.add_mousemap(M.config.mod_key, "BTN_RIGHT", {
     press = function(view_id) M.make_float(view_id) end,
-		drag = function(_, pos, drag)
-			if drag.view ~= nil then
-				local width = (pos.x - drag.start.x) + drag.view.offset.x + (drag.view.dims.width - drag.view.offset.x)
-				local height = (pos.y - drag.start.y) + drag.view.offset.y + (drag.view.dims.height - drag.view.offset.y)
+		drag = function(view_id, pos, start, offset)
+			if offset ~= nil then
+        local dims = mez.view.get_size(view_id) or { x = 0, y = 0 }
+				local width = (pos.x - start.x) + offset.x + (dims.width - offset.x)
+				local height = (pos.y - start.y) + offset.y + (dims.height - offset.y)
 
 				if width <= 10 then width = 10 end
 				if height <= 10 then height = 10 end
-				mez.view.set_size(drag.view.id, width, height)
+				mez.view.set_size(view_id, width, height)
 			end
 		end
 	})

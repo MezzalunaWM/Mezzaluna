@@ -1,11 +1,11 @@
 ---@module "mez_types"
 
-local master = require("master")
-master.setup()
-
 local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
+
+local master = require("master")
+master.setup({ mod_key = "logo" })
 
 local border_width = 4
 
@@ -27,7 +27,7 @@ mez.input.add_keymap(mod .. "|shift", "C", {
 	end
 })
 
-mez.input.add_keymap(mod .. "|shift", "q", {
+mez.input.add_keymap(mod .. "|shift", "Q", {
 	press = function ()
 		mez.api.exit();
 	end
