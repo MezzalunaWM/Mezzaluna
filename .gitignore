@@ -2,4 +2,6 @@
 zig-out/
 convert
 
+session_logs
+
 runtime/mez_types.lua
