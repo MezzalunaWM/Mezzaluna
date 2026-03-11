@@ -39,6 +39,8 @@ xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
+virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
+virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 
 allocator: *wlr.Allocator,
 
@@ -63,6 +65,9 @@ new_xdg_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewXdgPopup),
 new_xdg_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(handleNewXdgToplevelDecoration),
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleNewLayerSurface),
 request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .init(handleRequestActivate),
+
+new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) = .init(handleNewVirtualPointer),
+new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(handleNewVirtualKeyboard),
 
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
@@ -99,6 +104,8 @@ pub fn init(self: *Server) void {
         .layer_shell = try wlr.LayerShellV1.create(wl_server, 5),
         .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
         .xdg_activation = try wlr.XdgActivationV1.create(self.wl_server),
+        .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(self.wl_server),
+        .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(self.wl_server),
         .event_loop = event_loop,
         .session = session,
         .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
@@ -147,6 +154,9 @@ pub fn init(self: *Server) void {
     self.xdg_toplevel_decoration_manager.events.new_toplevel_decoration.add(&self.new_xdg_toplevel_decoration);
     self.layer_shell.events.new_surface.add(&self.new_layer_surface);
     self.xdg_activation.events.request_activate.add(&self.request_activate);
+
+    self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
+    self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
 
     self.events.exec("ServerStartPost", .{});
 }
@@ -289,4 +299,26 @@ fn handleRequestActivate(
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
+}
+
+fn handleNewVirtualPointer(
+    listener: *wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer),
+    event: *wlr.VirtualPointerManagerV1.event.NewPointer,
+) void {
+    const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
+    const device = &event.new_pointer.pointer.base;
+
+    self.cursor.wlr_cursor.attachInputDevice(device);
+    self.cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+}
+
+fn handleNewVirtualKeyboard(
+    listener: *wl.Listener(*wlr.VirtualKeyboardV1),
+    event: *wlr.VirtualKeyboardV1,
+) void {
+    const self: *Server = @fieldParentPtr("new_virtual_keyboard", listener);
+    const device = &event.keyboard.base;
+
+    const keyboard = Keyboard.init(device);
+    _ = self.seat.keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
 }
