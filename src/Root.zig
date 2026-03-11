@@ -15,8 +15,6 @@ const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const Utils = @import("Utils.zig");
 
-xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
-
 scene: *wlr.Scene,
 scene_node_data: SceneNodeData,
 
@@ -39,7 +37,6 @@ pub fn init(self: *Root) void {
         .scene = scene,
         .scene_node_data = .{ .root = self },
         .output_layout = output_layout,
-        .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(server.wl_server),
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
 
