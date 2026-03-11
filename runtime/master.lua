@@ -452,8 +452,8 @@ M.setup = function(config)
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_LEFT", {
 		press = function(view_id) M.make_float(view_id) end,
-		drag = function(view_id, pos, start, offset)
-			if offset ~= nil then
+		drag = function(view_id, pos, _, offset)
+			if view_id ~= nil then
 				mez.view.set_position(view_id, pos.x - offset.x, pos.y - offset.y)
 			end
 		end
@@ -463,11 +463,10 @@ M.setup = function(config)
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_RIGHT", {
     press = function(view_id) M.make_float(view_id) end,
-		drag = function(view_id, pos, start, offset)
-			if offset ~= nil then
-        local dims = mez.view.get_size(view_id) or { x = 0, y = 0 }
-				local width = (pos.x - start.x) + offset.x + (dims.width - offset.x)
-				local height = (pos.y - start.y) + offset.y + (dims.height - offset.y)
+		drag = function(view_id, pos, drag_start, offset)
+			if view_id ~= nil then
+				local width = (pos.x - drag_start.x) + offset.x
+				local height = (pos.y - drag_start.y) + offset.y
 
 				if width <= 10 then width = 10 end
 				if height <= 10 then height = 10 end
