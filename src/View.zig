@@ -214,6 +214,7 @@ pub fn resizeBorders(self: *View) void {
 
     // clip the surface tree to the size of the view
     self.surface_tree.node.subsurfaceTreeSetClip(&wlr.Box{
+        // use the offset relative to the surface geometry, not the output geometry
         .x = self.xdg_toplevel.base.geometry.x,
         .y = self.xdg_toplevel.base.geometry.y,
         .width = self.geometry.width - 2 * self.border_width,
