@@ -35,21 +35,13 @@ mez.input.add_keymap(mod .. "|shift", "Q", {
 
 mez.hook.add("ViewSetFocusPost", {
 	callback = function (view_id)
-    if mez.view.get_fullscreen(view_id) then
-      mez.view.set_border(view_id { width = 0 })
-    else
-      mez.view.set_border(view_id, { color = "#FFDD33", width = border_width })
-    end
+    mez.view.set_border(view_id, { color = "#FFDD33", width = border_width })
 	end
 })
 
 mez.hook.add("ViewRemoveFocusPost", {
 	callback = function(view_id)
-    if mez.view.get_fullscreen(view_id) then
-      mez.view.set_border(view_id { width = 0 })
-    else
-      mez.view.set_border(view_id, { color = "#52493E", width = border_width })
-    end
+    mez.view.set_border(view_id, { color = "#52493E", width = border_width })
 	end
 })
 

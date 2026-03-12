@@ -110,30 +110,41 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     const view = LuaUtils.viewById(view_id);
     if(view == null) return 0;
 
+    errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
+
     _ = L.pushString("x");
     _ = L.getTable(2);
-    const x: i32 = if (L.isNil(-1)) view.?.geometry.x else @intCast(L.checkInteger(-1));
+    const x: i32 = if (L.isNil(-1)) 
+        view.?.geometry.x 
+    else 
+        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("y");
     _ = L.getTable(2);
-    const y: i32 = if (L.isNil(-1)) view.?.geometry.y else @intCast(L.checkInteger(-1));
+    const y: i32 = if (L.isNil(-1)) 
+        view.?.geometry.y 
+    else 
+        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("width");
     _ = L.getTable(2);
-    const width: i32 = if (L.isNil(-1)) view.?.geometry.width else @intCast(L.checkInteger(-1));
+    const width: i32 = if (L.isNil(-1)) 
+        view.?.geometry.width
+    else 
+        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("height");
     _ = L.getTable(2);
-    const height: i32 = if (L.isNil(-1)) view.?.geometry.height else @intCast(L.checkInteger(-1));
+    const height: i32 = if (L.isNil(-1)) 
+        view.?.geometry.height
+    else 
+        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    view.?.previous_geometry = view.?.geometry;
-
-    view.?.setPosition(x, y);
-    view.?.setSize(width, height);
+    view.?.setGeometry(x, y, width, height);
 
     return 0;
 }

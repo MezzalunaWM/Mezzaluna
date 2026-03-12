@@ -177,36 +177,28 @@ pub fn toggleFullscreen(self: *View) void {
 
     self.previous_geometry = self.geometry;
 
-    self.setPosition(0, 0);
-    self.setSize(self.output.?.wlr_output.width, self.output.?.wlr_output.height);
+    self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
     fullscreens.append(gpa, self) catch Utils.oomPanic();
     _ = self.xdg_toplevel.setFullscreen(true);
     server.events.exec("ViewSetFullscreenPost", .{self.id, true});
 }
 
-pub fn setPosition(self: *View, x: i32, y: i32) void {
-    if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
-    
-    if (self.isFullscreen()) return;
-
-    self.geometry.x = x;
-    self.geometry.y = y;
-
-    self.scene_tree.node.setPosition(x, y);
-    self.resizeBorders();
-}
-
-pub fn setSize(self: *View, width: i32, height: i32) void {
+pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
 
     if(self.isFullscreen()) return;
 
-    // at the very least the client must be big enough to have borders
-    self.geometry.width = @max(1 + 2 * self.border_width, width);
-    self.geometry.height = @max(1 + 2 * self.border_width, height);
+    self.previous_geometry = self.geometry;
 
-    // This returns a configure serial for verifying the configure
+    self.geometry = .{
+        .x = x orelse self.geometry.x,
+        .y = y orelse self.geometry.y,
+        .width = @max(1 + 2 * self.border_width, width orelse self.geometry.width),
+        .height = @max(1 + 2 * self.border_width, height orelse self.geometry.height)
+    };
+
+    self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
     _ = self.xdg_toplevel.setSize(
         self.geometry.width - 2 * self.border_width,
         self.geometry.height - 2 * self.border_width,

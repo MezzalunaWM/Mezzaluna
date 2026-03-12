@@ -333,6 +333,8 @@ M.make_float = function (view_id)
 
 	local tag = M.state.tags[tag_idx]
 
+	mez.view.raise_to_top(tag.floating[#tag.floating])
+
 	if type == "floating" then return end
 
 	if type == "master" then
@@ -350,7 +352,6 @@ M.make_float = function (view_id)
 	end
 
 	mez.view.set_focused(tag.floating[#tag.floating])
-	mez.view.raise_to_top(tag.floating[#tag.floating])
 	M.tile_tag(tag_idx)
 end
 
