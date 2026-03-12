@@ -117,7 +117,7 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
 /// correct time.
 fn getTimeMs() u32 {
   const now = std.posix.clock_gettime(.MONOTONIC) catch unreachable;
-  return @intCast(now.sec * 1000 + @divTrunc(now.nsec, 1000000));
+  return @intCast(now.sec * std.time.ms_per_s + @divTrunc(now.nsec, std.time.ns_per_ms));
 }
 
 pub fn send_key(L: *zlua.Lua) i32 {
