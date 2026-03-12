@@ -188,16 +188,26 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---@field x number
 /// ---@field y number
 
-/// ---@alias MousemapFunc fun(
-/// --- view_id: integer,
-/// --- pos: Position,
-/// --- start: Position,
-/// --- offset: Position): boolean?
+/// ---@alias MousemapButtonFunc fun(
+/// ---     view_id: integer,
+/// ---     pos: Position,
+/// ---     start: Position,
+/// ---     offset: Position): boolean?
+
+/// ---@alias MousemapScrollFunc fun(
+/// ---     view_id: integer,
+/// ---     pos: Position,
+/// ---     delta: integer,
+/// ---     discrete_delta: number) :boolean?
 
 /// ---Create a new mousemap
 /// ---@param modifiers string
 /// ---@param btn_name string button name (ex. "BTN_LEFT", "BTN_RIGHT")
-/// ---@param options { press: MousemapFunc?, drag: MousemapFunc?, release: MousemapFunc? }
+/// ---@param options { 
+/// ---     press: MousemapButtonFunc?, 
+/// ---     drag: MousemapButtonFunc?, 
+/// ---     release: MousemapButtonFunc?,
+/// ---     scroll: MousemapScrollFunc? }
 pub fn add_mousemap(L: *zlua.Lua) i32 {
     var mousemap: MousemapData = undefined;
 
@@ -260,16 +270,24 @@ pub fn del_mousemap(L: *zlua.Lua) i32 {
     mousemap.modifier = parse_modkeys(mod);
 
     const button = L.checkString(2);
-    mousemap.event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
+    mousemap.event_code = blk: {
+        const key_event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
+        const rel_event_code = c.libevdev_event_code_from_name(c.EV_REL, button);
 
-    _ = server.mousemaps.remove(MousemapData.hash(mousemap.modifier, mousemap.event_code));
+        if(key_event_code != -1) break :blk key_event_code;
+        if(rel_event_code != -1) break :blk rel_event_code;
+        break :blk -1;
+    };
 
-    L.pushNil();
-    return 1;
+    if(mousemap.event_code != -1) {
+        _ = server.mousemaps.remove(MousemapData.hash(mousemap.modifier, mousemap.event_code));
+    }
+
+    return 0;
 }
 
 /// ---Get the repeat information
-/// ---@return integer[2]
+/// ---@return { rate: integer, delay: integer }
 pub fn get_repeat_info(L: *zlua.Lua) i32 {
     L.newTable();
 
