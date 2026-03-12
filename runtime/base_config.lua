@@ -4,8 +4,11 @@ local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
 
-local master = require("master")
-master.setup({ mod_key = mod })
+-- local master = require("master")
+-- master.setup({ mod_key = mod })
+
+local euclid = require("euclid")
+euclid.setup({ mod_key = mod })
 
 local border_width = 4
 
