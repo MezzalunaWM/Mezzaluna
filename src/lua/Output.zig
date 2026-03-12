@@ -73,7 +73,9 @@ pub fn set_scale(L: *zlua.Lua) i32 {
         var state: wlr.Output.State = .init();
         defer state.finish();
 
-        state.setScale(@floatCast(L.checkNumber(2)));
+        // We don't allow scales below 0
+        const new_scale: f32 = @floatCast(L.checkNumber(2));
+        state.setScale(if (new_scale <= 0) o.wlr_output.scale else new_scale);
         _ = o.wlr_output.commitState(&state);
 
         o.arrangeLayers();

@@ -72,9 +72,11 @@ pub const MousemapData = struct {
         lua_release_ref_idx: i32,
         /// This is the location of the on drag lua function in the lua registry
         lua_drag_ref_idx: i32,
+        /// This is the location of the on drag lua function in the lua registry
+        lua_scroll_ref_idx: i32,
     },
 
-    pub const MousemapState = enum { press, drag, release };
+    pub const MousemapState = enum { press, drag, release, scroll };
 
     // Returns true if mouse input should be passed through
     pub fn callback(self: *const MousemapData, state: MousemapState, args: anytype) bool {
@@ -88,6 +90,7 @@ pub const MousemapData = struct {
             .press => self.options.lua_press_ref_idx,
             .release => self.options.lua_release_ref_idx,
             .drag => self.options.lua_drag_ref_idx,
+            .scroll => self.options.lua_scroll_ref_idx
         };
 
         const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
@@ -108,8 +111,10 @@ pub const MousemapData = struct {
             RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
         };
 
-        const ret = if (Lua.state.isBoolean(-1)) Lua.state.toBoolean(-1) else false;
-        Lua.state.pop(-1);
+        
+        const ret = Lua.state.toBoolean(-1);
+        Lua.state.pop(1);
+
         return ret;
     }
 
@@ -182,11 +187,13 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---@class Position
 /// ---@field x number
 /// ---@field y number
+
 /// ---@alias MousemapFunc fun(
 /// --- view_id: integer,
 /// --- pos: Position,
 /// --- start: Position,
 /// --- offset: Position): boolean?
+
 /// ---Create a new mousemap
 /// ---@param modifiers string
 /// ---@param btn_name string button name (ex. "BTN_LEFT", "BTN_RIGHT")
@@ -198,28 +205,44 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
     mousemap.modifier = parse_modkeys(mod);
 
     const button = L.checkString(2);
-    mousemap.event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
+    mousemap.event_code = -1;
+    const key_event_code = c.libevdev_event_code_from_name(c.EV_KEY, button);
+    const rel_event_code = c.libevdev_event_code_from_name(c.EV_REL, button);
 
-    _ = L.pushString("press");
-    _ = L.getTable(3);
-    if (L.isFunction(-1)) {
-        mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+    if(key_event_code != -1) {
+        mousemap.event_code = key_event_code;
+
+        _ = L.pushString("press");
+        _ = L.getTable(3);
+        if (L.isFunction(-1)) {
+            mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        }
+
+        _ = L.pushString("release");
+        _ = L.getTable(3);
+        if (L.isFunction(-1)) {
+            mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        }
+
+        _ = L.pushString("drag");
+        _ = L.getTable(3);
+        if (L.isFunction(-1)) {
+            mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        }
+    } else if(rel_event_code != 1){
+        mousemap.event_code = rel_event_code;
+
+        _ = L.pushString("scroll");
+        _ = L.getTable(3);
+        if (L.isFunction(-1)) {
+            mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        }
     }
 
-    _ = L.pushString("release");
-    _ = L.getTable(3);
-    if (L.isFunction(-1)) {
-        mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+    if(mousemap.event_code != -1) {
+        const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
+        server.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
     }
-
-    _ = L.pushString("drag");
-    _ = L.getTable(3);
-    if (L.isFunction(-1)) {
-        mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
-    }
-
-    const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
-    server.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
 
     L.pushNil();
     return 1;
