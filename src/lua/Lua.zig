@@ -49,7 +49,7 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     };
 }
 
-pub fn setBaseConfig(self: *zlua.Lua, path: []const u8) !void {
+pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
     _ = try self.getGlobal("mez");
     defer self.pop(1);
     _ = self.getField(-1, "path");
@@ -161,11 +161,9 @@ pub fn init(self: *Lua, cfg: Config) !void {
 
     openMezLibs(self.state);
 
-    if (!cfg.enabled) {
-        try setBaseConfig(self.state, "");
-    } else if (cfg.path) |path| {
+    if (cfg.path) |path| {
         defer gpa.free(path);
-        try setBaseConfig(self.state, path);
+        try setConfig(self.state, path);
     }
 
     loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
