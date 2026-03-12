@@ -193,13 +193,29 @@ pub fn get_name(L: *zlua.Lua) i32 {
 
 /// ---Get the space not exclusively occupied
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return box
+/// ---@return box?
 pub fn get_available_area(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
     const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
 
+    if(output == null) return 0;
+
     L.pushAny(output.?.non_exclusive_area) catch unreachable;
+    return 1;
+}
 
+/// ---Get the id of the output's fullscreened view if it exists
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return integer?
+pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
+    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    if(output == null) return 0;
+
+    const view = output.?.getEnabledFullscreen();
+    if(view == null) return 0;
+
+    L.pushInteger(@intCast(view.?.id));
     return 1;
 }

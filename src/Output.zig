@@ -19,7 +19,7 @@ const server = &@import("main.zig").server;
 
 focused: bool,
 id: u64,
-fullscreen: ?*View,
+fullscreens: std.ArrayList(*View),
 
 wlr_output: *wlr.Output,
 state: wlr.Output.State,
@@ -33,7 +33,6 @@ layers: struct {
     bottom: *wlr.SceneTree,
     content: *wlr.SceneTree,
     top: *wlr.SceneTree,
-    fullscreen: *wlr.SceneTree,
     overlay: *wlr.SceneTree,
 },
 
@@ -42,7 +41,6 @@ layer_scene_node_data: struct {
     bottom: SceneNodeData,
     content: SceneNodeData,
     top: SceneNodeData,
-    fullscreen: SceneNodeData,
     overlay: SceneNodeData,
 },
 
@@ -61,7 +59,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
         .tree = try server.root.scene.tree.createSceneTree(),
-        .fullscreen = null,
+        .fullscreens = std.ArrayList(*View).initCapacity(gpa, 8) catch Utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
         .layers = .{
@@ -69,7 +67,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
             .bottom = try self.tree.createSceneTree(),
             .content = try self.tree.createSceneTree(),
             .top = try self.tree.createSceneTree(),
-            .fullscreen = try self.tree.createSceneTree(),
             .overlay = try self.tree.createSceneTree(),
         },
 
@@ -78,7 +75,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
             .bottom = .{ .output_layer = self.layers.bottom },
             .content = .{ .output_layer = self.layers.content },
             .top = .{ .output_layer = self.layers.top },
-            .fullscreen = .{ .output_layer = self.layers.fullscreen },
             .overlay = .{ .output_layer = self.layers.overlay },
         },
 
@@ -121,7 +117,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     self.layers.bottom.node.data = &self.layer_scene_node_data.bottom;
     self.layers.content.node.data = &self.layer_scene_node_data.content;
     self.layers.top.node.data = &self.layer_scene_node_data.top;
-    self.layers.fullscreen.node.data = &self.layer_scene_node_data.fullscreen;
     self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
 
     server.events.exec("OutputInitPost", .{self.id});
@@ -165,7 +160,7 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
     var sx: f64 = undefined;
     var sy: f64 = undefined;
 
-    const layers = [_]*wlr.SceneTree{ self.layers.top, self.layers.overlay, self.layers.fullscreen, self.layers.content, self.layers.bottom, self.layers.background };
+    const layers = [_]*wlr.SceneTree{ self.layers.overlay, self.layers.top, self.layers.content, self.layers.bottom, self.layers.background };
 
     for (layers) |layer| {
         const node = layer.node.at(lx, ly, &sx, &sy);
@@ -212,20 +207,16 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
     return null;
 }
 
-pub fn getFullscreenedView(self: *Output) ?*View {
-    if (self.layers.fullscreen.children.length() != 1) {
-        return null;
+// Get the first enabled fullscreened view
+pub fn getEnabledFullscreen(self: *Output) ?*View {
+    for(self.fullscreens.items) |view| {
+        if(view.scene_tree.node.enabled) 
+            return view;
     }
 
-    var it = self.layers.fullscreen.children.iterator(.forward);
-    if (it.next().?.data) |data| {
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
-        if (scene_node_data.* == .view) {
-            return scene_node_data.view;
-        }
-    }
     return null;
 }
+
 
 // --------- WlrOutput Event Handlers ---------
 fn handleRequestState(

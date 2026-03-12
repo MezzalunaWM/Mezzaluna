@@ -280,8 +280,10 @@ fn handleRequestActivate(
 
     if (scene_node_data.* == .view) {
         if (server.seat.focused_output) |output| {
-            if (output.fullscreen) |fullscreen| {
-                server.seat.focusSurface(.{ .view = fullscreen });
+            
+            // If an enabled fullscreen view exists, ignore the activation
+            if (output.getEnabledFullscreen()) |view| {
+                server.seat.focusSurface(.{ .view = view });
                 return;
             }
         }

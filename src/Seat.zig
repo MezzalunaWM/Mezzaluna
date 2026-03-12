@@ -108,20 +108,25 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
                     if (current_layer_surface.*.wlr_layer_surface.current.keyboard_interactive == .exclusive) return;
                 },
                 .view => |*current_view| {
-                    if (current_view.*.fullscreen) {
+                    if(current_view.*.output == null) {
+                        std.log.debug("View is not assigned to an output", .{});
+                        unreachable;
+                    }
+
+                    if (current_view.*.isFullscreen() and current_view.*.scene_tree.node.enabled) {
                         switch (to_focus.?) {
                             .layer_surface => |*layer_surface| {
                                 const layer = layer_surface.*.wlr_layer_surface.current.layer;
                                 if (layer == .background or layer == .bottom) return;
                             },
                             .view => |*view| {
-                                if (!view.*.fullscreen) return;
+                                if (!view.*.isFullscreen()) return;
                             },
                         }
                     }
                 },
             }
-        } else if (current_focus == .view and current_focus.view.fullscreen) {
+        } else if (current_focus == .view and current_focus.view.isFullscreen()) {
             return;
         }
 

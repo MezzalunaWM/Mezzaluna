@@ -73,7 +73,7 @@ pub fn deinit(self: *Root) void {
     self.scene.tree.node.destroy();
 }
 
-// Search output_layout's ouputs, and each outputs views
+// Search output_layout's outputs, and each outputs views
 pub fn viewById(self: *Root, id: u64) ?*View {
     var output_it = self.output_layout.outputs.iterator(.forward);
 
@@ -84,23 +84,19 @@ pub fn viewById(self: *Root, id: u64) ?*View {
         }
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        var node_it = output.layers.content.children.iterator(.forward);
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
 
-        while (node_it.next()) |node| {
-            if (node.data == null) continue;
+        for(layers) |l| {
+            var node_it = l.children.iterator(.forward);
+            while (node_it.next()) |node| {
+                if (node.data == null) continue;
 
-            const view_snd: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
+                const view_snd: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
 
-            // TODO: Should we assert that we want only views to be here
-            //    -- Basically should we use switch statements for snd interactions
-            //    -- Or if statements, for simplicity
-            if (view_snd.* == .view and view_snd.view.id == id) {
-                return view_snd.view;
+                if (view_snd.* == .view and view_snd.view.id == id) {
+                    return view_snd.view;
+                }
             }
-        }
-
-        if (output.fullscreen) |fullscreen| {
-            if (fullscreen.id == id) return fullscreen;
         }
     }
 

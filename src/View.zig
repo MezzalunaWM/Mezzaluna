@@ -15,7 +15,6 @@ const server = &@import("main.zig").server;
 
 mapped: bool,
 focused: bool,
-fullscreen: bool,
 id: u64,
 
 // workspace: Workspace,
@@ -64,7 +63,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.* = .{
         .focused = false,
         .mapped = false,
-        .fullscreen = false,
         .id = @intFromPtr(xdg_toplevel),
         .output = null,
         .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
@@ -113,6 +111,10 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 // Tell the client to close
 // It better behave!
 pub fn close(self: *View) void {
+    if(self.isFullscreen()) {
+        self.toggleFullscreen();
+    }
+
     self.xdg_toplevel.sendClose();
 }
 
@@ -120,41 +122,74 @@ pub fn setBorderColor(self: *View, color: *const [4]f32) void {
     for (self.borders) |border| border.setColor(color);
 }
 
-pub fn toggleFullscreen(self: *View) bool {
-    self.fullscreen = !self.fullscreen;
-    if (self.output) |output| {
-        if (self.fullscreen and output.fullscreen != self) {
-            // Check to see if another fullscreened view exists, if so replace it
-            if (output.getFullscreenedView()) |view| {
-                _ = view.toggleFullscreen();
-            }
-
-            self.scene_tree.node.reparent(output.layers.fullscreen);
-            self.setPosition(0, 0);
-            self.setSize(output.wlr_output.width, output.wlr_output.height);
-            output.fullscreen = self;
-        } else {
-            self.scene_tree.node.reparent(output.layers.content);
-            output.fullscreen = null;
-        }
+pub fn isFullscreen(self: *View) bool {
+    if(self.output == null) {
+        std.log.debug("View does not have an assigned output", .{});
+        unreachable;
     }
-    _ = self.xdg_toplevel.setFullscreen(self.fullscreen);
-    return self.fullscreen;
+
+    for(self.output.?.fullscreens.items) |view| {
+        if(view == self) return true;
+    }
+
+    return false;
+}
+
+pub fn toggleFullscreen(self: *View) void {
+    if(self.output == null) {
+        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
+        return;
+    }
+
+    const fullscreens = &self.output.?.fullscreens;
+    if(self.output.?.getEnabledFullscreen() == self) {
+        // ViewSetFullscreenPre
+        // Before making a view fullscreen within it's output
+        // passed view_id and true `true` if being fullscreened `false` otherwise
+        server.events.exec("ViewSetFullscreenPre", .{self.id, false});
+
+        self.scene_tree.node.reparent(self.output.?.layers.content);
+        
+        // ViewSetFullscreenPost
+        // After making a view fullscreen within it's output
+        // passed view_id and true `true` if being fullscreened `false` otherwise
+        server.events.exec("ViewSetFullscreenPost", .{self.id, false});
+
+        if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
+            _ = self.output.?.fullscreens.swapRemove(i);
+        }
+        _ = self.xdg_toplevel.setFullscreen(false);
+        return;
+    }
+
+    // Check to see if another enabled fullscreen view exists, if so replace it
+    if (self.output.?.getEnabledFullscreen()) |v| {
+        _ = v.toggleFullscreen();
+    }
+
+    server.events.exec("ViewSetFullscreenPre", .{self.id, true});
+    self.scene_tree.node.reparent(self.output.?.layers.top);
+    self.setPosition(0, 0);
+    self.setSize(self.output.?.wlr_output.width, self.output.?.wlr_output.height);
+
+    fullscreens.append(gpa, self) catch Utils.oomPanic();
+    _ = self.xdg_toplevel.setFullscreen(true);
+    server.events.exec("ViewSetFullscreenPost", .{self.id, true});
 }
 
 pub fn setPosition(self: *View, x: i32, y: i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+    
+    if (self.isFullscreen()) return;
 
-    self.geometry.x = x;
-    self.geometry.y = y;
-
-    self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
-
+    self.scene_tree.node.setPosition(x, y);
     self.resizeBorders();
 }
 
 pub fn setSize(self: *View, width: i32, height: i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+
+    if(self.isFullscreen()) return;
 
     // at the very least the client must be big enough to have borders
     self.geometry.width = @max(1 + 2 * self.border_width, width);

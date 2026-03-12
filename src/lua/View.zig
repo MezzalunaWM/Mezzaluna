@@ -35,16 +35,13 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
         // Only search the content and fullscreen layers for views
         const layers = [_]*wlr.SceneTree{
             output.layers.content,
-            output.layers.fullscreen,
+            output.layers.top,
         };
 
         for (layers) |layer| {
             if (layer.children.length() == 0) continue; // No children
 
-            if (@intFromPtr(layer) == 0) {
-                std.log.err("ts is literally a null ptr", .{});
-                unreachable;
-            }
+            if (@intFromPtr(layer) == 0) unreachable;
 
             var view_it = layer.children.iterator(.forward);
 
@@ -196,19 +193,28 @@ pub fn set_focused(L: *zlua.Lua) i32 {
     return 1;
 }
 
-// ---Toggle the view to enter fullscreen. Will enter the fullsreen layer.
-// ---@param view_id integer 0 maps to focused view
+/// ---Toggle the view to enter fullscreen. Will enter the fullscreen layer
+/// ---and remove any preexisting fullscreened view for it's output.
+/// ---@param view_id integer 0 maps to focused view
 pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
-    std.log.debug("fullscreen view {d}", .{view_id});
     if (LuaUtils.viewById(view_id)) |v| {
-        std.log.debug("toggling fullscreen", .{});
-        L.pushBoolean(v.toggleFullscreen());
-        return 1;
+        v.toggleFullscreen();
     }
 
     return 0;
+}
+
+/// ---True if view is fullscreened
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return bool
+pub fn get_fullscreen(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const view = LuaUtils.viewById(view_id);
+
+    L.pushBoolean(if (view == null) false else view.?.isFullscreen());
+    return 1;
 }
 
 /// ---Get the title of the view
