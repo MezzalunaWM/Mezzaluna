@@ -17,16 +17,20 @@ mapped: bool,
 focused: bool,
 id: u64,
 
-// workspace: Workspace,
 output: ?*Output,
+
 xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
+
 scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
+
 borders: [4]*wlr.SceneRect,
 border_width: i32,
 geometry: wlr.Box, // The total geometry including borders
+
+previous_geometry: wlr.Box,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -66,6 +70,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .id = @intFromPtr(xdg_toplevel),
         .output = null,
         .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
+        .previous_geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
         .xdg_toplevel = xdg_toplevel,
         .scene_tree = undefined,
         .surface_tree = undefined,
@@ -169,6 +174,9 @@ pub fn toggleFullscreen(self: *View) void {
 
     server.events.exec("ViewSetFullscreenPre", .{self.id, true});
     self.scene_tree.node.reparent(self.output.?.layers.top);
+
+    self.previous_geometry = self.geometry;
+
     self.setPosition(0, 0);
     self.setSize(self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
@@ -181,6 +189,9 @@ pub fn setPosition(self: *View, x: i32, y: i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
     
     if (self.isFullscreen()) return;
+
+    self.geometry.x = x;
+    self.geometry.y = y;
 
     self.scene_tree.node.setPosition(x, y);
     self.resizeBorders();

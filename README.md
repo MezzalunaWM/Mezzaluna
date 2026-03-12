@@ -59,7 +59,7 @@ mez.view.get_position(1011980528) -- Return the position of a view as { x = 640 
 
 -- Here 0 as a view id indicates to mez to use the current focused view id
 -- 0 can replace anywhere a normal id would typically be entered
-mez.view.set_position(0, 100, 250) -- Set the position of a view to be (100, 250)
+mez.view.set_geometry(0, { x = 100, y = 250 }) -- Set the position of a view to be (100, 250)
 ```
 
 These are just the basics as of right now. More exists, but that will have to be for you to discover in the example config until some official documentation is developed for the Lua API.
@@ -84,7 +84,7 @@ Mousemaps are for mouse interaction and can attach functions to keyboard modifie
 mez.input.add_mousemap("alt", "BTN_LEFT", {
     drag = function (pos, drag)
         if drag.view ~= nil then
-            mez.view.set_position(drag.view.id, pos.x, pos.y)
+            mez.view.set_geometry(drag.view.id, { x = pos.x, y = pos.y })
         end
     end
 })

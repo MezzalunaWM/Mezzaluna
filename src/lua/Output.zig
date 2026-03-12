@@ -185,15 +185,9 @@ pub fn get_name(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---@class box
-/// ---@field x integer
-/// ---@field y integer
-/// ---@field width integer
-/// ---@field height integer
-
 /// ---Get the space not exclusively occupied
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return box?
+/// ---@return Box?
 pub fn get_available_area(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
     const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);

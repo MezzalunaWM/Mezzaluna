@@ -94,87 +94,105 @@ pub fn close(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---position the view by it's top left corner
+/// ---@class Box
+/// ---@field x number?
+/// ---@field y number?
+/// ---@field width number?
+/// ---@field height number?
+
+/// ---Position and size the view. Size includes borders and position is from top left.
 /// ---@param view_id integer 0 maps to focused view
-/// ---@param x number x position for view
-/// ---@param y number y position for view
-pub fn set_position(L: *zlua.Lua) i32 {
+/// ---@param geometry Box Missing dimensions map to current dimensions
+pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const x = LuaUtils.coerceInteger(i32, L.checkInteger(2)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
-    const y = LuaUtils.coerceInteger(i32, L.checkInteger(3)) catch L.raiseErrorStr("The y must be > -inf and < inf", .{});
+    if(!L.isTable(2)) return 0;
 
-    if (LuaUtils.viewById(view_id)) |v| {
-        v.setPosition(x, y);
-    }
+    const view = LuaUtils.viewById(view_id);
+    if(view == null) return 0;
 
-    L.pushNil();
+    _ = L.pushString("x");
+    _ = L.getTable(2);
+    const x: i32 = if (L.isNil(-1)) view.?.geometry.x else @intCast(L.checkInteger(-1));
+    L.pop(1);
+
+    _ = L.pushString("y");
+    _ = L.getTable(2);
+    const y: i32 = if (L.isNil(-1)) view.?.geometry.y else @intCast(L.checkInteger(-1));
+    L.pop(1);
+
+    _ = L.pushString("width");
+    _ = L.getTable(2);
+    const width: i32 = if (L.isNil(-1)) view.?.geometry.width else @intCast(L.checkInteger(-1));
+    L.pop(1);
+
+    _ = L.pushString("height");
+    _ = L.getTable(2);
+    const height: i32 = if (L.isNil(-1)) view.?.geometry.height else @intCast(L.checkInteger(-1));
+    L.pop(1);
+
+    view.?.previous_geometry = view.?.geometry;
+
+    view.?.setPosition(x, y);
+    view.?.setSize(width, height);
+
+    return 0;
+}
+
+/// ---Get the geometry of the view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return Box?
+pub fn get_geometry(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const view = LuaUtils.viewById(view_id);
+    if(view == null) return 0;
+
+    L.newTable();
+
+    _ = L.pushString("x");
+    L.pushInteger(@intCast(view.?.geometry.x));
+    L.setTable(-3);
+
+    _ = L.pushString("y");
+    L.pushInteger(@intCast(view.?.geometry.y));
+    L.setTable(-3);
+
+    _ = L.pushString("width");
+    L.pushInteger(@intCast(view.?.geometry.width));
+    L.setTable(-3);
+
+    _ = L.pushString("height");
+    L.pushInteger(@intCast(view.?.geometry.height));
+    L.setTable(-3);
+
     return 1;
 }
 
-/// ---Get the position of the view
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return { x: integer, y: integer }? Position of the view
-pub fn get_position(L: *zlua.Lua) i32 {
+/// ---Get the geometry of the view before its last `set_geometry` or fullscreen
+/// ---@param view_id integer 0 maps to the focused view
+/// ---@return Box?
+pub fn get_previous_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if (LuaUtils.viewById(view_id)) |v| {
-        L.newTable();
+    const view = LuaUtils.viewById(view_id);
+    if(view == null) return 0;
 
-        _ = L.pushString("x");
-        L.pushInteger(@intCast(v.scene_tree.node.x));
-        L.setTable(-3);
+    L.newTable();
 
-        _ = L.pushString("y");
-        L.pushInteger(@intCast(v.scene_tree.node.y));
-        L.setTable(-3);
+    _ = L.pushString("x");
+    L.pushInteger(@intCast(view.?.previous_geometry.x));
+    L.setTable(-3);
 
-        return 1;
-    }
+    _ = L.pushString("y");
+    L.pushInteger(@intCast(view.?.previous_geometry.y));
+    L.setTable(-3);
 
-    L.pushNil();
-    return 1;
-}
+    _ = L.pushString("width");
+    L.pushInteger(@intCast(view.?.previous_geometry.width));
+    L.setTable(-3);
 
-/// ---Set the size of the spesified view. Will be resized relative to the view's top left corner.
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param width integer
-/// ---@param height integer
-pub fn set_size(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    // We use u32s here to enforce a minimum size of zero. The call to resize a
-    // toplevel requires a i32, which doesn't make too much sense as there's an
-    // assertion in the code enforcing that both the width and height are greater
-    // than or equal to zero.
-    const width = LuaUtils.coerceInteger(u32, L.checkInteger(2)) catch L.raiseErrorStr("The width must be >= 0 and < inf", .{});
-    const height = LuaUtils.coerceInteger(u32, L.checkInteger(3)) catch L.raiseErrorStr("The height must be >= 0 and < inf", .{});
+    _ = L.pushString("height");
+    L.pushInteger(@intCast(view.?.previous_geometry.height));
+    L.setTable(-3);
 
-    if (LuaUtils.viewById(view_id)) |v| {
-        v.setSize(@intCast(width), @intCast(height));
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the size of the view
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return { width: integer, height: integer }? Size of the view
-pub fn get_size(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if (LuaUtils.viewById(view_id)) |v| {
-        L.newTable();
-
-        _ = L.pushString("width");
-        L.pushInteger(@intCast(v.xdg_toplevel.current.width));
-        L.setTable(-3);
-
-        _ = L.pushString("height");
-        L.pushInteger(@intCast(v.xdg_toplevel.current.height));
-        L.setTable(-3);
-
-        return 1;
-    }
-
-    L.pushNil();
     return 1;
 }
 

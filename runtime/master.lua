@@ -1,12 +1,10 @@
 ---@class Master
----@field config MasterConfig
----@field state MasterState
 local M = {}
 
 local utils = {}
 
 ---Find view ID within all tags
----@param view_id number
+---@param view_id integer
 ---@return "master" | "floating" | "stacking" | nil view_type
 ---@return number | nil tag_index
 ---@return number | nil view_index
@@ -96,36 +94,37 @@ M.tile_tag = function(tag_id)
 	if tag.master == nil then return end
 
 	if #tag.stack == 0 then
-		mez.view.set_position(tag.master, M.config.screen_gap, M.config.screen_gap)
-		mez.view.set_size(
-			tag.master,
-			res.width - M.config.screen_gap * 2,
-			res.height - M.config.screen_gap * 2
-		)
+		mez.view.set_geometry(tag.master, {
+      x = M.config.screen_gap,
+      y = M.config.screen_gap,
+			width = res.width - M.config.screen_gap * 2,
+			height = res.height - M.config.screen_gap * 2
+    })
 	else
-		mez.view.set_position(tag.master, M.config.screen_gap, M.config.screen_gap)
-		mez.view.set_size(
-			tag.master,
-			res.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
-			res.height - M.config.screen_gap * 2
-		)
+		mez.view.set_geometry(tag.master, {
+      x =M.config.screen_gap,
+      y = M.config.screen_gap,
+			width = res.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
+			height = res.height - M.config.screen_gap * 2
+    })
 
 		local stack_x = (res.width * M.state.master_ratio)
 		local stack_width = res.width * (1 - M.state.master_ratio) - M.config.tile_gap - M.config.screen_gap
 		local stack_height = (res.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
 
 		for i, view_id in ipairs(tag.stack) do
-			mez.view.set_position(view_id,
-			stack_x,
-			(stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap)
-
-			mez.view.set_size(view_id, stack_width, stack_height)
+			mez.view.set_geometry(view_id, {
+        x = stack_x,
+        y = (stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap,
+        width = stack_width,
+        height = stack_height
+      })
 		end
 	end
 end
 
 ---Add the id of a new view
----@param view_id number
+---@param view_id integer
 M.add_view = function(view_id)
 	local tag = M.state.tags[M.state.tag_id]
 
@@ -215,7 +214,7 @@ M.focus_prev = function()
 end
 
 ---Remove a view_id from the layout
----@param view_id number
+---@param view_id integer
 M.remove_view = function(view_id)
   if view_id == 0 then view_id = mez.view.get_focused_id() end
 
@@ -301,7 +300,7 @@ M.tag_enable = function (tag_idx)
 end
 
 ---Move a stack window to the master, and vice versa
----@param view_id number
+---@param view_id integer
 M.zoom = function (view_id)
 	if view_id == 0 then view_id = mez.view.get_focused_id() end
 	local type, tag_idx, view_idx = utils.find_view(view_id)
@@ -328,7 +327,7 @@ M.change_ratio = function (delta)
 end
 
 ---Move a view from tiling to floating
----@param view_id number
+---@param view_id integer
 M.make_float = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -356,7 +355,7 @@ M.make_float = function (view_id)
 end
 
 ---Move a view from floating to tiling
----@param view_id number
+---@param view_id integer
 M.make_tile = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -375,13 +374,15 @@ end
 
 M.set_fullscreen = function (view_id)
 	local _, tag_idx, _ = utils.find_view(view_id)
+  mez.view.toggle_fullscreen(view_id)
 
-	if not mez.view.toggle_fullscreen(view_id) then
+	if not mez.view.get_fullscreen(view_id) then
+    mez.view.set_geometry(view_id, mez.view.get_previous_geometry(view_id))
 		M.tile_tag(tag_idx)
 	end
 end
 
----@param view_id number
+---@param view_id integer
 ---@param tag_id number
 M.send_view = function (view_id, tag_id)
   if view_id == 0 then view_id = mez.view.get_focused_id() end
@@ -450,7 +451,10 @@ M.setup = function(config)
 		press = function(view_id) M.make_float(view_id) end,
 		drag = function(view_id, pos, _, offset)
 			if view_id ~= nil then
-				mez.view.set_position(view_id, pos.x - offset.x, pos.y - offset.y)
+				mez.view.set_geometry(view_id, {
+          x = pos.x - offset.x,
+          y = pos.y - offset.y
+        })
 			end
 		end
 	})
@@ -466,7 +470,10 @@ M.setup = function(config)
 
 				if width <= 10 then width = 10 end
 				if height <= 10 then height = 10 end
-				mez.view.set_size(view_id, width, height)
+				mez.view.set_geometry(view_id, {
+          width = width,
+          height = height
+        })
 			end
 		end
 	})
