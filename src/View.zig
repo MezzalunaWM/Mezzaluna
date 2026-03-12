@@ -195,7 +195,10 @@ pub fn resizeBorders(self: *View) void {
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
 
-    server.events.exec("ViewMapPre", .{view.id});
+    server.events.exec("ViewMapPre", .{view.id},
+        \\Before a view is mapped to the screen. This means the view is not yet
+        \\displayed to the user.
+    );
 
     // we're gonna tell the client that it's tiled so it doesn't try anything
     // stupid
@@ -207,14 +210,20 @@ fn handleMap(listener: *wl.Listener(void)) void {
     });
 
     view.mapped = true;
-    server.events.exec("ViewMapPost", .{view.id});
+    server.events.exec("ViewMapPost", .{view.id},
+        \\After a view is mapped to the screen. This view is now being displayed
+        \\to the user.
+    );
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
     std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
-    server.events.exec("ViewUnmapPre", .{view.id});
+    server.events.exec("ViewUnmapPre", .{view.id},
+        \\Before the view is unmapped. This view is still currently visibile to
+        \\the user.
+    );
     view.mapped = false; // we do this before any work is done so that nobody tries
     // any funny business
 
@@ -224,7 +233,9 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
-    server.events.exec("ViewUnmapPost", .{view.id});
+    server.events.exec("ViewUnmapPost", .{view.id},
+        \\After the view is unmapped. This view is no longer visibile to the user.
+    );
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -291,12 +302,16 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopu
 
 fn handleRequestMove(listener: *wl.Listener(*wlr.XdgToplevel.event.Move), _: *wlr.XdgToplevel.event.Move) void {
     const view: *View = @fieldParentPtr("request_move", listener);
-    server.events.exec("ViewRequestMove", .{view.id});
+    server.events.exec("ViewRequestMove", .{view.id},
+        \\Before the view requests to move.
+    );
 }
 
 fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _: *wlr.XdgToplevel.event.Resize) void {
     const view: *View = @fieldParentPtr("request_resize", listener);
-    server.events.exec("ViewRequestResize", .{view.id});
+    server.events.exec("ViewRequestResize", .{view.id},
+        \\Before the view requests to resize.
+    );
 }
 
 fn handleAckConfigure(
@@ -309,23 +324,31 @@ fn handleAckConfigure(
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_fullscreen", listener);
-    server.events.exec("ViewRequestFullscreen", .{view.id});
+    server.events.exec("ViewRequestFullscreen", .{view.id},
+        \\Before the view requests to be fullscreened.
+    );
 }
 
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_minimize", listener);
-    server.events.exec("ViewRequestMinimize", .{view.id});
+    server.events.exec("ViewRequestMinimize", .{view.id},
+        \\Before the view requests to be minimized.
+    );
     std.log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_app_id", listener);
-    server.events.exec("ViewAppIdUpdate", .{view.id});
+    server.events.exec("ViewAppIdUpdate", .{view.id},
+        \\Before the view requests to update its appid.
+    );
     std.log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_title", listener);
-    server.events.exec("ViewTitleUpdate", .{view.id});
+    server.events.exec("ViewTitleUpdate", .{view.id},
+        \\Before the view requests to update its title.
+    );
     std.log.debug("request_set_title unimplemented", .{});
 }

@@ -81,9 +81,11 @@ pub fn build(b: *std.Build) void {
 
     const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir")
         orelse b.pathJoin(&.{b.install_prefix, "share"});
-    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
 
+    const event_gen = b.option(bool, "event_gen", "Should mez generate event docs? WARNING: This will prevent codegen!") orelse false;
+    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
     options.addOption([]const u8, "version", version);
+    options.addOption(bool, "event_gen", event_gen);
     mez.root_module.addOptions("config", options);
 
     // Installs a bin to prefix/bin/mez

@@ -139,7 +139,9 @@ pub fn processCursorMotion(
                 surface.scene_node_data.view.id,
                 @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                 @as(c_int, @intFromFloat(self.wlr_cursor.y)),
-            });
+            },
+            \\After the cursor moves, but before anyone is told about it.
+        );
         }
 
         server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);

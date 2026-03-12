@@ -158,7 +158,9 @@ pub fn init(self: *Server) void {
     self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
 
-    self.events.exec("ServerStartPost", .{});
+    self.events.exec("ServerStartPost", .{},
+        \\Just after Mezzaluna has successfully started.
+    );
 }
 
 /// libwayland uses a bool which the event loop checks to see if the server
