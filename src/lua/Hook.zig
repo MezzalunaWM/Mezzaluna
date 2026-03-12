@@ -64,12 +64,25 @@ pub const Events = struct {
         }
 
         comptime if (config.event_gen) {
-            @compileLog(event++"|"++desc++"|");
-            @compileLog("desc:" ++ desc);
-            for (args_type_info.@"struct".fields) |field| {
-                @compileLog("fieldname:" ++ field.name);
-                @compileLog("fieldtype:" ++ @typeName(field.type));
+            // combine all the name and types of passed in args
+            var fields: []const u8 = &[_]u8{};
+            const args_fields = args_type_info.@"struct".fields;
+            if (args_fields.len > 0) fields = std.fmt.comptimePrint("| args:", .{});
+            for (args_fields) |field| {
+                fields = std.fmt.comptimePrint("{s} {s}:{s}", .{
+                    fields,
+                    field.name,
+                    @typeName(field.type),
+                });
             }
+            if (args_fields.len > 0) fields = fields ++ " ";
+
+            // print out the event information in luadoc @alias format
+            @compileLog(std.fmt.comptimePrint("---| '{s}' [# {s} {s}]", .{
+                event,
+                desc,
+                fields,
+            }));
         };
 
         if (self.events.get(event)) |e| {

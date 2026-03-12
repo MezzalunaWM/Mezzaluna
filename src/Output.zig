@@ -124,17 +124,13 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     self.layers.fullscreen.node.data = &self.layer_scene_node_data.fullscreen;
     self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
 
-    server.events.exec("OutputInitPost", .{self.id},
-        \\After a new output is initialized. You're probably looking for
-    );
+    server.events.exec("OutputInitPost", .{self.id}, "After a new output is initialized. You're probably looking for OutputStateChange.");
 
     return self;
 }
 
 pub fn deinit(self: *Output) void {
-    server.events.exec("OutputDeinitPre", .{self.id},
-        \\Before an output is de-initialized.
-    );
+    server.events.exec("OutputDeinitPre", .{self.id}, "Before an output is de-initialized.");
 
     self.frame.link.remove();
     self.request_state.link.remove();
@@ -144,9 +140,7 @@ pub fn deinit(self: *Output) void {
 
     self.wlr_output.destroy();
 
-    server.events.exec("OutputDeinitPost", .{},
-        \\After an output is de-initialized.
-    );
+    server.events.exec("OutputDeinitPost", .{}, "After an output is de-initialized.");
 
     gpa.destroy(self);
 }
@@ -257,9 +251,7 @@ fn handleRequestState(
     // make sure the layers are behaving
     arrangeLayers(output);
 
-    server.events.exec("OutputStateChange", .{output.id},
-    \\ After an outputs state has been changed.
-    );
+    server.events.exec("OutputStateChange", .{output.id}, "After an outputs state has been changed.");
 }
 
 fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {

@@ -141,18 +141,14 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 
                     if(view_id) |v| {
                         // ---@param view_id number
-                        server.events.exec("ViewRemoveFocusPre", .{v},
-                            \\ViewRemoveFocusPre is fired before a views focus is removed.
-                        );
+                        server.events.exec("ViewRemoveFocusPre", .{v}, "ViewRemoveFocusPre is fired before a views focus is removed.");
                     }
 
                     _ = xdg_surface.role_data.toplevel.?.setActivated(false);
 
                     if(view_id) |v| {
                         // ---@param view_id number
-                        server.events.exec("ViewRemoveFocusPost", .{v},
-                            \\ViewRemoveFocusPost is fired after a views focus is removed.
-                        );
+                        server.events.exec("ViewRemoveFocusPost", .{v}, "ViewRemoveFocusPost is fired after a views focus is removed.");
                     }
                 }
             }
@@ -175,18 +171,14 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 
                     if(view_id) |v| {
                         // ---@param view_id number
-                        server.events.exec("ViewSetFocusPre", .{v},
-                            \\ViewSetFocusPre is fired before a view is focused.
-                        );
+                        server.events.exec("ViewSetFocusPre", .{v}, "ViewSetFocusPre is fired before a view is focused.");
                     }
 
                     _ = xdg_surface.role_data.toplevel.?.setActivated(true);
 
                     if(view_id) |v| {
                         // ---@param view_id number
-                        server.events.exec("ViewSetFocusPost", .{v},
-                            \\ViewSetFocusPost is fired after a view is focused.
-                        );
+                        server.events.exec("ViewSetFocusPost", .{v}, "ViewSetFocusPost is fired after a view is focused.");
                     }
             }
         }
