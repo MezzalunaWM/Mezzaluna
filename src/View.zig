@@ -175,8 +175,6 @@ pub fn toggleFullscreen(self: *View) void {
     server.events.exec("ViewSetFullscreenPre", .{self.id, true});
     self.scene_tree.node.reparent(self.output.?.layers.top);
 
-    self.previous_geometry = self.geometry;
-
     self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
     fullscreens.append(gpa, self) catch Utils.oomPanic();
@@ -184,6 +182,7 @@ pub fn toggleFullscreen(self: *View) void {
     server.events.exec("ViewSetFullscreenPost", .{self.id, true});
 }
 
+// Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
 
