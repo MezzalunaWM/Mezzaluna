@@ -27,9 +27,11 @@ end
 local plugin_dir = mez.fs.joinpath(env_data, "mez", "plugins")
 -- TODO: we should make a function for this in mez.fs instead of using the shell
 os.execute("mkdir -p " .. plugin_dir)
-for _, plugin_name in ipairs(mez.fs.subdirs(plugin_dir)) do
-  package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?", "init.lua")
-  package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?.lua")
+for plugin_name, kind in mez.fs.open_directory(plugin_dir) do
+  if kind == "directory" then
+    package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?", "init.lua")
+    package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?.lua")
+  end
 end
 
 -- allow loading files in the runtime directory
