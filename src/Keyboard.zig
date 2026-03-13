@@ -13,6 +13,8 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const c = @import("C.zig").c;
+
 wlr_keyboard: *wlr.Keyboard,
 context: *xkb.Context,
 device: *wlr.InputDevice,

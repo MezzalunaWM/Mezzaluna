@@ -6,6 +6,8 @@ const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
 
 const server = &@import("../main.zig").server;
+const wlr = @import("wlroots");
+const posix = std.posix;
 
 fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
@@ -58,6 +60,43 @@ pub fn get_rate(L: *zlua.Lua) i32 {
 
     L.pushNil();
     return 1;
+}
+
+/// ---Set the scale for the output
+/// ---@param output_id integer 0 maps to focused output
+/// ---@param scale number
+pub fn set_scale(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+
+    if (output) |o| {
+        var state: wlr.Output.State = .init();
+        defer state.finish();
+
+        // We don't allow scales below 0
+        const new_scale: f32 = @floatCast(L.checkNumber(2));
+        state.setScale(if (new_scale <= 0) o.wlr_output.scale else new_scale);
+        _ = o.wlr_output.commitState(&state);
+
+        o.arrangeLayers();
+    }
+
+    return 0;
+}
+
+/// ---Get the scale for the output
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return number? scale
+pub fn get_scale(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+
+    if (output) |o| {
+        L.pushNumber(o.wlr_output.scale);
+        return 1;
+    }
+
+    return 0;
 }
 
 /// ---Get resolution in pixels of the output
@@ -171,7 +210,7 @@ pub fn get_description(L: *zlua.Lua) i32 {
 
 /// ---Get the name of the output
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return string 
+/// ---@return string
 pub fn get_name(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -192,7 +231,7 @@ pub fn get_available_area(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
     const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
 
-    if(output == null) return 0;
+    if (output == null) return 0;
 
     L.pushAny(output.?.non_exclusive_area) catch unreachable;
     return 1;
@@ -205,10 +244,10 @@ pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
     const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
-    if(output == null) return 0;
+    if (output == null) return 0;
 
     const view = output.?.getEnabledFullscreen();
-    if(view == null) return 0;
+    if (view == null) return 0;
 
     L.pushInteger(@intCast(view.?.id));
     return 1;

@@ -208,7 +208,7 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 }
 
 /// ---Remove focus from current view, and set to given id
-/// ---@param view_id integer Id of the view to be focused, or nil to remove focus
+/// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
     const view_id: ?c_longlong = L.optInteger(1);
 
