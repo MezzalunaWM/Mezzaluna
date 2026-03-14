@@ -24,7 +24,6 @@ const Utils = @import("Utils.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const gpa = std.heap.c_allocator;
-const server = &@import("main.zig").server;
 
 wl_server: *wl.Server,
 compositor: *wlr.Compositor,
@@ -241,17 +240,18 @@ pub fn deinit(self: *Server) noreturn {
 }
 
 // --------- Backend event handlers ---------
-fn handleNewInput(_: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
+fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
+    const self: *Server = @fieldParentPtr("new_input", listener);
     switch (device.type) {
         .keyboard => _ = Keyboard.init(device),
-        .pointer => server.cursor.wlr_cursor.attachInputDevice(device),
+        .pointer => self.cursor.wlr_cursor.attachInputDevice(device),
         else => {
             std.log.err("New input request for input that is not a keyboard or pointer: {s}", .{device.name orelse "(null)"});
         },
     }
 
     // We should really only set true capabilities
-    server.seat.wlr_seat.setCapabilities(.{
+    self.seat.wlr_seat.setCapabilities(.{
         .pointer = true,
         .keyboard = true,
     });
@@ -265,8 +265,9 @@ fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.Xd
     _ = View.init(xdg_toplevel);
 }
 
-fn handleNewXdgToplevelDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
-    if (server.root.viewById(@intFromPtr(decoration.toplevel))) |view| {
+fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
+    const self: *Server = @fieldParentPtr("new_xdg_toplevel_decoration", listener);
+    if (self.root.viewById(@intFromPtr(decoration.toplevel))) |view| {
         view.xdg_toplevel_decoration = decoration;
     }
 }
@@ -275,39 +276,41 @@ fn handleNewXdgPopup(_: *wl.Listener(*wlr.XdgPopup), _: *wlr.XdgPopup) void {
     std.log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
 }
 
-fn handleNewLayerSurface(_: *wl.Listener(*wlr.LayerSurfaceV1), layer_surface: *wlr.LayerSurfaceV1) void {
+fn handleNewLayerSurface(listener: *wl.Listener(*wlr.LayerSurfaceV1), layer_surface: *wlr.LayerSurfaceV1) void {
+    const self: *Server = @fieldParentPtr("new_layer_surface", listener);
     std.log.debug("requested layer shell\n", .{});
     if (layer_surface.output == null) {
-        if (server.seat.focused_output == null) {
+        if (self.seat.focused_output == null) {
             std.log.err("No output available for new layer surface", .{});
             layer_surface.destroy();
             return;
         }
 
-        layer_surface.output = server.seat.focused_output.?.wlr_output;
+        layer_surface.output = self.seat.focused_output.?.wlr_output;
     }
 
     _ = LayerSurface.init(layer_surface);
 }
 
 fn handleRequestActivate(
-    _: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivate),
+    listener: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivate),
     event: *wlr.XdgActivationV1.event.RequestActivate,
 ) void {
+    const self: *Server = @fieldParentPtr("request_activate", listener);
     if (event.surface.data == null) return;
 
     const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
 
     if (scene_node_data.* == .view) {
-        if (server.seat.focused_output) |output| {
+        if (self.seat.focused_output) |output| {
 
             // If an enabled fullscreen view exists, ignore the activation
             if (output.getEnabledFullscreen()) |view| {
-                server.seat.focusSurface(.{ .view = view });
+                self.seat.focusSurface(.{ .view = view });
                 return;
             }
         }
-        server.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
+        self.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
