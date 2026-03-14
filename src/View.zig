@@ -227,12 +227,12 @@ pub fn resizeBorders(self: *View) void {
     self.borders[2].node.setPosition(self.geometry.width - self.border_width, 0);
 }
 
-pub fn setActivated(self: *View, focused: bool) void {
+pub fn setActivated(self: *View, activated: bool) void {
     // Before a view's focus is set
-    server.events.exec("ViewSetFocusPre", .{ self.id, focused });
-    _ = self.xdg_toplevel.setActivated(focused);
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    _ = self.xdg_toplevel.setActivated(activated);
     // After a view's focus is set
-    server.events.exec("ViewSetFocusPost", .{ self.id, focused });
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated });
 }
 
 // --------- XdgTopLevel event handlers ---------
