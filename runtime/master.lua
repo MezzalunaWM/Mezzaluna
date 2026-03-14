@@ -91,33 +91,33 @@ local default_config = {
 M.tile_tag = function(tag_id)
 	local tag = M.state.tags[tag_id]
 
-	local res = mez.output.get_resolution(0)
+	local area = mez.output.get_available_area(0)
 
 	if tag.master == nil then return end
 
 	if #tag.stack == 0 then
 		mez.view.set_geometry(tag.master, {
-      x = M.config.screen_gap,
-      y = M.config.screen_gap,
-			width = res.width - M.config.screen_gap * 2,
-			height = res.height - M.config.screen_gap * 2
+      x = M.config.screen_gap + area.x,
+      y = M.config.screen_gap + area.y,
+			width = area.width - M.config.screen_gap * 2,
+			height = area.height - M.config.screen_gap * 2
     })
 	else
 		mez.view.set_geometry(tag.master, {
-      x =M.config.screen_gap,
-      y = M.config.screen_gap,
-			width = res.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
-			height = res.height - M.config.screen_gap * 2
+      x = M.config.screen_gap + area.x,
+      y = M.config.screen_gap + area.y,
+			width = area.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
+			height = area.height - M.config.screen_gap * 2
     })
 
-		local stack_x = (res.width * M.state.master_ratio)
-		local stack_width = res.width * (1 - M.state.master_ratio) - M.config.tile_gap - M.config.screen_gap
-		local stack_height = (res.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
+		local stack_x = (area.width * M.state.master_ratio) + area.x
+		local stack_width = area.width * (1 - M.state.master_ratio) - M.config.tile_gap - M.config.screen_gap
+		local stack_height = (area.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
 
 		for i, view_id in ipairs(tag.stack) do
 			mez.view.set_geometry(view_id, {
         x = stack_x,
-        y = (stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap,
+        y = (stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap + area.y,
         width = stack_width,
         height = stack_height
       })
@@ -440,18 +440,20 @@ M.setup = function(config)
 	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
 	mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })
 	mez.input.add_keymap(M.config.mod_key, "Return", { press = function () M.zoom(0) end })
-	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.05) end })
-	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.05) end })
+	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.03) end })
+	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.03) end })
 	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.set_fullscreen(0) end })
 
 	for i = 1, M.config.tag_count do
-		mez.input.add_keymap(M.config.mod_key, tostring(i), { press = function () M.tag_enable(i) end })
+		mez.input.add_keymap(M.config.mod_key, tostring(i), {
+      press = function ()
+        M.tag_enable(i)
+      end
+    })
+
 		mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), {
       press = function ()
-        local res, err = M.send_view(0, i)
-        if err then
-          print(err)
-        end
+        M.send_view(0, i)
       end
     })
 	end
@@ -468,7 +470,11 @@ M.setup = function(config)
 		end
 	})
 
-	mez.input.add_mousemap(M.config.mod_key, "BTN_MIDDLE", { press = function(view_id) M.make_tile(view_id) end })
+	mez.input.add_mousemap(M.config.mod_key, "BTN_MIDDLE", {
+    press = function(view_id)
+      M.make_tile(view_id)
+    end
+  })
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_RIGHT", {
     press = function(view_id) M.make_float(view_id) end,
@@ -493,7 +499,11 @@ M.setup = function(config)
 		end
 	end})
 
-	mez.hook.add("ViewRequestFullscreen", { callback = function () M.set_fullscreen(0) end })
+	mez.hook.add("ViewRequestFullscreen", {
+    callback = function (view_id)
+      M.set_fullscreen(view_id)
+    end
+  })
 end
 
 return M
