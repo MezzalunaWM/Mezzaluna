@@ -39,7 +39,7 @@ pub fn build(b: *std.Build) void {
     const pixman = b.dependency("pixman", .{}).module("pixman");
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
     const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua51 }).module("zlua");
-    const clap = b.dependency("clap", .{}).module("clap");
+    const clap = b.dependency("clap", .{ .optimize = optimize, .target = target }).module("clap");
     const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize }).module("xev");
 
     wlroots.addImport("wayland", wayland);
