@@ -115,33 +115,33 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
 
     _ = L.pushString("x");
     _ = L.getTable(2);
-    const x: i32 = if (L.isNil(-1)) 
-        view.?.geometry.x 
-    else 
+    const x: i32 = if (L.isNil(-1))
+        view.?.geometry.x
+    else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("y");
     _ = L.getTable(2);
-    const y: i32 = if (L.isNil(-1)) 
-        view.?.geometry.y 
-    else 
+    const y: i32 = if (L.isNil(-1))
+        view.?.geometry.y
+    else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("width");
     _ = L.getTable(2);
-    const width: i32 = if (L.isNil(-1)) 
+    const width: i32 = if (L.isNil(-1))
         view.?.geometry.width
-    else 
+    else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.pushString("height");
     _ = L.getTable(2);
-    const height: i32 = if (L.isNil(-1)) 
+    const height: i32 = if (L.isNil(-1))
         view.?.geometry.height
-    else 
+    else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
