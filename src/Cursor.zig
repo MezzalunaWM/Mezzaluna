@@ -96,6 +96,10 @@ pub fn processCursorMotion(
     // process the cursor motion
     self.wlr_cursor.move(device, delta_x, delta_y);
 
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
+
     const view: ?*View = blk: {
         if (server.seat.focused_surface) |fs| {
             if (fs == .view) {
@@ -288,6 +292,10 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
     if (passthrough) {
         _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
 }
 
 fn handleHoldBegin(listener: *wl.Listener(*wlr.Pointer.event.HoldBegin), event: *wlr.Pointer.event.HoldBegin) void {
@@ -336,6 +344,10 @@ fn handleAxis(
             passthrough = map.callback(.scroll, args);
         }
     }
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
 
     if(!passthrough) return;
 

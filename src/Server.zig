@@ -12,6 +12,8 @@ const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
+const IdleInhibitor = @import("IdleInhibitor.zig");
+const IdleNotifier = @import("IdleNotifer.zig");
 const Input = @import("lua/Input.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
@@ -31,6 +33,8 @@ backend: *wlr.Backend,
 event_loop: *wl.EventLoop,
 session: ?*wlr.Session,
 remote_lua_manager: ?*RemoteLuaManager,
+idle_inhibit_manager: *wlr.IdleInhibitManagerV1,
+idle_notifier: *IdleNotifier,
 running: bool,
 xev_event_loop: xev.Loop,
 
@@ -69,6 +73,8 @@ request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .ini
 new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) = .init(handleNewVirtualPointer),
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(handleNewVirtualKeyboard),
 
+new_idle_inhibitor: wl.Listener(*wlr.IdleInhibitorV1) = .init(handleNewIdleInhibitor),
+
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
 
@@ -100,6 +106,8 @@ pub fn init(self: *Server) void {
         },
         .running = true,
         .xev_event_loop = try .init(.{}),
+        .idle_inhibit_manager = try wlr.IdleInhibitManagerV1.create(wl_server),
+        .idle_notifier = .init(),
         .xdg_shell = try wlr.XdgShell.create(wl_server, 6),
         .layer_shell = try wlr.LayerShellV1.create(wl_server, 5),
         .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
@@ -157,6 +165,8 @@ pub fn init(self: *Server) void {
 
     self.virtual_pointer_manager.events.new_virtual_pointer.add(&self.new_virtual_pointer);
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
+
+    self.idle_inhibit_manager.events.new_inhibitor.add(&self.new_idle_inhibitor);
 
     self.events.exec("ServerStartPost", .{});
 }
@@ -290,7 +300,7 @@ fn handleRequestActivate(
 
     if (scene_node_data.* == .view) {
         if (server.seat.focused_output) |output| {
-            
+
             // If an enabled fullscreen view exists, ignore the activation
             if (output.getEnabledFullscreen()) |view| {
                 server.seat.focusSurface(.{ .view = view });
@@ -323,4 +333,11 @@ fn handleNewVirtualKeyboard(
 
     const keyboard = Keyboard.init(device);
     _ = self.seat.keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+}
+
+fn handleNewIdleInhibitor(
+    _: *wl.Listener(*wlr.IdleInhibitorV1),
+    inhibitor: *wlr.IdleInhibitorV1,
+) void {
+    _ = IdleInhibitor.init(inhibitor);
 }
