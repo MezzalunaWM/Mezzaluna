@@ -16,6 +16,7 @@ const Remote = @import("Remote.zig");
 const Async = @import("Async.zig");
 
 const gpa = std.heap.c_allocator;
+pub const log = std.log.scoped(.lua);
 
 state: *zlua.Lua,
 
@@ -36,20 +37,20 @@ pub fn init(self: *Lua, cfg: Config) !void {
     }
 
     loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
+        log.warn("{s}", .{try self.state.toString(-1)});
     };
 
     loadBaseConfig(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
+        log.warn("{s}", .{try self.state.toString(-1)});
     };
 
     if (cfg.enabled) {
         loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
-            std.log.warn("{s}", .{try self.state.toString(-1)});
+            log.warn("{s}", .{try self.state.toString(-1)});
         };
     }
 
-    std.log.debug("Loaded lua", .{});
+    log.debug("Loaded lua", .{});
 }
 
 pub fn deinit(self: *Lua) void {
@@ -98,11 +99,11 @@ pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
 fn loadBaseConfig(self: *zlua.Lua) !void {
     const lua_path = "mez.path.base_config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Base config path not found. Is your runtime dir setup?", .{});
+        log.err("Base config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
-        std.log.err("Failed to pop the base config path from the lua stack. {}", .{err});
+        log.err("Failed to pop the base config path from the lua stack. {}", .{err});
         return;
     };
     self.pop(-1);
@@ -112,11 +113,11 @@ fn loadBaseConfig(self: *zlua.Lua) !void {
 fn loadConfigDir(self: *zlua.Lua) !void {
     const lua_path = "mez.path.config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Config path not found. Is your runtime dir setup?", .{});
+        log.err("Config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
-        std.log.err("Failed to pop the config path from the lua stack. {}", .{err});
+        log.err("Failed to pop the config path from the lua stack. {}", .{err});
         return;
     };
     self.pop(-1);

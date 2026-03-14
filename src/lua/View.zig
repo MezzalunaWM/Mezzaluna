@@ -5,6 +5,7 @@ const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 
 const Output = @import("../Output.zig");
+const Lua = @import("Lua.zig");
 const View = @import("../View.zig");
 const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 const LuaUtils = @import("LuaUtils.zig");
@@ -25,7 +26,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 
     while (output_it.next()) |o| {
         if (o.output.data == null) {
-            std.log.err("Output arbitrary data not assigned", .{});
+            Lua.log.err("Output arbitrary data not assigned", .{});
             unreachable;
         }
 
@@ -47,7 +48,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 
             while (view_it.next()) |v| {
                 if (v.data == null) {
-                    std.log.err("Unassigned arbitrary data in scene graph", .{});
+                    Lua.log.err("Unassigned arbitrary data in scene graph", .{});
                     unreachable;
                 }
 
