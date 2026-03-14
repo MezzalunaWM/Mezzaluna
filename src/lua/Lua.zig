@@ -7,14 +7,6 @@ const zlua = @import("zlua");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
-const Fs = @import("Fs.zig");
-const Input = @import("Input.zig");
-const Api = @import("Api.zig");
-const Hook = @import("Hook.zig");
-const View = @import("View.zig");
-const Output = @import("Output.zig");
-const Remote = @import("Remote.zig");
-const Async = @import("Async.zig");
 
 const gpa = std.heap.c_allocator;
 pub const log = std.log.scoped(.lua);
@@ -138,44 +130,18 @@ pub fn openMezLibs(self: *zlua.Lua) void {
         self.newTable();
         defer _ = self.setField(-2, "path");
     }
-    {
-        const fs_funcs = zlua.fnRegsFromType(Fs);
-        LuaUtils.newLib(self, fs_funcs);
-        self.setField(-2, "fs");
-    }
-    {
-        const input_funcs = zlua.fnRegsFromType(Input);
-        LuaUtils.newLib(self, input_funcs);
-        self.setField(-2, "input");
-    }
-    {
-        const hook_funcs = zlua.fnRegsFromType(Hook);
-        LuaUtils.newLib(self, hook_funcs);
-        self.setField(-2, "hook");
-    }
-    {
-        const api_funcs = zlua.fnRegsFromType(Api);
-        LuaUtils.newLib(self, api_funcs);
-        self.setField(-2, "api");
-    }
-    {
-        const view_funcs = zlua.fnRegsFromType(View);
-        LuaUtils.newLib(self, view_funcs);
-        self.setField(-2, "view");
-    }
-    {
-        const output_funcs = zlua.fnRegsFromType(Output);
-        LuaUtils.newLib(self, output_funcs);
-        self.setField(-2, "output");
-    }
-    {
-        const remote_funcs = zlua.fnRegsFromType(Remote);
-        LuaUtils.newLib(self, remote_funcs);
-        self.setField(-2, "remote");
-    }
-    {
-        const async_funcs = zlua.fnRegsFromType(Async);
-        LuaUtils.newLib(self, async_funcs);
-        self.setField(-2, "async");
+    inline for (.{
+        .{ "api", @import("Api.zig") },
+        .{ "async", @import("Async.zig") },
+        .{ "fs", @import("Fs.zig") },
+        .{ "hook", @import("Hook.zig") },
+        .{ "input", @import("Input.zig") },
+        .{ "output", @import("Output.zig") },
+        .{ "remote", @import("Remote.zig") },
+        .{ "view", @import("View.zig") },
+    }) |file| {
+        const funcs = zlua.fnRegsFromType(file[1]);
+        LuaUtils.newLib(self, funcs);
+        self.setField(-2, file[0]);
     }
 }
