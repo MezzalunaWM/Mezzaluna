@@ -40,36 +40,63 @@ pub fn joinpath(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---List sub-directories given an abosolute parent path
-/// ---@param path string 
-/// ---@return string[] list of sub directories
-pub fn subdirs(L: *zlua.Lua) i32 {
-    const nargs: i32 = L.getTop();
-    if (nargs != 1) {
-        L.raiseErrorStr("Expected exactly one path", .{});
-        return 0;
-    }
-
+/// ---open a directory and return its iterator
+/// ---The iterator returns a `file_name` and `kind`
+/// ---The kind may be any one of the following:
+/// --- block_device,
+/// --- character_device,
+/// --- directory,
+/// --- named_pipe,
+/// --- sym_link,
+/// --- file,
+/// --- unix_domain_socket,
+/// --- whiteout,
+/// --- door,
+/// --- event_port,
+/// --- unknown,
+/// ---
+/// ---@param path string
+/// ---@return function iterator
+pub fn open_directory(L: *zlua.Lua) i32 {
     const path = L.checkString(1);
 
-    var dir = std.fs.openDirAbsoluteZ(path, .{ .iterate = true }) catch {
-        L.raiseErrorStr("Directory does not exist", .{});
-    };
-    defer dir.close();
-    var dir_it = dir.iterate();
-
-    L.newTable();
-
-    var i: i32 = 1;
-    while(dir_it.next() catch {
-        L.raiseErrorStr("An error has occured while getting subdirectories", .{});
-    }) |entry| : (i += 1) {
-        if (entry.kind != .directory and entry.kind != .sym_link ) continue;
-
-        L.pushInteger(i);
-        _ = L.pushString(entry.name);
-        L.setTable(-3);
+    const iterator = L.newUserdata(std.fs.Dir.Iterator);
+    { // create a metatable for the userdata and add set the __gc function
+        L.newTable();
+        defer L.setMetatable(-2);
+        L.pushFunction(zlua.wrap(directory__gc));
+        L.setField(-2, "__gc");
     }
 
+    const dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+        L.raiseErrorStr("Failed to open directory `{s}`: `{s}`", .{ path.ptr, @errorName(err).ptr });
+    };
+    iterator.* = dir.iterate();
+
+    // the 1 upvalue is the userdata we just created
+    L.pushClosure(zlua.wrap(directory_iterator), 1);
     return 1;
+}
+
+fn directory_iterator(L: *zlua.Lua) i32 {
+    var iterator = L.toUserdata(std.fs.Dir.Iterator, zlua.Lua.upvalueIndex(1)) catch |err| {
+        L.raiseErrorStr("Invalid user data: {}", .{ @errorName(err).ptr });
+        return 0;
+    };
+
+    const entry = iterator.next() catch return 0; // the iterator shouldn't error
+    if (entry) |e| {
+        _ = L.pushString(e.name);
+        L.pushAny(e.kind) catch Utils.oomPanic();
+        return 2;
+    }
+
+    // no more values to return
+    return 0;
+}
+
+fn directory__gc(L: *zlua.Lua) i32 {
+    const iterator = L.toUserdata(std.fs.Dir.Iterator, 1) catch return 0;
+    iterator.dir.close();
+    return 0;
 }

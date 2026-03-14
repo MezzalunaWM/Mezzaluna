@@ -99,3 +99,5 @@ mez.hook.add("ViewMapPre", {
     end
 })
 ```
+
+Special thank to the talented [Phantom](https://adrian.lunarflame.dev) for designing our logo
