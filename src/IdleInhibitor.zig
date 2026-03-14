@@ -1,0 +1,34 @@
+const IdleInhibitor = @This();
+
+const std = @import("std");
+const wl = @import("wayland").server.wl;
+const wlr = @import("wlroots");
+
+const Utils = @import("Utils.zig");
+
+const gpa = std.heap.c_allocator;
+const server = &@import("main.zig").server;
+
+inhibitor: *wlr.IdleInhibitorV1,
+
+destroy: wl.Listener(*wlr.Surface) = .init(handleDestroy),
+
+pub fn init(inhibitor: *wlr.IdleInhibitorV1) *IdleInhibitor {
+    const self = gpa.create(IdleInhibitor) catch Utils.oomPanic();
+
+    self.* = .{ .inhibitor = inhibitor };
+    self.inhibitor.events.destroy.add(&self.destroy);
+    server.idle_notifier.setInhibited(true);
+
+    return self;
+}
+
+fn handleDestroy(
+    listener: *wl.Listener(*wlr.Surface),
+    _: *wlr.Surface,
+) void {
+    const self: *IdleInhibitor = @fieldParentPtr("destroy", listener);
+    listener.link.remove();
+    gpa.destroy(self);
+    server.idle_notifier.setInhibited(false);
+}

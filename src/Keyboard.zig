@@ -126,6 +126,10 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         server.seat.wlr_seat.setKeyboard(&server.seat.keyboard_group.wlr_group.keyboard);
         server.seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
 }
 
 pub fn keypress(modifiers: wlr.Keyboard.ModifierMask, sym: xkb.Keysym, state: wl.Keyboard.KeyState) bool {
