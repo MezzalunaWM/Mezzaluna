@@ -63,6 +63,8 @@ end
 ---@field refocus_on_kill boolean
 ---@field screen_gap number
 ---@field tile_gap number
+
+---@type MasterConfig
 local default_config = {
   mod_key = "alt",
 	master_ratio = 0.5,
@@ -333,8 +335,6 @@ M.make_float = function (view_id)
 
 	local tag = M.state.tags[tag_idx]
 
-	mez.view.raise_to_top(tag.floating[#tag.floating])
-
 	if type == "floating" then return end
 
 	if type == "master" then
@@ -351,6 +351,7 @@ M.make_float = function (view_id)
 		)
 	end
 
+	mez.view.raise_to_top(tag.floating[#tag.floating])
 	mez.view.set_focused(tag.floating[#tag.floating])
 	M.tile_tag(tag_idx)
 end
@@ -401,7 +402,7 @@ M.send_view = function (view_id, tag_id)
     if tag.master == nil then
       tag.master = view_id
     else
-      table.insert(tag.stack, #tag.stack, view_id)
+      tag.stack[#tag.stack + 1] = view_id
     end
   end
 
@@ -445,7 +446,14 @@ M.setup = function(config)
 
 	for i = 1, M.config.tag_count do
 		mez.input.add_keymap(M.config.mod_key, tostring(i), { press = function () M.tag_enable(i) end })
-		-- mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), { press = function () M.send_view(0, i) end })
+		mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), {
+      press = function ()
+        local res, err = M.send_view(0, i)
+        if err then
+          print(err)
+        end
+      end
+    })
 	end
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_LEFT", {
