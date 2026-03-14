@@ -19,6 +19,43 @@ const gpa = std.heap.c_allocator;
 
 state: *zlua.Lua,
 
+pub const Config = struct {
+    path: ?[]const u8,
+    enabled: bool,
+};
+pub fn init(self: *Lua, cfg: Config) !void {
+    self.state = try zlua.Lua.init(gpa);
+    errdefer self.state.deinit();
+    self.state.openLibs();
+
+    openMezLibs(self.state);
+
+    if (cfg.path) |path| {
+        defer gpa.free(path);
+        try setConfig(self.state, path);
+    }
+
+    loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
+        std.log.warn("{s}", .{try self.state.toString(-1)});
+    };
+
+    loadBaseConfig(self.state) catch |err| if (err == error.LuaRuntime) {
+        std.log.warn("{s}", .{try self.state.toString(-1)});
+    };
+
+    if (cfg.enabled) {
+        loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
+            std.log.warn("{s}", .{try self.state.toString(-1)});
+        };
+    }
+
+    std.log.debug("Loaded lua", .{});
+}
+
+pub fn deinit(self: *Lua) void {
+    self.state.deinit();
+}
+
 pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     const path_dir = try std.fs.path.joinZ(gpa, &[_][]const u8{
         config.runtime_path_prefix,
@@ -148,41 +185,4 @@ pub fn openMezLibs(self: *zlua.Lua) void {
         LuaUtils.newLib(self, async_funcs);
         self.setField(-2, "async");
     }
-}
-
-pub const Config = struct {
-    path: ?[]const u8,
-    enabled: bool,
-};
-pub fn init(self: *Lua, cfg: Config) !void {
-    self.state = try zlua.Lua.init(gpa);
-    errdefer self.state.deinit();
-    self.state.openLibs();
-
-    openMezLibs(self.state);
-
-    if (cfg.path) |path| {
-        defer gpa.free(path);
-        try setConfig(self.state, path);
-    }
-
-    loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
-    };
-
-    loadBaseConfig(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
-    };
-
-    if (cfg.enabled) {
-        loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
-            std.log.warn("{s}", .{try self.state.toString(-1)});
-        };
-    }
-
-    std.log.debug("Loaded lua", .{});
-}
-
-pub fn deinit(self: *Lua) void {
-    self.state.deinit();
 }
