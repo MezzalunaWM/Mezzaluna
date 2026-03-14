@@ -75,13 +75,6 @@ pub fn deinit(self: *LayerSurface) void {
     gpa.destroy(self);
 }
 
-pub fn allowKeyboard(self: *LayerSurface) void {
-    const keyboard_interactive = self.wlr_layer_surface.current.keyboard_interactive;
-    if (keyboard_interactive == .exclusive or keyboard_interactive == .on_demand) {
-        server.seat.wlr_seat.keyboardNotifyEnter(self.wlr_layer_surface.surface, &server.seat.keyboard_group.wlr_group.keyboard.keycodes, &server.seat.keyboard_group.wlr_group.keyboard.modifiers);
-    }
-}
-
 // --------- LayerSurface event handlers ---------
 fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfaceV1) void {
     const layer: *LayerSurface = @fieldParentPtr("destroy", listener);
@@ -91,7 +84,9 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
     layer_suraface.output.arrangeLayers();
-    layer_suraface.allowKeyboard();
+    if (layer_suraface.wlr_layer_surface.current.keyboard_interactive != .none) {
+        server.seat.focusSurface(.{ .layer_surface = layer_suraface });
+    }
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {

@@ -37,15 +37,19 @@ mez.input.add_keymap(mod .. "|shift", "Q", {
 })
 
 mez.hook.add("ViewSetFocusPost", {
-	callback = function (view_id)
-    mez.view.set_border(view_id, { color = "#FFDD33", width = border_width })
+	callback = function (view_id, focus)
+    if focus then
+      mez.view.set_border(view_id, { color = "#FFDD33", width = border_width })
+    else
+      mez.view.set_border(view_id, { color = "#52493E", width = border_width })
+    end
 	end
 })
 
-mez.hook.add("ViewRemoveFocusPost", {
-	callback = function(view_id)
+mez.hook.add("ViewMapPre", {
+  callback = function(view_id)
     mez.view.set_border(view_id, { color = "#52493E", width = border_width })
-	end
+  end
 })
 
 mez.hook.add("ViewPointerMotion", {
