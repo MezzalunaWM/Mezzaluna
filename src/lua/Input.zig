@@ -49,9 +49,7 @@ pub const KeymapData = struct {
             return;
         }
 
-        Lua.state.protectedCall(.{ .args = 0, .results = 0 }) catch {
-            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
-        };
+        Lua.state.protectedCall(.{ .args = 0, .results = 0 }) catch LuaUtils.handleError(Lua.state);
         Lua.state.pop(-1);
     }
 
@@ -107,11 +105,7 @@ pub const MousemapData = struct {
             i = k;
         }
 
-        Lua.state.protectedCall(.{ .args = i, .results = 1 }) catch {
-            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
-        };
-
-        
+        Lua.state.protectedCall(.{ .args = i, .results = 1 }) catch LuaUtils.handleError(Lua.state);
         const ret = Lua.state.toBoolean(-1);
         Lua.state.pop(1);
 
@@ -203,9 +197,9 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---Create a new mousemap
 /// ---@param modifiers string
 /// ---@param btn_name string button name (ex. "BTN_LEFT", "BTN_RIGHT")
-/// ---@param options { 
-/// ---     press: MousemapButtonFunc?, 
-/// ---     drag: MousemapButtonFunc?, 
+/// ---@param options {
+/// ---     press: MousemapButtonFunc?,
+/// ---     drag: MousemapButtonFunc?,
 /// ---     release: MousemapButtonFunc?,
 /// ---     scroll: MousemapScrollFunc? }
 pub fn add_mousemap(L: *zlua.Lua) i32 {

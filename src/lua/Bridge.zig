@@ -5,7 +5,7 @@ const zlua = @import("zlua");
 
 const gpa = std.heap.c_allocator;
 
-pub fn getNestedField(L: *zlua.Lua, path: []u8) bool {
+pub fn getNestedField(L: *zlua.Lua, path: []const u8) bool {
     var tokens = std.mem.tokenizeScalar(u8, path, '.');
     var first = true;
 

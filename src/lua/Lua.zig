@@ -4,6 +4,7 @@ const std = @import("std");
 const config = @import("config");
 const zlua = @import("zlua");
 
+const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
 const Fs = @import("Fs.zig");
@@ -36,19 +37,13 @@ pub fn init(self: *Lua, cfg: Config) !void {
         try setConfig(self.state, path);
     }
 
-    loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
-        log.warn("{s}", .{try self.state.toString(-1)});
+    // load lua files
+    loadRuntimeDir(self.state) catch |err| switch (err) {
+        error.OutOfMemory => Utils.oomPanic(),
+        else => log.err("{}", .{ err })
     };
-
-    loadBaseConfig(self.state) catch |err| if (err == error.LuaRuntime) {
-        log.warn("{s}", .{try self.state.toString(-1)});
-    };
-
-    if (cfg.enabled) {
-        loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
-            log.warn("{s}", .{try self.state.toString(-1)});
-        };
-    }
+    loadBaseConfig(self.state);
+    if (cfg.enabled) loadConfigDir(self.state);
 
     log.debug("Loaded lua", .{});
 }
@@ -81,10 +76,7 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     });
     defer gpa.free(path_full);
 
-    self.doFile(path_full) catch {
-        const err = try self.toString(-1);
-        std.log.debug("Failed to run lua file: {s}", .{err});
-    };
+    self.doFile(path_full) catch LuaUtils.handleError(self);
 }
 
 pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
@@ -96,7 +88,7 @@ pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
     self.setField(-2, "config");
 }
 
-fn loadBaseConfig(self: *zlua.Lua) !void {
+fn loadBaseConfig(self: *zlua.Lua) void {
     const lua_path = "mez.path.base_config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
         log.err("Base config path not found. Is your runtime dir setup?", .{});
@@ -107,10 +99,10 @@ fn loadBaseConfig(self: *zlua.Lua) !void {
         return;
     };
     self.pop(-1);
-    try self.doFile(path);
+    self.doFile(path) catch LuaUtils.handleError(self);
 }
 
-fn loadConfigDir(self: *zlua.Lua) !void {
+fn loadConfigDir(self: *zlua.Lua) void {
     const lua_path = "mez.path.config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
         log.err("Config path not found. Is your runtime dir setup?", .{});
@@ -121,7 +113,7 @@ fn loadConfigDir(self: *zlua.Lua) !void {
         return;
     };
     self.pop(-1);
-    try self.doFile(path);
+    self.doFile(path) catch LuaUtils.handleError(self);
 }
 
 pub fn openMezLibs(self: *zlua.Lua) void {

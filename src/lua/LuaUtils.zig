@@ -4,6 +4,10 @@ const std = @import("std");
 const zlua = @import("zlua");
 
 const View = @import("../View.zig");
+const Bridge = @import("Bridge.zig");
+const Remote = @import("Remote.zig");
+const Lua = @import("Lua.zig");
+const RemoteLua = @import("../RemoteLua.zig");
 
 const server = &@import("../main.zig").server;
 
@@ -62,4 +66,15 @@ pub fn viewById(view_id: u64) ?*View {
         return server.root.viewById(view_id);
     }
     return null;
+}
+
+pub fn handleError(L: *zlua.Lua) void {
+    if (Bridge.getNestedField(L, "debug.traceback")) {
+        L.pushValue(1); // error message
+        L.pushInteger(0); // level
+        L.call(.{ .args = 2, .results = 1 });
+        const error_traceback = L.toString(-1) catch unreachable;
+        Lua.log.err("{s}", .{ error_traceback });
+        RemoteLua.sendNewLogEntry(error_traceback);
+    }
 }
