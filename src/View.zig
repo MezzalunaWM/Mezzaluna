@@ -14,7 +14,6 @@ const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
 mapped: bool,
-focused: bool,
 id: u64,
 
 output: ?*Output,
@@ -65,7 +64,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     errdefer gpa.destroy(self);
 
     self.* = .{
-        .focused = false,
         .mapped = false,
         .id = @intFromPtr(xdg_toplevel),
         .output = null,
@@ -154,7 +152,7 @@ pub fn toggleFullscreen(self: *View) void {
         server.events.exec("ViewSetFullscreenPre", .{self.id, false});
 
         self.scene_tree.node.reparent(self.output.?.layers.content);
-        
+
         // ViewSetFullscreenPost
         // After making a view fullscreen within it's output
         // passed view_id and true `true` if being fullscreened `false` otherwise
@@ -227,6 +225,14 @@ pub fn resizeBorders(self: *View) void {
     self.borders[3].setSize(self.border_width, self.geometry.height);
     self.borders[1].node.setPosition(0, self.geometry.height - self.border_width);
     self.borders[2].node.setPosition(self.geometry.width - self.border_width, 0);
+}
+
+pub fn setActivated(self: *View, activated: bool) void {
+    // Before a view's focus is set
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    _ = self.xdg_toplevel.setActivated(activated);
+    // After a view's focus is set
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated });
 }
 
 // --------- XdgTopLevel event handlers ---------

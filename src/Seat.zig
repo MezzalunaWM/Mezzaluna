@@ -2,7 +2,9 @@ const Seat = @This();
 
 const std = @import("std");
 const wlr = @import("wlroots");
-const wl = @import("wayland").server.wl;
+const wayland = @import("wayland");
+const wl = wayland.server.wl;
+const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
 
 const KeyboardGroup = @import("KeyboardGroup.zig");
@@ -85,113 +87,51 @@ pub fn deinit(self: *Seat) void {
 }
 
 pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
-    const surface: ?*wlr.Surface = blk: {
-        if (to_focus != null) {
-            break :blk to_focus.?.getSurface();
-        } else {
-            break :blk null;
-        }
-    };
+    if (to_focus == null) {
+        self.focused_surface = to_focus;
+        self.wlr_seat.keyboardClearFocus();
+        return;
+    }
+    const surface = to_focus.?.getSurface();
 
-    // Remove focus from the current surface unless:
-    //  - current and to focus are the same surface
-    //  - current layer has exclusive keyboard interactivity
-    //  - current is fullscreen and to focus is content
-    //  - current is fullscreen and layer is bottom or background
+    // Remove focus from the current surface unless...
     if (self.focused_surface) |current_focus| {
-        const current_surface = current_focus.getSurface();
-        if (current_surface == surface) return; // Same surface
+        // the current surface and the surface to focus are the same
+        if (current_focus.getSurface() == surface) return;
 
-        if (to_focus != null) {
-            switch (current_focus) {
-                .layer_surface => |*current_layer_surface| {
-                    if (current_layer_surface.*.wlr_layer_surface.current.keyboard_interactive == .exclusive) return;
-                },
-                .view => |*current_view| {
-                    if(current_view.*.output == null) {
-                        std.log.debug("View is not assigned to an output", .{});
-                        unreachable;
-                    }
-
-                    if (current_view.*.isFullscreen() and current_view.*.scene_tree.node.enabled) {
-                        switch (to_focus.?) {
-                            .layer_surface => |*layer_surface| {
-                                const layer = layer_surface.*.wlr_layer_surface.current.layer;
-                                if (layer == .background or layer == .bottom) return;
-                            },
-                            .view => |*view| {
-                                if (!view.*.isFullscreen()) return;
-                            },
-                        }
-                    }
-                },
-            }
-        } else if (current_focus == .view and current_focus.view.isFullscreen()) {
-            return;
-        }
-
-        // Clear the focus if applicable
         switch (current_focus) {
-            .layer_surface => {}, // IDK if we actually have to clear any focus here
-            .view => {
-                if (wlr.XdgSurface.tryFromWlrSurface(current_surface)) |xdg_surface| {
-                    const view_id: ?u64 = blk: {
-                        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xdg_surface.data.?));
-                        if(scene_node_data.* == .view) {
-                            break :blk scene_node_data.view.id;
-                        } else {
-                            break :blk null;
-                        }
-                    };
-
-                    if(view_id) |v| {
-                        // ViewRemoveFocusPre is fired before a view's focus is removed
-                        // ---@param view_id number
-                        server.events.exec("ViewRemoveFocusPre", .{v});
-                    }
-
-                    _ = xdg_surface.role_data.toplevel.?.setActivated(false);
-
-                    if(view_id) |v| {
-                        // ViewRemoveFocusPost is fired after a view's focus is removed
-                        // ---@param view_id number
-                        server.events.exec("ViewRemoveFocusPost", .{v});
+            .layer_surface => |*current_layer_surface| {
+                const layer = @intFromEnum(current_layer_surface.*.wlr_layer_surface.current.layer);
+                // the current surface is over on or above the top layer
+                if (layer >= @intFromEnum(zwlr.LayerShellV1.Layer.top)) return;
+            },
+            .view => |*current_view| {
+                // the current surface is fullscreen and the layer surface to
+                // focus is not on or above the top layer
+                if (current_view.*.isFullscreen() and current_view.*.scene_tree.node.enabled) {
+                    switch (to_focus.?) {
+                        .layer_surface => |*layer_surface| {
+                            const layer = @intFromEnum(layer_surface.*.wlr_layer_surface.current.layer);
+                            if (layer < @intFromEnum(zwlr.LayerShellV1.Layer.top)) return;
+                        },
+                        .view => return,
                     }
                 }
-            }
+            },
         }
+
+        // deactivate the current surface
+        if (current_focus == .view) current_focus.view.setActivated(false);
     }
 
-    if (to_focus != null) {
-        server.seat.wlr_seat.keyboardNotifyEnter(surface.?, &server.seat.keyboard_group.wlr_group.keyboard.keycodes, &server.seat.keyboard_group.wlr_group.keyboard.modifiers);
-        if (to_focus.? != .layer_surface) {
-            if (to_focus.? == .view) to_focus.?.view.focused = true;
-            if (wlr.XdgSurface.tryFromWlrSurface(surface.?)) |xdg_surface| {
-                    const view_id: ?u64 = blk: {
-                        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xdg_surface.data.?));
-                        if(scene_node_data.* == .view) {
-                            break :blk scene_node_data.view.id;
-                        } else {
-                            break :blk null;
-                        }
-                    };
-
-                    if(view_id) |v| {
-                        // ViewSetFocusPre is fired before a view is focused
-                        // ---@param view_id number
-                        server.events.exec("ViewSetFocusPre", .{v});
-                    }
-
-                    _ = xdg_surface.role_data.toplevel.?.setActivated(true);
-
-                    if(view_id) |v| {
-                        // ViewSetFocusPost is fired after a view is focused
-                        // ---@param view_id number
-                        server.events.exec("ViewSetFocusPost", .{v});
-                    }
-            }
-        }
-    }
+    // focus the new surface
+    self.wlr_seat.keyboardNotifyEnter(
+        surface,
+        &self.keyboard_group.wlr_group.keyboard.keycodes,
+        &self.keyboard_group.wlr_group.keyboard.modifiers,
+    );
+    // activate the new surface
+    if (to_focus.? == .view) to_focus.?.view.setActivated(true);
     self.focused_surface = to_focus;
 }
 
