@@ -13,7 +13,6 @@ const Utils = @import("Utils.zig");
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
-mapped: bool,
 id: u64,
 
 output: ?*Output,
@@ -64,7 +63,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     errdefer gpa.destroy(self);
 
     self.* = .{
-        .mapped = false,
         .id = @intFromPtr(xdg_toplevel),
         .output = null,
         .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
@@ -250,7 +248,6 @@ fn handleMap(listener: *wl.Listener(void)) void {
         .right = true,
     });
 
-    view.mapped = true;
     server.events.exec("ViewMapPost", .{view.id});
 }
 
@@ -259,8 +256,6 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
     server.events.exec("ViewUnmapPre", .{view.id});
-    view.mapped = false; // we do this before any work is done so that nobody tries
-    // any funny business
 
     if (server.seat.focused_surface) |fs| {
         if (fs == .view and fs.view == view) {
