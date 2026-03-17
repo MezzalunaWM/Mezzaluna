@@ -61,7 +61,7 @@ pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
         .wlr_seat = wlr_seat,
         .focused_surface = null,
         .focused_output = null,
-        .keyboard_group = .init(),
+        .keyboard_group = .init(self),
         .xkb_keymap = xkb_keymap.ref(),
     };
     errdefer {

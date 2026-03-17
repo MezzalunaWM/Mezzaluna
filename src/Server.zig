@@ -243,7 +243,10 @@ pub fn deinit(self: *Server) noreturn {
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
     switch (device.type) {
-        .keyboard => _ = Keyboard.init(device),
+        .keyboard => {
+            const keyboard = Keyboard.init(device);
+            self.seat.keyboard_group.addKeyboard(keyboard);
+        },
         .pointer => self.cursor.wlr_cursor.attachInputDevice(device),
         else => {
             std.log.err("New input request for input that is not a keyboard or pointer: {s}", .{device.name orelse "(null)"});

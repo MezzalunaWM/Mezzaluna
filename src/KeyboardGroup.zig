@@ -7,6 +7,7 @@ const xkb = @import("xkbcommon");
 
 const Keyboard = @import("Keyboard.zig");
 const Utils = @import("Utils.zig");
+const Seat = @import("Seat.zig");
 
 const server = &@import("main.zig").server;
 const gpa = std.heap.c_allocator;
@@ -15,8 +16,9 @@ wlr_group: *wlr.KeyboardGroup,
 repeat_source: ?*wl.EventSource,
 modifiers: ?wlr.Keyboard.ModifierMask,
 keysyms: ?[]const xkb.Keysym,
+seat: *Seat,
 
-pub fn init() *KeyboardGroup {
+pub fn init(seat: *Seat) *KeyboardGroup {
     errdefer Utils.oomPanic();
 
     const self = try gpa.create(KeyboardGroup);
@@ -30,9 +32,17 @@ pub fn init() *KeyboardGroup {
         },
         .modifiers = null,
         .keysyms = null,
+        .seat = seat,
     };
 
     return self;
+}
+
+pub fn addKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
+    if (!self.wlr_group.addKeyboard(keyboard.wlr_keyboard)) {
+        std.log.err("Adding new keyboard {s} failed", .{ keyboard.device.name orelse "(unnamed)" });
+    }
+    keyboard.group = self;
 }
 
 pub fn deinit(self: *KeyboardGroup) void {
