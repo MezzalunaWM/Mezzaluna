@@ -136,7 +136,7 @@ pub fn init(self: *Server) void {
     };
 
     self.root.init();
-    self.seat.init();
+    self.seat.init(try wlr.Seat.create(wl_server, "default"));
     self.cursor.init();
 
     _ = try wlr.Subcompositor.create(self.wl_server);

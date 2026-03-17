@@ -42,7 +42,7 @@ request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(
 request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(handleRequestSetPrimarySelection),
 // request_start_drage
 
-pub fn init(self: *Seat) void {
+pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
     errdefer Utils.oomPanic();
 
     const xkb_context = xkb.Context.new(.no_flags) orelse {
@@ -58,7 +58,7 @@ pub fn init(self: *Seat) void {
     defer xkb_keymap.unref();
 
     self.* = .{
-        .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
+        .wlr_seat = wlr_seat,
         .focused_surface = null,
         .focused_output = null,
         .keyboard_group = .init(),
@@ -136,7 +136,7 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 }
 
 pub fn focusOutput(self: *Seat, output: *Output) void {
-    if (server.seat.focused_output) |prev_output| {
+    if (self.focused_output) |prev_output| {
         prev_output.focused = false;
     }
 
@@ -144,23 +144,27 @@ pub fn focusOutput(self: *Seat, output: *Output) void {
 }
 
 fn handleRequestSetCursor(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
     event: *wlr.Seat.event.RequestSetCursor,
 ) void {
-    if (event.seat_client == server.seat.wlr_seat.pointer_state.focused_client)
+    const self: *Seat = @fieldParentPtr("request_set_cursor", listener);
+    if (event.seat_client == self.wlr_seat.pointer_state.focused_client) {
         server.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+    }
 }
 
 fn handleRequestSetSelection(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
     event: *wlr.Seat.event.RequestSetSelection,
 ) void {
-    server.seat.wlr_seat.setSelection(event.source, event.serial);
+    const self: *Seat = @fieldParentPtr("request_set_selection", listener);
+    self.wlr_seat.setSelection(event.source, event.serial);
 }
 
 fn handleRequestSetPrimarySelection(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
     event: *wlr.Seat.event.RequestSetPrimarySelection,
 ) void {
-    server.seat.wlr_seat.setPrimarySelection(event.source, event.serial);
+    const self: *Seat = @fieldParentPtr("request_set_primary_selection", listener);
+    self.wlr_seat.setPrimarySelection(event.source, event.serial);
 }
