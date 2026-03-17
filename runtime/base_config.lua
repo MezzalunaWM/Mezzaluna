@@ -1,6 +1,6 @@
 ---@module "mez_types"
 
-local mod = "logo"
+local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
 

@@ -40,7 +40,7 @@ local plugin_dir = mez.fs.joinpath(env_data, "mez", "plugins")
 -- TODO: we should make a function for this in mez.fs instead of using the shell
 os.execute("mkdir -p " .. plugin_dir)
 for plugin_name, kind in mez.fs.open_directory(plugin_dir) do
-  if kind == "directory" then
+  if kind == "directory" or kind == "sym_link" then
     mez.packadd(mez.fs.joinpath(plugin_dir, plugin_name))
   end
 end
