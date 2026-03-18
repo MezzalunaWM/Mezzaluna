@@ -19,7 +19,6 @@ const c = @import("C.zig").c;
 
 wlr_keyboard: *wlr.Keyboard,
 context: *xkb.Context,
-device: *wlr.InputDevice,
 // there's wlr.KeyboardGroup.fromKeyboard, but it doesn't seem to work
 group: ?*KeyboardGroup,
 
@@ -42,7 +41,6 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
     self.* = .{
         .context = xkb.Context.new(.no_flags) orelse return error.ContextFailed,
         .wlr_keyboard = device.toKeyboard(),
-        .device = device,
         .group = null,
     };
 
@@ -157,7 +155,7 @@ fn handleKeyMap(_: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void {
 pub fn handleDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {
     const keyboard: *Keyboard = @fieldParentPtr("destroy", listener);
 
-    std.log.debug("removing keyboard: {s}", .{keyboard.device.name orelse "(null)"});
+    std.log.debug("removing keyboard: {s}", .{keyboard.wlr_keyboard.base.name orelse "(null)"});
 
     keyboard.modifiers.link.remove();
     keyboard.key.link.remove();

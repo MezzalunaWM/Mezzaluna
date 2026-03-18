@@ -40,7 +40,7 @@ pub fn init(seat: *Seat) *KeyboardGroup {
 
 pub fn addKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
     if (!self.wlr_group.addKeyboard(keyboard.wlr_keyboard)) {
-        std.log.err("Adding new keyboard {s} failed", .{ keyboard.device.name orelse "(unnamed)" });
+        std.log.err("Adding new keyboard {s} failed", .{ keyboard.wlr_keyboard.base.name orelse "(unnamed)" });
     }
     keyboard.group = self;
 }
