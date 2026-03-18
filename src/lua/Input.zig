@@ -312,7 +312,7 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
 /// ---@param cursor string name
 pub fn set_cursor_type(L: *zlua.Lua) i32 {
     const name = L.checkString(1);
-    server.cursor.wlr_cursor.setXcursor(server.cursor.x_cursor_manager, name);
+    server.seat.cursor.wlr_cursor.setXcursor(server.seat.cursor.x_cursor_manager, name);
 
     return 0;
 }

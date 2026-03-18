@@ -8,6 +8,8 @@ const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
 
 const KeyboardGroup = @import("KeyboardGroup.zig");
+const Keyboard = @import("Keyboard.zig");
+const Cursor = @import("Cursor.zig");
 const Utils = @import("Utils.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
@@ -35,6 +37,7 @@ focused_surface: ?FocusData,
 focused_output: ?*Output,
 
 keyboard_group: *KeyboardGroup,
+cursor: Cursor, // all mice in a seat share one cursor
 xkb_keymap: *xkb.Keymap,
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
@@ -63,6 +66,7 @@ pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
         .focused_output = null,
         .keyboard_group = .init(self),
         .xkb_keymap = xkb_keymap.ref(),
+        .cursor = undefined,
     };
     errdefer {
         self.keyboard_group.deinit();
@@ -71,6 +75,7 @@ pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
 
     _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.xkb_keymap);
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
+    self.cursor.init(self);
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
@@ -143,13 +148,26 @@ pub fn focusOutput(self: *Seat, output: *Output) void {
     self.focused_output = output;
 }
 
+pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
+    switch (device.type) {
+        .keyboard => {
+            const keyboard = Keyboard.init(device);
+            self.keyboard_group.addKeyboard(keyboard);
+        },
+        .pointer => {
+            self.cursor.wlr_cursor.attachInputDevice(device);
+        },
+        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+    }
+}
+
 fn handleRequestSetCursor(
     listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
     event: *wlr.Seat.event.RequestSetCursor,
 ) void {
     const self: *Seat = @fieldParentPtr("request_set_cursor", listener);
     if (event.seat_client == self.wlr_seat.pointer_state.focused_client) {
-        server.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+        self.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
     }
 }
 

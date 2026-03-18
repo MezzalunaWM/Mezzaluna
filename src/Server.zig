@@ -7,7 +7,6 @@ const xev = @import("xev");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
-const Cursor = @import("Cursor.zig");
 const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
@@ -49,7 +48,6 @@ allocator: *wlr.Allocator,
 
 root: Root,
 seat: Seat,
-cursor: Cursor,
 
 // Lua data
 keymaps: std.AutoHashMap(u64, Input.KeymapData),
@@ -120,7 +118,6 @@ pub fn init(self: *Server) void {
         // TODO: let the user configure a cursor theme and side lua
         .root = undefined,
         .seat = undefined,
-        .cursor = undefined,
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
         .keymaps = .init(gpa),
         .mousemaps = .init(gpa),
@@ -137,7 +134,6 @@ pub fn init(self: *Server) void {
 
     self.root.init();
     self.seat.init(try wlr.Seat.create(wl_server, "default"));
-    self.cursor.init();
 
     _ = try wlr.Subcompositor.create(self.wl_server);
     _ = try wlr.DataDeviceManager.create(self.wl_server);
@@ -224,7 +220,6 @@ pub fn deinit(self: *Server) noreturn {
 
     self.seat.deinit();
     self.root.deinit();
-    self.cursor.deinit();
 
     self.backend.destroy();
 
@@ -242,16 +237,7 @@ pub fn deinit(self: *Server) noreturn {
 // --------- Backend event handlers ---------
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
-    switch (device.type) {
-        .keyboard => {
-            const keyboard = Keyboard.init(device);
-            self.seat.keyboard_group.addKeyboard(keyboard);
-        },
-        .pointer => self.cursor.wlr_cursor.attachInputDevice(device),
-        else => {
-            std.log.err("New input request for input that is not a keyboard or pointer: {s}", .{device.name orelse "(null)"});
-        },
-    }
+    self.seat.addInputDevice(device);
 
     // We should really only set true capabilities
     self.seat.wlr_seat.setCapabilities(.{
@@ -326,8 +312,8 @@ fn handleNewVirtualPointer(
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
     const device = &event.new_pointer.pointer.base;
 
-    self.cursor.wlr_cursor.attachInputDevice(device);
-    self.cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    self.seat.cursor.wlr_cursor.attachInputDevice(device);
+    self.seat.cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
 }
 
 fn handleNewVirtualKeyboard(
