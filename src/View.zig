@@ -116,7 +116,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .current = .{},
     };
 
-    self.scene_tree.node.setEnabled(false);
+    self.scene_tree.node.setEnabled(true);
     self.surface_tree.node.setEnabled(false);
     self.saved_surface_tree.node.setEnabled(false);
 
@@ -229,13 +229,18 @@ pub fn toggleFullscreen(self: *View) void {
 
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+    // if (!self.xdg_toplevel.base.surface.mapped) return;
 
     if (self.isFullscreen()) return;
 
     if (self.pending == null) self.pending = self.current;
 
-    self.pending.?.geometry = .{ .x = x orelse self.current.geometry.x, .y = y orelse self.current.geometry.y, .width = @max(1 + 2 * self.border_width, width orelse self.current.geometry.width), .height = @max(1 + 2 * self.border_width, height orelse self.current.geometry.height) };
+    self.pending.?.geometry = .{ 
+        .x = x orelse self.current.geometry.x, 
+        .y = y orelse self.current.geometry.y, 
+        .width = @max(1 + 2 * self.border_width, width orelse self.current.geometry.width), 
+        .height = @max(1 + 2 * self.border_width, height orelse self.current.geometry.height) 
+    };
 
     // self.resizeBorders();
 }
@@ -346,10 +351,11 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
         std.log.debug("\t\tTiling configure {d}", .{self.id});
     }
 
-    if (pending.enabled != current.enabled) {
-        self.scene_tree.node.setEnabled(pending.enabled);
-        std.log.debug("\t\tEnabled configure {d}", .{self.id});
-    }
+    // Enabled
+    // if (pending.enabled != current.enabled) {
+    //     self.scene_tree.node.setEnabled(pending.enabled);
+    //     std.log.debug("\t\tEnabled configure {d}", .{self.id});
+    // }
 
     if (serial) |s| {
         configures.append(gpa, s) catch Utils.oomPanic();
@@ -360,6 +366,8 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
 }
 
 fn saveSurfaceTreeIter(buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, saved_surface_tree: *wlr.SceneTree) void {
+    std.log.debug("COPY IS HAPPENING", .{});
+
     // Create new saved surface tree
     const saved = saved_surface_tree.createSceneBuffer(buffer.buffer) catch Utils.oomPanic();
 
@@ -384,7 +392,6 @@ pub fn applySending(self: *View) void {
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
-    std.log.debug("\tShowing raw surface tree", .{});
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
@@ -453,9 +460,7 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     if (view.xdg_toplevel.base.initial_commit) {
         std.log.debug("\t\tInitial commit", .{});
 
-        // Don't call applyPending here - Lua's ViewMapPost will call apply()
-        // which will position the view correctly. Calling applyPending() now
-        // would position the scene_tree at (0, 0) before Lua can set geometry.
+        // view.xdg_toplevel.configure(configure: *const Configure)
         server.root.applyPending();
         return;
     }
