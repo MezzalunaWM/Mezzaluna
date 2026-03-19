@@ -91,8 +91,14 @@ pub fn close(L: *zlua.Lua) i32 {
         v.close();
     }
 
-    L.pushNil();
-    return 1;
+    return 0;
+}
+
+/// --- Apply all pending state changes
+pub fn apply(_: *zlua.Lua) i32 {
+    server.root.applyPending();
+
+    return 0;
 }
 
 /// ---@class Box
@@ -100,23 +106,22 @@ pub fn close(L: *zlua.Lua) i32 {
 /// ---@field y number?
 /// ---@field width number?
 /// ---@field height number?
-
 /// ---Position and size the view. Size includes borders and position is from top left.
 /// ---@param view_id integer 0 maps to focused view
 /// ---@param geometry Box Missing dimensions map to current dimensions
 pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if(!L.isTable(2)) return 0;
+    if (!L.isTable(2)) return 0;
 
     const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
+    if (view == null) return 0;
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 
     _ = L.pushString("x");
     _ = L.getTable(2);
     const x: i32 = if (L.isNil(-1))
-        view.?.geometry.x
+        view.?.current.geometry.x
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
@@ -124,7 +129,7 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     _ = L.pushString("y");
     _ = L.getTable(2);
     const y: i32 = if (L.isNil(-1))
-        view.?.geometry.y
+        view.?.current.geometry.y
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
@@ -132,7 +137,7 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     _ = L.pushString("width");
     _ = L.getTable(2);
     const width: i32 = if (L.isNil(-1))
-        view.?.geometry.width
+        view.?.current.geometry.width
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
@@ -140,12 +145,13 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     _ = L.pushString("height");
     _ = L.getTable(2);
     const height: i32 = if (L.isNil(-1))
-        view.?.geometry.height
+        view.?.current.geometry.height
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     view.?.setGeometry(x, y, width, height);
+    view.?.setEnabled(true);
 
     return 0;
 }
@@ -156,24 +162,24 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
 pub fn get_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
+    if (view == null) return 0;
 
     L.newTable();
 
     _ = L.pushString("x");
-    L.pushInteger(@intCast(view.?.geometry.x));
+    L.pushInteger(@intCast(view.?.current.geometry.x));
     L.setTable(-3);
 
     _ = L.pushString("y");
-    L.pushInteger(@intCast(view.?.geometry.y));
+    L.pushInteger(@intCast(view.?.current.geometry.y));
     L.setTable(-3);
 
     _ = L.pushString("width");
-    L.pushInteger(@intCast(view.?.geometry.width));
+    L.pushInteger(@intCast(view.?.current.geometry.width));
     L.setTable(-3);
 
     _ = L.pushString("height");
-    L.pushInteger(@intCast(view.?.geometry.height));
+    L.pushInteger(@intCast(view.?.current.geometry.height));
     L.setTable(-3);
 
     return 1;
@@ -185,7 +191,7 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
 pub fn get_previous_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
+    if (view == null) return 0;
 
     L.newTable();
 

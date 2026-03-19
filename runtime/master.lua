@@ -123,6 +123,8 @@ M.tile_tag = function(tag_id)
       })
 		end
 	end
+
+  mez.view.apply()
 end
 
 ---Add the id of a new view
@@ -415,8 +417,6 @@ end
 M.setup = function(config)
   --- Take a user config
   M.config = utils.table_merge(config or {}, default_config)
-
-  print(M.config.mod_key)
 
 	M.state = {
 		tag_id = 1,

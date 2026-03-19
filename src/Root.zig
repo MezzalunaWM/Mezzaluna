@@ -17,8 +17,14 @@ const Utils = @import("Utils.zig");
 
 scene_node_data: SceneNodeData,
 
+configures: std.ArrayList(u32),
+
 scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
+
+hidden_tree: *wlr.SceneTree,
+
+// All visible views should be accessed through these
 output_layout: *wlr.OutputLayout,
 output_manager: *wlr.OutputManagerV1,
 output_power_manager: *wlr.OutputPowerManagerV1,
@@ -42,12 +48,21 @@ pub fn init(self: *Root) void {
     self.* = .{
         .scene = scene,
         .scene_node_data = .{ .root = self },
+        .scene_output_layout = try scene.attachOutputLayout(output_layout),
+
+        .hidden_tree = try scene.tree.createSceneTree(),
+
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
-        .scene_output_layout = try scene.attachOutputLayout(output_layout),
+
+        .configures = std.ArrayList(u32).initCapacity(gpa, 8) catch Utils.oomPanic()
     };
 
+    // This hidden tree is, you guessed it, hidden
+    self.hidden_tree.node.setEnabled(false);
+
+    self.hidden_tree.node.data = &self.scene_node_data;
     self.scene.tree.node.data = &self.scene_node_data;
 
     self.output_manager.events.apply.add(&self.output_manager_apply);
@@ -56,51 +71,54 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var it = self.scene.tree.children.iterator(.forward);
+    var output_it = self.output_layout.outputs.iterator(.forward);
 
-    while (it.next()) |node| {
-        if (node.data == null) continue;
+    while(output_it.next()) |o| {
+        if(o.output.data == null) continue;
 
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-        switch (scene_node_data.*) {
-            .output => {
-                scene_node_data.output.deinit();
-            },
-            else => {
-                std.log.debug("The root has a child that is not an output", .{});
-                unreachable;
-            },
-        }
+        const output: *Output = @ptrCast(@alignCast(o.output.data));
+        output.deinit();
     }
 
+    self.configures.deinit(gpa);
     self.output_layout.destroy();
+    self.hidden_tree.node.destroy();
     self.scene.tree.node.destroy();
 }
 
-// Search output_layout's outputs, and each outputs views
+// This function is ugly as hell because I am stobbournly
+// trying to avoid data duplication. Therefore we need to
+// search everywhere there can be a view.
 pub fn viewById(self: *Root, id: u64) ?*View {
-    var output_it = self.output_layout.outputs.iterator(.forward);
+    // Check all hidden children
+    var hidden_view_it = self.hidden_tree.children.iterator(.forward);
+    while(hidden_view_it.next()) |scene_node| {
+        if(scene_node.data == null) continue;
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
 
-    while (output_it.next()) |o| {
-        if (o.output.data == null) {
-            std.log.err("Wlr_output arbitrary data not assigned", .{});
-            unreachable;
+        if(scene_node_data.* == .view and scene_node_data.view.id == id) {
+            return scene_node_data.view;
+        }
+    }
+
+    var output_it = self.output_layout.outputs.iterator(.forward);
+    while(output_it.next()) |o| {
+        if (o.output.data == null) continue;
+        const output: *Output = @ptrCast(@alignCast(o.output.data));
+
+        var view_it = output.layers.content.children.iterator(.forward);
+        while(view_it.next()) |scene_node| {
+            if(scene_node.data == null) continue;
+
+            const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+
+            if(scene_node_data.* == .view and scene_node_data.view.id == id) {
+                return scene_node_data.view;
+            }
         }
 
-        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
-
-        for(layers) |l| {
-            var node_it = l.children.iterator(.forward);
-            while (node_it.next()) |node| {
-                if (node.data == null) continue;
-
-                const view_snd: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-
-                if (view_snd.* == .view and view_snd.view.id == id) {
-                    return view_snd.view;
-                }
-            }
+        for(output.fullscreens.items) |view| {
+            if(view.id == id) return view;
         }
     }
 
@@ -108,18 +126,67 @@ pub fn viewById(self: *Root, id: u64) ?*View {
 }
 
 pub fn outputById(self: *Root, id: u64) ?*Output {
-    var it = self.scene.outputs.iterator(.forward);
+    var output_it = self.output_layout.outputs.iterator(.forward);
+    while(output_it.next()) |o| {
+        if (o.output.data == null) continue;
+        const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-    while (it.next()) |scene_output| {
-        if (scene_output.output.data == null) continue;
-
-        const output: *Output = @as(*Output, @ptrCast(@alignCast(scene_output.output.data.?)));
-        if (output.id == id) return output;
+        if(output.id == id) {
+            return output;
+        }
     }
 
     return null;
 }
 
+// First we make a copy of the surface tree
+pub fn applyPending(self: *Root) void {
+    std.log.debug("ROOT - Apply pending", .{});
+
+    var output_it = self.output_layout.outputs.iterator(.forward);
+
+    while(output_it.next()) |o| {
+        if (o.output.data == null) continue;
+
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        var view_it = output.layers.content.children.iterator(.forward);
+
+        while(view_it.next()) |scene_node| {
+            if(scene_node.data == null) continue;
+
+            const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+            if(view_snd.* != .view) continue;
+
+            view_snd.view.applyPending(&self.configures);
+        }
+    }
+}
+
+pub fn applySending(self: *Root) void {
+    std.log.debug("ROOT - Apply sending", .{});
+
+    var output_it = self.output_layout.outputs.iterator(.forward);
+
+    while(output_it.next()) |o| {
+        if (o.output.data == null) continue;
+
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        var view_it = output.layers.content.children.iterator(.forward);
+
+        while(view_it.next()) |scene_node| {
+            if(scene_node.data == null) continue;
+
+            const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+            if(view_snd.* != .view) continue;
+
+            view_snd.view.applySending();
+        }
+    }
+}
+
+// --------- OutputManagerV1 event handlers ---------
 fn handleOutputManagerApply(
     _: *wl.Listener(*wlr.OutputConfigurationV1),
     config: *wlr.OutputConfigurationV1
