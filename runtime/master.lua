@@ -466,6 +466,7 @@ M.setup = function(config)
           x = pos.x - offset.x,
           y = pos.y - offset.y
         })
+        mez.view.apply()
 			end
 		end
 	})
@@ -489,6 +490,7 @@ M.setup = function(config)
           width = width,
           height = height
         })
+        mez.view.apply()
 			end
 		end
 	})

@@ -29,7 +29,7 @@ const State = struct {
         return .{
             .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
             .activated = false,
-            .enabled = false,
+            .enabled = true,
 
             .decoration_mode = .server_side,
             .wm_capabilities = .{ .fullscreen = true },
@@ -295,22 +295,15 @@ pub fn resizeBorders(self: *View) void {
 pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
     std.log.debug("\tApply pending {d}", .{self.id});
 
+    self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
+    
+    self.surface_tree.node.setEnabled(false);
+    self.saved_surface_tree.node.setEnabled(true);
+    std.log.debug("\tShowing the saved buffer tree", .{});
+
     if (self.pending == null) return;
     const pending = &self.pending.?;
     const current = &self.current;
-
-    const is_initial_map = current.geometry.width == 0 and current.geometry.height == 0;
-
-    if (!is_initial_map and !self.saved_surface_tree.children.empty()) {
-        std.log.debug("saved surface should be empty but has {d} children", .{self.saved_surface_tree.children.length()});
-        return;
-    }
-
-    if (!is_initial_map) {
-        self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
-        self.saved_surface_tree.node.setEnabled(true);
-        self.surface_tree.node.setEnabled(false);
-    }
 
     var serial: ?u32 = null;
 
@@ -353,7 +346,11 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
         std.log.debug("\t\tTiling configure {d}", .{self.id});
     }
 
-    // self.xdg_toplevel.co
+    if (pending.enabled != current.enabled) {
+        self.scene_tree.node.setEnabled(pending.enabled);
+        std.log.debug("\t\tEnabled configure {d}", .{self.id});
+    }
+
     if (serial) |s| {
         configures.append(gpa, s) catch Utils.oomPanic();
     }
@@ -384,19 +381,16 @@ fn dropSavedSurfaceTree(self: *View) void {
 pub fn applySending(self: *View) void {
     std.log.debug("\tApplying sending {d}", .{self.id});
 
-    if (self.sending != null) {
-        self.current = self.sending.?;
-    }
+    if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
-    self.scene_tree.node.setEnabled(self.current.enabled);
-
-    self.saved_surface_tree.node.setEnabled(false);
+    std.log.debug("\tShowing raw surface tree", .{});
     self.surface_tree.node.setEnabled(true);
+    self.saved_surface_tree.node.setEnabled(false);
 
     self.dropSavedSurfaceTree();
 
-    self.resizeBorders();
+    // self.resizeBorders();
 }
 
 // --------- XdgTopLevel event handlers ---------
@@ -462,11 +456,12 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         // Don't call applyPending here - Lua's ViewMapPost will call apply()
         // which will position the view correctly. Calling applyPending() now
         // would position the scene_tree at (0, 0) before Lua can set geometry.
+        server.root.applyPending();
         return;
     }
 
     // resize on every commit
-    view.resizeBorders();
+    // view.resizeBorders();
 }
 
 // --------- XdgToplevel Event Handlers ---------
