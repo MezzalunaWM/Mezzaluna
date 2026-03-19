@@ -101,7 +101,7 @@ pub fn processCursorMotion(
 
     // tell the idle notifier that we've recieved activity now that it's been
     // fully processed
-    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
     const view: ?*View = blk: {
         if (self.seat.focused_surface) |fs| {
