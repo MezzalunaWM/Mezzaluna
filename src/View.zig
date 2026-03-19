@@ -77,7 +77,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     };
 
     // Add new Toplevel to root of the tree
-    if (server.seat.focused_output) |output| {
+    if (server.getDefaultSeat().focused_output) |output| {
         self.scene_tree = try output.layers.content.createSceneTree();
         self.surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base);
         self.output = output;
@@ -257,9 +257,9 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 
     server.events.exec("ViewUnmapPre", .{view.id});
 
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .view and fs.view == view) {
-            server.seat.focusSurface(null);
+            server.getDefaultSeat().focusSurface(null);
         }
     }
 

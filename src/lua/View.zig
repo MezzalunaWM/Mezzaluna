@@ -71,7 +71,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 /// ---Get the id for the focused view
 /// ---@return integer?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .view) {
             L.pushInteger(@intCast(fs.view.id));
             return 1;
@@ -214,9 +214,9 @@ pub fn set_focused(L: *zlua.Lua) i32 {
     const view_id: ?c_longlong = L.optInteger(1);
 
     if (view_id == null) {
-        server.seat.focusSurface(null);
+        server.getDefaultSeat().focusSurface(null);
     } else if (server.root.viewById(@intCast(view_id.?))) |view| {
-        server.seat.focusSurface(.{ .view = view });
+        server.getDefaultSeat().focusSurface(.{ .view = view });
     }
 
     L.pushNil();

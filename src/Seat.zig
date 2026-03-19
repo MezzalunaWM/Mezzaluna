@@ -18,6 +18,7 @@ const Output = @import("Output.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const server = &@import("main.zig").server;
+const gpa = std.heap.c_allocator;
 
 pub const FocusData = union(enum) {
     view: *View,
@@ -32,6 +33,7 @@ pub const FocusData = union(enum) {
 };
 
 wlr_seat: *wlr.Seat,
+link: wl.list.Link,
 
 focused_surface: ?FocusData,
 focused_output: ?*Output,
@@ -45,28 +47,30 @@ request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(
 request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(handleRequestSetPrimarySelection),
 // request_start_drage
 
-pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
-    errdefer Utils.oomPanic();
+pub fn init(name: [*:0]const u8) !*Seat {
+    const self = try gpa.create(Seat);
+    errdefer gpa.destroy(self);
 
     const xkb_context = xkb.Context.new(.no_flags) orelse {
         std.log.err("Unable to create a xkb context, exiting", .{});
-        std.process.exit(7);
+        return error.xkbContext;
     };
     defer xkb_context.unref();
 
     const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
         std.log.err("Unable to create a xkb keymap, exiting", .{});
-        std.process.exit(8);
+        return error.xkbKeymap;
     };
     defer xkb_keymap.unref();
 
     self.* = .{
-        .wlr_seat = wlr_seat,
+        .wlr_seat = try wlr.Seat.create(server.wl_server, name),
         .focused_surface = null,
         .focused_output = null,
         .keyboard_group = .init(self),
         .xkb_keymap = xkb_keymap.ref(),
         .cursor = undefined,
+        .link = undefined,
     };
     errdefer {
         self.keyboard_group.deinit();
@@ -80,6 +84,8 @@ pub fn init(self: *Seat, wlr_seat: *wlr.Seat) void {
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
     self.wlr_seat.events.request_set_primary_selection.add(&self.request_set_primary_selection);
+
+    return self;
 }
 
 pub fn deinit(self: *Seat) void {

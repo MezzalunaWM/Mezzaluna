@@ -59,7 +59,7 @@ pub fn toStringEx(L: *zlua.Lua) [:0]const u8 {
 
 pub fn viewById(view_id: u64) ?*View {
     if (view_id == 0) {
-        if (server.seat.focused_surface) |fs| {
+        if (server.getDefaultSeat().focused_surface) |fs| {
             if (fs == .view) return fs.view;
         }
     } else {
