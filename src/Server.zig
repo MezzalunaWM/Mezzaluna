@@ -28,6 +28,8 @@ const gpa = std.heap.c_allocator;
 wl_server: *wl.Server,
 compositor: *wlr.Compositor,
 renderer: *wlr.Renderer,
+linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
+linux_drm_syncobj_manager: ?*wlr.LinuxDrmSyncobjManagerV1 = null,
 backend: *wlr.Backend,
 event_loop: *wl.EventLoop,
 session: ?*wlr.Session,
@@ -129,6 +131,16 @@ pub fn init(self: *Server) void {
         .remote_lua_clients = .{},
         .async_callbacks = .init(gpa),
     };
+
+    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
+    }
+    if (renderer.features.timeline and backend.features.timeline) {
+        const drm_fd = renderer.getDrmFd();
+        if (drm_fd >= 0) {
+            self.linux_drm_syncobj_manager = wlr.LinuxDrmSyncobjManagerV1.create(wl_server, 1, drm_fd);
+        }
+    }
 
     self.renderer.initServer(wl_server) catch {
         std.log.err("Renderer init failed, exiting with 6", .{});
