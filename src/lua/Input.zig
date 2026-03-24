@@ -133,20 +133,17 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     const key = L.checkString(2);
     keymap.keysym = xkb.Keysym.fromName(key, .no_flags);
 
-    _ = L.pushString("press");
-    _ = L.getTable(3);
+    _ = L.getField(3, "press");
     if (L.isFunction(-1)) {
         keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
-    _ = L.pushString("release");
-    _ = L.getTable(3);
+    _ = L.getField(3, "release");
     if (L.isFunction(-1)) {
         keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
-    _ = L.pushString("repeat");
-    _ = L.getTable(3);
+    _ = L.getField(3, "repeat");
     keymap.options.repeat = L.isNil(-1) or L.toBoolean(-1);
 
     const hash = KeymapData.hash(keymap.modifier, keymap.keysym);
@@ -216,28 +213,24 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
     if(key_event_code != -1) {
         mousemap.event_code = key_event_code;
 
-        _ = L.pushString("press");
-        _ = L.getTable(3);
+        _ = L.getField(3, "press");
         if (L.isFunction(-1)) {
             mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
         }
 
-        _ = L.pushString("release");
-        _ = L.getTable(3);
+        _ = L.getField(3, "release");
         if (L.isFunction(-1)) {
             mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
         }
 
-        _ = L.pushString("drag");
-        _ = L.getTable(3);
+        _ = L.getField(3, "drag");
         if (L.isFunction(-1)) {
             mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
         }
     } else if(rel_event_code != 1){
         mousemap.event_code = rel_event_code;
 
-        _ = L.pushString("scroll");
-        _ = L.getTable(3);
+        _ = L.getField(3, "scroll");
         if (L.isFunction(-1)) {
             mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
         }

@@ -109,13 +109,11 @@ pub fn get_resolution(L: *zlua.Lua) i32 {
     if (output) |o| {
         L.newTable();
 
-        _ = L.pushString("width");
         L.pushInteger(@intCast(o.wlr_output.width));
-        L.setTable(-3);
+        L.setField(-2, "width");
 
-        _ = L.pushString("height");
         L.pushInteger(@intCast(o.wlr_output.height));
-        L.setTable(-3);
+        L.setField(-2, "height");
 
         return 1;
     }

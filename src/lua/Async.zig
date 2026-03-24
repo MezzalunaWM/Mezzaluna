@@ -113,8 +113,7 @@ pub fn run(L: *zlua.Lua) i32 {
 
     switch (L.typeOf(2)) {
         .table => {
-            _ = L.pushString("timeout");
-            _ = L.getTable(2);
+            _ = L.getField(2, "timeout");
             if (L.isNumber(-1)) {
                 async.timeout = LuaUtils.coerceInteger(
                     u32,
@@ -122,8 +121,7 @@ pub fn run(L: *zlua.Lua) i32 {
                 ) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
             }
 
-            _ = L.pushString("once");
-            _ = L.getTable(2);
+            _ = L.getField(2, "once");
             if (L.isBoolean(-1)) async.once = L.toBoolean(-1);
         },
         .number => async.timeout = LuaUtils.coerceInteger(
