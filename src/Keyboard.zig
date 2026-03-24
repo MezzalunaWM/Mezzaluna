@@ -44,9 +44,6 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
         .group = null,
     };
 
-    // TODO: configure this via lua later
-    // Should handle this error here
-    if (!self.wlr_keyboard.setKeymap(self.group.?.seat.xkb_keymap)) return error.SetKeymapFailed;
     self.wlr_keyboard.setRepeatInfo(25, 600);
 
     self.wlr_keyboard.events.modifiers.add(&self.modifiers);

@@ -40,7 +40,7 @@ focused_output: ?*Output,
 
 keyboard_group: *KeyboardGroup,
 cursor: Cursor, // all mice in a seat share one cursor
-xkb_keymap: *xkb.Keymap,
+xkb_keymap: *xkb.Keymap, // TODO: configure this via lua later
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),

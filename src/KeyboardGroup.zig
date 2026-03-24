@@ -39,8 +39,13 @@ pub fn init(seat: *Seat) *KeyboardGroup {
 }
 
 pub fn addKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
+    // The keyboard must have a keymap before it can be added to a group.
+    if (!keyboard.wlr_keyboard.setKeymap(self.seat.xkb_keymap)) {
+        return;
+    }
+
     if (!self.wlr_group.addKeyboard(keyboard.wlr_keyboard)) {
-        std.log.err("Adding new keyboard {s} failed", .{ keyboard.wlr_keyboard.base.name orelse "(unnamed)" });
+        std.log.err("Adding new keyboard `{s}` failed", .{ keyboard.wlr_keyboard.base.name orelse "(unnamed)" });
     }
     keyboard.group = self;
 }
