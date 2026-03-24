@@ -47,6 +47,7 @@ xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+relative_pointer_manager: *wlr.RelativePointerManagerV1,
 
 allocator: *wlr.Allocator,
 
@@ -133,6 +134,7 @@ pub fn init(self: *Server) void {
         .remote_lua_clients = .{},
         .async_callbacks = .init(gpa),
         .drm_lease_manager = wlr.DrmLeaseManagerV1.create(self.wl_server, self.backend),
+        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server)
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {

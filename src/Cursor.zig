@@ -89,12 +89,18 @@ pub fn processCursorMotion(
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    // these will be used later when the relative pointer manager is setup
-    _ = unaccel_dx;
-    _ = unaccel_dy;
-
     // process the cursor motion
     self.wlr_cursor.move(device, delta_x, delta_y);
+
+    // send relative motion
+    server.relative_pointer_manager.sendRelativeMotion(
+        server.seat.wlr_seat,
+        @as(u64, time_msec) * std.time.us_per_ms,
+        delta_x,
+        delta_y,
+        unaccel_dx,
+        unaccel_dy
+    );
 
     // tell the idle notifier that we've recieved activity now that it's been
     // fully processed
@@ -198,7 +204,7 @@ fn handleMotionAbsolute(
         event.device,
         delta_x,
         delta_y,
-        delta_x, // absolute motions do not decelerate
+        delta_x, // absolute motions decelerate immediately
         delta_y,
     );
 }
