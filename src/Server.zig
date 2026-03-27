@@ -13,7 +13,6 @@ const Output = @import("Output.zig");
 const View = @import("View.zig");
 const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
-const Input = @import("lua/Input.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
@@ -50,8 +49,6 @@ root: Root,
 seats: wl.list.Head(Seat, .link),
 
 // Lua data
-keymaps: std.AutoHashMap(u64, Input.KeymapData),
-mousemaps: std.AutoHashMap(u64, Input.MousemapData),
 hooks: std.AutoHashMap(i32, *Hook.HookData),
 events: Hook.Events,
 remote_lua_clients: std.DoublyLinkedList,
@@ -119,8 +116,6 @@ pub fn init(self: *Server) void {
         .root = undefined,
         .seats = undefined,
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
-        .keymaps = .init(gpa),
-        .mousemaps = .init(gpa),
         .hooks = .init(gpa),
         .events = try .init(gpa),
         .remote_lua_clients = .{},

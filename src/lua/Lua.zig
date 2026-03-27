@@ -138,6 +138,7 @@ pub fn openMezLibs(self: *zlua.Lua) void {
         .{ "input", @import("Input.zig") },
         .{ "output", @import("Output.zig") },
         .{ "remote", @import("Remote.zig") },
+        .{ "seat", @import("Seat.zig") },
         .{ "view", @import("View.zig") },
     }) |file| {
         const funcs = zlua.fnRegsFromType(file[1]);

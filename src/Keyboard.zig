@@ -90,7 +90,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
 
     var syms: []const xkb.Keysym = undefined;
     for (level_keysyms) |sym| {
-        handled = keypress(modifiers, sym, event.state);
+        handled = keypress(self.group.?.seat, modifiers, sym, event.state);
         if(handled) {
             syms = level_keysyms;
             break;
@@ -99,7 +99,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
 
     if(!handled and state_keysyms != null) {
         for (state_keysyms.?) |sym| {
-            handled = keypress(modifiers, sym, event.state);
+            handled = keypress(self.group.?.seat, modifiers, sym, event.state);
             if(handled) {
                 syms = state_keysyms.?;
                 break;
@@ -131,8 +131,13 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
     server.idle_notifier.notifyActivity(seat.wlr_seat);
 }
 
-pub fn keypress(modifiers: wlr.Keyboard.ModifierMask, sym: xkb.Keysym, state: wl.Keyboard.KeyState) bool {
-    if (server.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
+pub fn keypress(
+    seat: *Seat,
+    modifiers: wlr.Keyboard.ModifierMask,
+    sym: xkb.Keysym,
+    state: wl.Keyboard.KeyState,
+) bool {
+    if (seat.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
         if (state == .pressed and map.options.lua_press_ref_idx > 0) {
             map.callback(false);
             return true;

@@ -16,6 +16,7 @@ const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const Input = @import("lua/Input.zig");
 
 const server = &@import("main.zig").server;
 const gpa = std.heap.c_allocator;
@@ -41,6 +42,10 @@ focused_output: ?*Output,
 keyboard_group: *KeyboardGroup,
 cursor: Cursor, // all mice in a seat share one cursor
 xkb_keymap: *xkb.Keymap, // TODO: configure this via lua later
+
+// per seat lua data
+keymaps: std.AutoHashMap(u64, Input.KeymapData),
+mousemaps: std.AutoHashMap(u64, Input.MousemapData),
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),
@@ -71,6 +76,9 @@ pub fn init(name: [*:0]const u8) !*Seat {
         .xkb_keymap = xkb_keymap.ref(),
         .cursor = undefined,
         .link = undefined,
+
+        .keymaps = undefined,
+        .mousemaps = undefined,
     };
     errdefer {
         self.keyboard_group.deinit();
@@ -80,6 +88,9 @@ pub fn init(name: [*:0]const u8) !*Seat {
     _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.xkb_keymap);
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
     self.cursor.init(self);
+
+    self.keymaps = .init(gpa);
+    self.mousemaps = .init(gpa);
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
@@ -92,6 +103,9 @@ pub fn deinit(self: *Seat) void {
     self.request_set_cursor.link.remove();
     self.request_set_selection.link.remove();
     self.request_set_primary_selection.link.remove();
+
+    self.keymaps.deinit();
+    self.mousemaps.deinit();
 
     self.keyboard_group.deinit();
     self.wlr_seat.destroy();

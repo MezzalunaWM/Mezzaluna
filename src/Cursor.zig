@@ -117,7 +117,7 @@ pub fn processCursorMotion(
         const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
         // Proceed if mousemap for current mouse and modifier state's exist
-        if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
+        if (self.seat.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
             if (map.options.lua_drag_ref_idx > 0) {
                 passthrough = map.callback(.drag, .{
                     if (view != null) view.?.id else null, // view_id
@@ -264,7 +264,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
 
     // Proceed if mousemap for current mouse and modifier state's exist
     const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
-    if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
+    if (self.seat.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
         const args = .{
             if (view != null) view.?.id else null, // view_id
             .{ // pos
@@ -324,7 +324,7 @@ fn handleAxis(
     var passthrough = true;
 
     const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
-    if (server.mousemaps.get(Mousemap.hash(modifiers, event_code))) |map| {
+    if (self.seat.mousemaps.get(Mousemap.hash(modifiers, event_code))) |map| {
         const view: ?*View = blk: {
             if (self.seat.focused_surface) |fs| {
                 if (fs == .view) {

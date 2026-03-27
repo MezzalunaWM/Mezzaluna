@@ -72,7 +72,7 @@ fn handleRepeat(data: ?*KeyboardGroup) c_int {
         std.log.warn("failed to update keyboard repeat timer", .{});
     };
     for (data.?.keysyms.?) |sym| {
-        _ = Keyboard.keypress(data.?.modifiers.?, sym, .pressed);
+        _ = Keyboard.keypress(data.?.seat, data.?.modifiers.?, sym, .pressed);
     }
 
     return 0;
