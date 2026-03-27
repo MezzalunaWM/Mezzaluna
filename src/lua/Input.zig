@@ -127,6 +127,7 @@ pub const MousemapData = struct {
 /// ---@param modifiers string
 /// ---@param keys string
 /// ---@param options table { press: fun(), repeat: fun(), release: fun() }
+/// ---@return nil failure if nil is returned this means the seat provided doesn't exist
 pub fn add_keymap(L: *zlua.Lua) i32 {
     var keymap: KeymapData = undefined;
     keymap.options.repeat = true;
@@ -140,7 +141,10 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
     if (L.getField(3, "seat") == .number) {
         const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch Seat.seat_id_err(L);
-        keymap.options.seat = LuaUtils.seatFromId(seat_id);
+        keymap.options.seat = LuaUtils.seatFromId(seat_id) orelse {
+            L.pushNil();
+            return 1;
+        };
     }
 
     _ = L.getField(3, "press");
@@ -160,8 +164,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     const seat = if (keymap.options.seat) |seat| seat else server.getDefaultSeat();
     seat.keymaps.put(hash, keymap) catch Utils.oomPanic();
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Remove an existing keymap
@@ -211,6 +214,7 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---     drag: MousemapButtonFunc?,
 /// ---     release: MousemapButtonFunc?,
 /// ---     scroll: MousemapScrollFunc? }
+/// ---@return nil failure if nil is returned this means the seat provided doesn't exist
 pub fn add_mousemap(L: *zlua.Lua) i32 {
     var mousemap: MousemapData = undefined;
     mousemap.options.seat = null; // default to the default seat
@@ -228,7 +232,10 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 
         if (L.getField(3, "seat") == .number) {
             const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch Seat.seat_id_err(L);
-            mousemap.options.seat = LuaUtils.seatFromId(seat_id);
+            mousemap.options.seat = LuaUtils.seatFromId(seat_id) orelse {
+                L.pushNil();
+                return 1;
+            };
         }
 
         _ = L.getField(3, "press");
@@ -260,8 +267,7 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
         seat.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
     }
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Remove an existing mousemap
