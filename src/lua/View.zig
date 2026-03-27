@@ -9,6 +9,7 @@ const Lua = @import("Lua.zig");
 const View = @import("../View.zig");
 const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 const LuaUtils = @import("LuaUtils.zig");
+const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
 
@@ -69,9 +70,15 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the id for the focused view
+/// ---@param integer? seat seat id
 /// ---@return integer?
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-    if (server.getDefaultSeat().focused_surface) |fs| {
+    const seat = if (!L.isNil(1)) blk: {
+        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
+        break :blk LuaUtils.seatFromId(seat_id) orelse server.getDefaultSeat();
+    } else server.getDefaultSeat();
+
+    if (seat.focused_surface) |fs| {
         if (fs == .view) {
             L.pushInteger(@intCast(fs.view.id));
             return 1;
