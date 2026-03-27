@@ -26,6 +26,9 @@ const gpa = std.heap.c_allocator;
 wl_server: *wl.Server,
 compositor: *wlr.Compositor,
 renderer: *wlr.Renderer,
+linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
+linux_drm_syncobj_manager: ?*wlr.LinuxDrmSyncobjManagerV1 = null,
+drm_lease_manager: ?*wlr.DrmLeaseManagerV1 = null,
 backend: *wlr.Backend,
 event_loop: *wl.EventLoop,
 session: ?*wlr.Session,
@@ -42,6 +45,7 @@ xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
 virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
 virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+relative_pointer_manager: *wlr.RelativePointerManagerV1,
 
 allocator: *wlr.Allocator,
 
@@ -68,6 +72,7 @@ new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) 
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(handleNewVirtualKeyboard),
 
 new_idle_inhibitor: wl.Listener(*wlr.IdleInhibitorV1) = .init(handleNewIdleInhibitor),
+drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest),
 
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
@@ -120,7 +125,23 @@ pub fn init(self: *Server) void {
         .events = try .init(gpa),
         .remote_lua_clients = .{},
         .async_callbacks = .init(gpa),
+        .drm_lease_manager = wlr.DrmLeaseManagerV1.create(self.wl_server, self.backend),
+        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server)
     };
+
+    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
+    }
+    if (renderer.features.timeline and backend.features.timeline) {
+        const drm_fd = renderer.getDrmFd();
+        if (drm_fd >= 0) {
+            self.linux_drm_syncobj_manager = wlr.LinuxDrmSyncobjManagerV1.create(wl_server, 1, drm_fd);
+        }
+    }
+
+    if (self.drm_lease_manager != null) {
+        self.drm_lease_manager.?.events.request.add(&self.drm_lease_request);
+    }
 
     self.renderer.initServer(wl_server) catch {
         std.log.err("Renderer init failed, exiting with 6", .{});
@@ -333,4 +354,15 @@ fn handleNewIdleInhibitor(
     inhibitor: *wlr.IdleInhibitorV1,
 ) void {
     _ = IdleInhibitor.init(inhibitor);
+}
+
+fn handleDrmRequest(
+    _: *wl.Listener(*wlr.DrmLeaseRequestV1),
+    request: *wlr.DrmLeaseRequestV1,
+) void {
+    const lease = request.grant();
+    if (lease == null) {
+        std.log.err("Failed to grant drm lease request.", .{});
+        request.reject();
+    }
 }

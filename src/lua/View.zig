@@ -113,32 +113,28 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 
-    _ = L.pushString("x");
-    _ = L.getTable(2);
+    _ = L.getField(2, "x");
     const x: i32 = if (L.isNil(-1))
         view.?.geometry.x
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("y");
-    _ = L.getTable(2);
+    _ = L.getField(2, "y");
     const y: i32 = if (L.isNil(-1))
         view.?.geometry.y
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("width");
-    _ = L.getTable(2);
+    _ = L.getField(2, "width");
     const width: i32 = if (L.isNil(-1))
         view.?.geometry.width
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("height");
-    _ = L.getTable(2);
+    _ = L.getField(2, "height");
     const height: i32 = if (L.isNil(-1))
         view.?.geometry.height
     else
@@ -160,21 +156,17 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
 
     L.newTable();
 
-    _ = L.pushString("x");
     L.pushInteger(@intCast(view.?.geometry.x));
-    L.setTable(-3);
+    L.setField(-2, "x");
 
-    _ = L.pushString("y");
     L.pushInteger(@intCast(view.?.geometry.y));
-    L.setTable(-3);
+    L.setField(-2, "y");
 
-    _ = L.pushString("width");
     L.pushInteger(@intCast(view.?.geometry.width));
-    L.setTable(-3);
+    L.setField(-2, "width");
 
-    _ = L.pushString("height");
     L.pushInteger(@intCast(view.?.geometry.height));
-    L.setTable(-3);
+    L.setField(-2, "height");
 
     return 1;
 }
@@ -189,21 +181,17 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 
     L.newTable();
 
-    _ = L.pushString("x");
     L.pushInteger(@intCast(view.?.previous_geometry.x));
-    L.setTable(-3);
+    L.setField(-2, "x");
 
-    _ = L.pushString("y");
     L.pushInteger(@intCast(view.?.previous_geometry.y));
-    L.setTable(-3);
+    L.setField(-2, "y");
 
-    _ = L.pushString("width");
     L.pushInteger(@intCast(view.?.previous_geometry.width));
-    L.setTable(-3);
+    L.setField(-2, "width");
 
-    _ = L.pushString("height");
     L.pushInteger(@intCast(view.?.previous_geometry.height));
-    L.setTable(-3);
+    L.setField(-2, "height");
 
     return 1;
 }
