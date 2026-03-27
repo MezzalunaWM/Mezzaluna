@@ -97,7 +97,7 @@ pub fn processCursorMotion(
 
     // send relative motion
     server.relative_pointer_manager.sendRelativeMotion(
-        server.seat.wlr_seat,
+        self.seat.wlr_seat,
         @as(u64, time_msec) * std.time.us_per_ms,
         delta_x,
         delta_y,
