@@ -9,7 +9,7 @@ local utils = {}
 ---@return number | nil tag_index
 ---@return number | nil view_index
 utils.find_view = function(view_id)
-	if view_id == 0 then view_id = mez.view.get_focused_id() end
+	if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 
 	for i, curr_tag in ipairs(M.state.tags) do
 		local t = M.state.tags[i]
@@ -144,7 +144,7 @@ end
 ---Move the focus in a tag to the next view
 ---Order is master -> stack -> floating -> master
 M.focus_next = function()
-	local view_id = mez.view.get_focused_id()
+	local view_id = mez.view.get_focused_id(0)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 	local tag = M.state.tags[tag_idx]
 
@@ -182,7 +182,7 @@ end
 ---Move the focus in a tag to the previous view
 ---Order is master -> floating -> stack -> master
 M.focus_prev = function()
-	local view_id = mez.view.get_focused_id()
+	local view_id = mez.view.get_focused_id(0)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 	local tag = M.state.tags[tag_idx]
 
@@ -218,7 +218,7 @@ end
 ---Remove a view_id from the layout
 ---@param view_id integer
 M.remove_view = function(view_id)
-  if view_id == 0 then view_id = mez.view.get_focused_id() end
+  if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -279,7 +279,7 @@ M.tag_enable = function (tag_idx)
         end
       end
 		else
-			tag.last_focused = mez.view.get_focused_id()
+			tag.last_focused = mez.view.get_focused_id(0)
 		end
 
 		for _, v in ipairs(tag.floating) do
@@ -304,7 +304,7 @@ end
 ---Move a stack window to the master, and vice versa
 ---@param view_id integer
 M.zoom = function (view_id)
-	if view_id == 0 then view_id = mez.view.get_focused_id() end
+	if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
 	if type == "floating" or type == "master" or M.state.tag_id ~= tag_idx then return end
@@ -387,7 +387,7 @@ end
 ---@param view_id integer
 ---@param tag_id number
 M.send_view = function (view_id, tag_id)
-  if view_id == 0 then view_id = mez.view.get_focused_id() end
+  if view_id == 0 then view_id = mez.view.get_focused_id(0) end
   if tag_id == M.state.tag_id then return end
 
 	local type, _, _ = utils.find_view(view_id)
