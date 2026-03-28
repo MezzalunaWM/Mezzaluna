@@ -23,34 +23,36 @@ const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const gpa = std.heap.c_allocator;
 
+running: bool,
+event_loop: *wl.EventLoop,
+xev_event_loop: xev.Loop,
+
 wl_server: *wl.Server,
+session: ?*wlr.Session,
 compositor: *wlr.Compositor,
+shm: *wlr.Shm,
+backend: *wlr.Backend,
 renderer: *wlr.Renderer,
+drm_lease_manager: ?*wlr.DrmLeaseManagerV1 = null,
 linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 linux_drm_syncobj_manager: ?*wlr.LinuxDrmSyncobjManagerV1 = null,
-drm_lease_manager: ?*wlr.DrmLeaseManagerV1 = null,
-backend: *wlr.Backend,
-event_loop: *wl.EventLoop,
-session: ?*wlr.Session,
+
 remote_lua_manager: ?*RemoteLuaManager,
 idle_inhibit_manager: *wlr.IdleInhibitManagerV1,
 idle_notifier: *IdleNotifier,
-running: bool,
-xev_event_loop: xev.Loop,
+allocator: *wlr.Allocator,
+root: Root,
+seats: wl.list.Head(Seat, .link),
 
-shm: *wlr.Shm,
+virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
+virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+
 xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
-virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
-virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
-
-allocator: *wlr.Allocator,
-
-root: Root,
-seats: wl.list.Head(Seat, .link),
 
 // Lua data
 hooks: std.AutoHashMap(i32, *Hook.HookData),
@@ -96,37 +98,46 @@ pub fn init(self: *Server) void {
     };
 
     self.* = .{
+        // event loop
+        .running = true,
+        .event_loop = event_loop,
+        .xev_event_loop = try .init(.{}),
+
+        // core wayland
         .wl_server = wl_server,
+        .session = session,
+        .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
+        .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
         .backend = backend,
         .renderer = renderer,
         .allocator = wlr.Allocator.autocreate(backend, renderer) catch {
             std.log.err("Allocator create failed, exiting with 5", .{});
             std.process.exit(5);
         },
-        .running = true,
-        .xev_event_loop = try .init(.{}),
+        .root = undefined,
+        .seats = undefined,
+        .drm_lease_manager = wlr.DrmLeaseManagerV1.create(self.wl_server, self.backend),
+
+        // additional wayland protocols
         .idle_inhibit_manager = try wlr.IdleInhibitManagerV1.create(wl_server),
         .idle_notifier = .init(),
+
         .xdg_shell = try wlr.XdgShell.create(wl_server, 6),
         .layer_shell = try wlr.LayerShellV1.create(wl_server, 5),
         .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
         .xdg_activation = try wlr.XdgActivationV1.create(self.wl_server),
+
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(self.wl_server),
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(self.wl_server),
-        .event_loop = event_loop,
-        .session = session,
-        .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
-        .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
-        // TODO: let the user configure a cursor theme and side lua
-        .root = undefined,
-        .seats = undefined,
+
+        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server),
+
+        // lua stuff
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
+        .remote_lua_clients = .{},
         .hooks = .init(gpa),
         .events = try .init(gpa),
-        .remote_lua_clients = .{},
         .async_callbacks = .init(gpa),
-        .drm_lease_manager = wlr.DrmLeaseManagerV1.create(self.wl_server, self.backend),
-        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server)
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
