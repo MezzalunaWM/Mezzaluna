@@ -100,6 +100,9 @@ pub fn init(name: [*:0]const u8) !*Seat {
 }
 
 pub fn deinit(self: *Seat) void {
+    // remove the seat from the list
+    self.link.remove();
+
     self.request_set_cursor.link.remove();
     self.request_set_selection.link.remove();
     self.request_set_primary_selection.link.remove();
