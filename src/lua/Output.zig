@@ -36,7 +36,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the id for the focused output
-/// ---@param integer? seat seat id
+/// ---@param integer? seat seat id, nil for the default seat
 /// ---@return integer? result nil if the seat provided doesn't exist
 pub fn get_focused_id(L: *zlua.Lua) i32 {
     const seat = if (!L.isNil(1)) blk: {

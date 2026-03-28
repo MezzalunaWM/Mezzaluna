@@ -22,8 +22,8 @@ pub const options = struct {
 /// ---Create a new seat
 /// ---@param name string the seat name
 /// ---@param options options seat options
-/// ---@return seat integer seat id
-pub fn add(L: *zlua.Lua) i32 {
+/// ---@return integer seat seat id
+pub fn create(L: *zlua.Lua) i32 {
     const name = L.toString(1) catch {
         L.raiseErrorStr("The seat name must be a valid string", .{});
     };
@@ -50,7 +50,7 @@ pub fn add(L: *zlua.Lua) i32 {
 /// ---Remove an existing seat
 /// ---@param id integer
 /// ---@return boolean has it been deleted
-pub fn del(L: *zlua.Lua) i32 {
+pub fn remove(L: *zlua.Lua) i32 {
     const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
     const seat = LuaUtils.seatFromId(seat_id) orelse {
         L.pushBoolean(false);
