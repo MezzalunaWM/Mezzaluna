@@ -37,7 +37,6 @@ drm_lease_manager: ?*wlr.DrmLeaseManagerV1 = null,
 linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
 linux_drm_syncobj_manager: ?*wlr.LinuxDrmSyncobjManagerV1 = null,
 
-remote_lua_manager: ?*RemoteLuaManager,
 idle_inhibit_manager: *wlr.IdleInhibitManagerV1,
 idle_notifier: *IdleNotifier,
 allocator: *wlr.Allocator,
@@ -55,9 +54,10 @@ xdg_activation: *wlr.XdgActivationV1,
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
 
 // Lua data
+remote_lua_manager: ?*RemoteLuaManager,
+remote_lua_clients: std.DoublyLinkedList,
 hooks: std.AutoHashMap(i32, *Hook.HookData),
 events: Hook.Events,
-remote_lua_clients: std.DoublyLinkedList,
 async_callbacks: std.AutoHashMap(usize, *Async.AsyncData),
 
 // Backend listeners
