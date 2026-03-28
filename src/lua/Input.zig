@@ -9,6 +9,8 @@ const wlr = @import("wlroots");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
+const ServerSeat = @import("../Seat.zig");
+const Seat = @import("Seat.zig");
 
 const c = @import("../C.zig").c;
 const server = &@import("../main.zig").server;
@@ -32,6 +34,7 @@ pub const KeymapData = struct {
     modifier: wlr.Keyboard.ModifierMask,
     keysym: xkb.Keysym,
     options: struct {
+        seat: ?*ServerSeat,
         repeat: bool,
         /// This is the location of the on press lua function in the lua registry
         lua_press_ref_idx: i32,
@@ -64,6 +67,7 @@ pub const MousemapData = struct {
     modifier: wlr.Keyboard.ModifierMask,
     event_code: i32,
     options: struct {
+        seat: ?*ServerSeat,
         /// This is the location of the on press lua function in the lua registry
         lua_press_ref_idx: i32,
         /// This is the location of the on release lua function in the lua registry
@@ -123,15 +127,25 @@ pub const MousemapData = struct {
 /// ---@param modifiers string
 /// ---@param keys string
 /// ---@param options table { press: fun(), repeat: fun(), release: fun() }
+/// ---@return nil failure if nil is returned this means the seat provided doesn't exist
 pub fn add_keymap(L: *zlua.Lua) i32 {
     var keymap: KeymapData = undefined;
     keymap.options.repeat = true;
+    keymap.options.seat = null; // default to the default seat
 
     const mod = L.checkString(1);
     keymap.modifier = parse_modkeys(mod);
 
     const key = L.checkString(2);
     keymap.keysym = xkb.Keysym.fromName(key, .no_flags);
+
+    if (L.getField(3, "seat") == .number) {
+        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch Seat.seat_id_err(L);
+        keymap.options.seat = LuaUtils.seatFromId(seat_id) orelse {
+            L.pushNil();
+            return 1;
+        };
+    }
 
     _ = L.getField(3, "press");
     if (L.isFunction(-1)) {
@@ -147,10 +161,10 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
     keymap.options.repeat = L.isNil(-1) or L.toBoolean(-1);
 
     const hash = KeymapData.hash(keymap.modifier, keymap.keysym);
-    server.keymaps.put(hash, keymap) catch Utils.oomPanic();
+    const seat = if (keymap.options.seat) |seat| seat else server.getDefaultSeat();
+    seat.keymaps.put(hash, keymap) catch Utils.oomPanic();
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Remove an existing keymap
@@ -168,7 +182,8 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
     const key = L.checkString(2);
 
     keymap.keysym = xkb.Keysym.fromName(key, .no_flags);
-    _ = server.keymaps.remove(KeymapData.hash(keymap.modifier, keymap.keysym));
+    const seat = if (keymap.options.seat) |seat| seat else server.getDefaultSeat();
+    _ = seat.keymaps.remove(KeymapData.hash(keymap.modifier, keymap.keysym));
 
     L.pushNil();
     return 1;
@@ -199,8 +214,10 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---     drag: MousemapButtonFunc?,
 /// ---     release: MousemapButtonFunc?,
 /// ---     scroll: MousemapScrollFunc? }
+/// ---@return nil failure if nil is returned this means the seat provided doesn't exist
 pub fn add_mousemap(L: *zlua.Lua) i32 {
     var mousemap: MousemapData = undefined;
+    mousemap.options.seat = null; // default to the default seat
 
     const mod = L.checkString(1);
     mousemap.modifier = parse_modkeys(mod);
@@ -212,6 +229,14 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 
     if(key_event_code != -1) {
         mousemap.event_code = key_event_code;
+
+        if (L.getField(3, "seat") == .number) {
+            const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(-1)) catch Seat.seat_id_err(L);
+            mousemap.options.seat = LuaUtils.seatFromId(seat_id) orelse {
+                L.pushNil();
+                return 1;
+            };
+        }
 
         _ = L.getField(3, "press");
         if (L.isFunction(-1)) {
@@ -238,11 +263,11 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 
     if(mousemap.event_code != -1) {
         const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
-        server.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
+        const seat = if (mousemap.options.seat) |seat| seat else server.getDefaultSeat();
+        seat.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
     }
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Remove an existing mousemap
@@ -267,37 +292,10 @@ pub fn del_mousemap(L: *zlua.Lua) i32 {
     };
 
     if(mousemap.event_code != -1) {
-        _ = server.mousemaps.remove(MousemapData.hash(mousemap.modifier, mousemap.event_code));
+        const seat = if (mousemap.options.seat) |seat| seat else server.getDefaultSeat();
+        _ = seat.mousemaps.remove(MousemapData.hash(mousemap.modifier, mousemap.event_code));
     }
 
-    return 0;
-}
-
-/// ---Get the repeat information
-/// ---@return { rate: integer, delay: integer }
-pub fn get_repeat_info(L: *zlua.Lua) i32 {
-    L.newTable();
-
-    L.pushInteger(server.seat.keyboard_group.wlr_group.keyboard.repeat_info.rate);
-    L.setField(-2, "rate");
-    L.pushInteger(server.seat.keyboard_group.wlr_group.keyboard.repeat_info.delay);
-    L.setField(-2, "delay");
-
-    return 1;
-}
-
-/// ---Set the repeat information
-/// ---@param rate integer
-/// ---@param delay integer
-pub fn set_repeat_info(L: *zlua.Lua) i32 {
-    const rate = LuaUtils.coerceInteger(i32, L.checkInteger(1)) catch {
-        L.raiseErrorStr("The rate must be a valid number", .{});
-    };
-    const delay = LuaUtils.coerceInteger(i32, L.checkInteger(2)) catch {
-        L.raiseErrorStr("The delay must be a valid number", .{});
-    };
-
-    server.seat.keyboard_group.wlr_group.keyboard.setRepeatInfo(rate, delay);
     return 0;
 }
 
@@ -305,7 +303,7 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
 /// ---@param cursor string name
 pub fn set_cursor_type(L: *zlua.Lua) i32 {
     const name = L.checkString(1);
-    server.cursor.wlr_cursor.setXcursor(server.cursor.x_cursor_manager, name);
+    server.getDefaultSeat().cursor.wlr_cursor.setXcursor(server.getDefaultSeat().cursor.x_cursor_manager, name);
 
     return 0;
 }

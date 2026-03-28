@@ -8,14 +8,18 @@ const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
 
 const KeyboardGroup = @import("KeyboardGroup.zig");
+const Keyboard = @import("Keyboard.zig");
+const Cursor = @import("Cursor.zig");
 const Utils = @import("Utils.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const Input = @import("lua/Input.zig");
 
 const server = &@import("main.zig").server;
+const gpa = std.heap.c_allocator;
 
 pub const FocusData = union(enum) {
     view: *View,
@@ -30,39 +34,51 @@ pub const FocusData = union(enum) {
 };
 
 wlr_seat: *wlr.Seat,
+link: wl.list.Link,
 
 focused_surface: ?FocusData,
 focused_output: ?*Output,
 
 keyboard_group: *KeyboardGroup,
-xkb_keymap: *xkb.Keymap,
+cursor: Cursor, // all mice in a seat share one cursor
+xkb_keymap: *xkb.Keymap, // TODO: configure this via lua later
+
+// per seat lua data
+keymaps: std.AutoHashMap(u64, Input.KeymapData),
+mousemaps: std.AutoHashMap(u64, Input.MousemapData),
 
 request_set_cursor: wl.Listener(*wlr.Seat.event.RequestSetCursor) = .init(handleRequestSetCursor),
 request_set_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(handleRequestSetSelection),
 request_set_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(handleRequestSetPrimarySelection),
 // request_start_drage
 
-pub fn init(self: *Seat) void {
-    errdefer Utils.oomPanic();
+pub fn init(name: [*:0]const u8) !*Seat {
+    const self = try gpa.create(Seat);
+    errdefer gpa.destroy(self);
 
     const xkb_context = xkb.Context.new(.no_flags) orelse {
         std.log.err("Unable to create a xkb context, exiting", .{});
-        std.process.exit(7);
+        return error.xkbContext;
     };
     defer xkb_context.unref();
 
     const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
         std.log.err("Unable to create a xkb keymap, exiting", .{});
-        std.process.exit(8);
+        return error.xkbKeymap;
     };
     defer xkb_keymap.unref();
 
     self.* = .{
-        .wlr_seat = try wlr.Seat.create(server.wl_server, "default"),
+        .wlr_seat = try wlr.Seat.create(server.wl_server, name),
         .focused_surface = null,
         .focused_output = null,
-        .keyboard_group = .init(),
+        .keyboard_group = .init(self),
         .xkb_keymap = xkb_keymap.ref(),
+        .cursor = undefined,
+        .link = undefined,
+
+        .keymaps = undefined,
+        .mousemaps = undefined,
     };
     errdefer {
         self.keyboard_group.deinit();
@@ -71,16 +87,28 @@ pub fn init(self: *Seat) void {
 
     _ = self.keyboard_group.wlr_group.keyboard.setKeymap(self.xkb_keymap);
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
+    self.cursor.init(self);
+
+    self.keymaps = .init(gpa);
+    self.mousemaps = .init(gpa);
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);
     self.wlr_seat.events.request_set_primary_selection.add(&self.request_set_primary_selection);
+
+    return self;
 }
 
 pub fn deinit(self: *Seat) void {
+    // remove the seat from the list
+    self.link.remove();
+
     self.request_set_cursor.link.remove();
     self.request_set_selection.link.remove();
     self.request_set_primary_selection.link.remove();
+
+    self.keymaps.deinit();
+    self.mousemaps.deinit();
 
     self.keyboard_group.deinit();
     self.wlr_seat.destroy();
@@ -136,31 +164,48 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 }
 
 pub fn focusOutput(self: *Seat, output: *Output) void {
-    if (server.seat.focused_output) |prev_output| {
+    if (self.focused_output) |prev_output| {
         prev_output.focused = false;
     }
 
     self.focused_output = output;
 }
 
+pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
+    switch (device.type) {
+        .keyboard => {
+            const keyboard = Keyboard.init(device);
+            self.keyboard_group.addKeyboard(keyboard);
+        },
+        .pointer => {
+            self.cursor.wlr_cursor.attachInputDevice(device);
+        },
+        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+    }
+}
+
 fn handleRequestSetCursor(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetCursor),
     event: *wlr.Seat.event.RequestSetCursor,
 ) void {
-    if (event.seat_client == server.seat.wlr_seat.pointer_state.focused_client)
-        server.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+    const self: *Seat = @fieldParentPtr("request_set_cursor", listener);
+    if (event.seat_client == self.wlr_seat.pointer_state.focused_client) {
+        self.cursor.wlr_cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+    }
 }
 
 fn handleRequestSetSelection(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetSelection),
     event: *wlr.Seat.event.RequestSetSelection,
 ) void {
-    server.seat.wlr_seat.setSelection(event.source, event.serial);
+    const self: *Seat = @fieldParentPtr("request_set_selection", listener);
+    self.wlr_seat.setSelection(event.source, event.serial);
 }
 
 fn handleRequestSetPrimarySelection(
-    _: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
+    listener: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection),
     event: *wlr.Seat.event.RequestSetPrimarySelection,
 ) void {
-    server.seat.wlr_seat.setPrimarySelection(event.source, event.serial);
+    const self: *Seat = @fieldParentPtr("request_set_primary_selection", listener);
+    self.wlr_seat.setPrimarySelection(event.source, event.serial);
 }

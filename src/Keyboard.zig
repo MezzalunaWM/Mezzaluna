@@ -8,6 +8,8 @@ const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 const Keymap = @import("lua/Input.zig").KeymapData;
 const Utils = @import("Utils.zig");
+const KeyboardGroup = @import("KeyboardGroup.zig");
+const Seat = @import("Seat.zig");
 
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
@@ -17,7 +19,8 @@ const c = @import("C.zig").c;
 
 wlr_keyboard: *wlr.Keyboard,
 context: *xkb.Context,
-device: *wlr.InputDevice,
+// there's wlr.KeyboardGroup.fromKeyboard, but it doesn't seem to work
+group: ?*KeyboardGroup,
 
 // Keyboard listeners
 key: wl.Listener(*wlr.Keyboard.event.Key) = .init(handleKey),
@@ -38,12 +41,9 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
     self.* = .{
         .context = xkb.Context.new(.no_flags) orelse return error.ContextFailed,
         .wlr_keyboard = device.toKeyboard(),
-        .device = device,
+        .group = null,
     };
 
-    // TODO: configure this via lua later
-    // Should handle this error here
-    if (!self.wlr_keyboard.setKeymap(server.seat.xkb_keymap)) return error.SetKeymapFailed;
     self.wlr_keyboard.setRepeatInfo(25, 600);
 
     self.wlr_keyboard.events.modifiers.add(&self.modifiers);
@@ -54,11 +54,6 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
 
     self.wlr_keyboard.data = self;
 
-    std.log.info("Adding new keyboard {s}", .{device.name orelse "(unnamed)"});
-    if (!server.seat.keyboard_group.wlr_group.addKeyboard(self.wlr_keyboard)) {
-        std.log.err("Adding new keyboard {s} failed", .{device.name orelse "(unnamed)"});
-    }
-
     return self;
 }
 
@@ -68,22 +63,26 @@ pub fn deinit(self: *Keyboard) void {
     self.modifiers.link.remove();
 }
 
-fn handleModifiers(_: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) void {
-    server.seat.wlr_seat.setKeyboard(wlr_keyboard);
-    server.seat.wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
+fn handleModifiers(listener: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Keyboard) void {
+    const self: *Keyboard = @fieldParentPtr("modifiers", listener);
+    const seat = self.group.?.seat;
+    seat.wlr_seat.setKeyboard(wlr_keyboard);
+    seat.wlr_seat.keyboardNotifyModifiers(&wlr_keyboard.modifiers);
 }
 
 fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
-    const keyboard: *Keyboard = @fieldParentPtr("key", listener);
+    const self: *Keyboard = @fieldParentPtr("key", listener);
+    const seat = self.group.?.seat;
+
     // Translate libinput keycode -> xkbcommon
     const keycode = event.keycode + 8;
 
     var handled: bool = false;
-    const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
+    const modifiers = self.group.?.wlr_group.keyboard.getModifiers();
     // TODO: We should check against other layers besides 0, hyprland does this according to jippity
-    const level_keysyms = server.seat.xkb_keymap.keyGetSymsByLevel(keycode, 0, 0);
+    const level_keysyms = seat.xkb_keymap.keyGetSymsByLevel(keycode, 0, 0);
     const state_keysyms = blk: {
-        if(keyboard.wlr_keyboard.xkb_state) |xkb_state| {
+        if(self.wlr_keyboard.xkb_state) |xkb_state| {
             break :blk xkb_state.keyGetSyms(keycode);
         }
         break :blk null;
@@ -91,7 +90,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
 
     var syms: []const xkb.Keysym = undefined;
     for (level_keysyms) |sym| {
-        handled = keypress(modifiers, sym, event.state);
+        handled = keypress(self.group.?.seat, modifiers, sym, event.state);
         if(handled) {
             syms = level_keysyms;
             break;
@@ -100,7 +99,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
 
     if(!handled and state_keysyms != null) {
         for (state_keysyms.?) |sym| {
-            handled = keypress(modifiers, sym, event.state);
+            handled = keypress(self.group.?.seat, modifiers, sym, event.state);
             if(handled) {
                 syms = state_keysyms.?;
                 break;
@@ -109,31 +108,36 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
     }
 
     // give the keyboard group information about what to repeat and update it
-    if (handled and keyboard.wlr_keyboard.repeat_info.delay > 0) {
-        server.seat.keyboard_group.modifiers = modifiers;
-        server.seat.keyboard_group.keysyms = syms;
-        server.seat.keyboard_group.repeat_source.?.timerUpdate(
-            keyboard.wlr_keyboard.repeat_info.delay,
+    if (handled and self.wlr_keyboard.repeat_info.delay > 0) {
+        self.group.?.modifiers = modifiers;
+        self.group.?.keysyms = syms;
+        self.group.?.repeat_source.?.timerUpdate(
+            self.wlr_keyboard.repeat_info.delay,
         ) catch {
             std.log.warn("failed to update keyboard repeat timer", .{});
         };
     } else {
-        server.seat.keyboard_group.modifiers = null;
-        server.seat.keyboard_group.keysyms = null;
+        self.group.?.modifiers = null;
+        self.group.?.keysyms = null;
     }
 
     if (!handled) {
-        server.seat.wlr_seat.setKeyboard(&server.seat.keyboard_group.wlr_group.keyboard);
-        server.seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
+        seat.wlr_seat.setKeyboard(&self.group.?.wlr_group.keyboard);
+        seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
 
     // tell the idle notifier that we've recieved activity now that it's been
     // fully processed
-    server.idle_notifier.notifyActivity(server.seat.wlr_seat);
+    server.idle_notifier.notifyActivity(seat.wlr_seat);
 }
 
-pub fn keypress(modifiers: wlr.Keyboard.ModifierMask, sym: xkb.Keysym, state: wl.Keyboard.KeyState) bool {
-    if (server.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
+pub fn keypress(
+    seat: *Seat,
+    modifiers: wlr.Keyboard.ModifierMask,
+    sym: xkb.Keysym,
+    state: wl.Keyboard.KeyState,
+) bool {
+    if (seat.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
         if (state == .pressed and map.options.lua_press_ref_idx > 0) {
             map.callback(false);
             return true;
@@ -153,7 +157,7 @@ fn handleKeyMap(_: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void {
 pub fn handleDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {
     const keyboard: *Keyboard = @fieldParentPtr("destroy", listener);
 
-    std.log.debug("removing keyboard: {s}", .{keyboard.device.name orelse "(null)"});
+    std.log.debug("removing keyboard: {s}", .{keyboard.wlr_keyboard.base.name orelse "(null)"});
 
     keyboard.modifiers.link.remove();
     keyboard.key.link.remove();

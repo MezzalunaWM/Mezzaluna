@@ -141,11 +141,11 @@ pub fn deinit(self: *Output) void {
 }
 
 pub fn setFocused(self: *Output) void {
-    if (server.seat.focused_output) |prev_output| {
+    if (server.getDefaultSeat().focused_output) |prev_output| {
         prev_output.focused = false;
     }
 
-    server.seat.focused_output = self;
+    server.getDefaultSeat().focused_output = self;
     self.focused = true;
 }
 
@@ -210,7 +210,7 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
 // Get the first enabled fullscreened view
 pub fn getEnabledFullscreen(self: *Output) ?*View {
     for(self.fullscreens.items) |view| {
-        if(view.scene_tree.node.enabled) 
+        if(view.scene_tree.node.enabled)
             return view;
     }
 

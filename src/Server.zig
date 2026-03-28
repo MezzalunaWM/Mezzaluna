@@ -7,14 +7,12 @@ const xev = @import("xev");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
-const Cursor = @import("Cursor.zig");
 const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
-const Input = @import("lua/Input.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
@@ -52,12 +50,9 @@ relative_pointer_manager: *wlr.RelativePointerManagerV1,
 allocator: *wlr.Allocator,
 
 root: Root,
-seat: Seat,
-cursor: Cursor,
+seats: wl.list.Head(Seat, .link),
 
 // Lua data
-keymaps: std.AutoHashMap(u64, Input.KeymapData),
-mousemaps: std.AutoHashMap(u64, Input.MousemapData),
 hooks: std.AutoHashMap(i32, *Hook.HookData),
 events: Hook.Events,
 remote_lua_clients: std.DoublyLinkedList,
@@ -124,11 +119,8 @@ pub fn init(self: *Server) void {
         .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
         // TODO: let the user configure a cursor theme and side lua
         .root = undefined,
-        .seat = undefined,
-        .cursor = undefined,
+        .seats = undefined,
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
-        .keymaps = .init(gpa),
-        .mousemaps = .init(gpa),
         .hooks = .init(gpa),
         .events = try .init(gpa),
         .remote_lua_clients = .{},
@@ -157,8 +149,10 @@ pub fn init(self: *Server) void {
     };
 
     self.root.init();
-    self.seat.init();
-    self.cursor.init();
+
+    // create the default seat
+    self.seats.init();
+    self.seats.append(try Seat.init("default"));
 
     _ = try wlr.Subcompositor.create(self.wl_server);
     _ = try wlr.DataDeviceManager.create(self.wl_server);
@@ -235,6 +229,10 @@ pub fn dispatchEvents(self: *Server, loop: *xev.Loop) void {
     self.wl_server.flushClients();
 }
 
+pub fn getDefaultSeat(self: *Server) *Seat {
+    return self.seats.first() orelse unreachable; // shouldn't ever be null
+}
+
 pub fn deinit(self: *Server) noreturn {
     self.new_input.link.remove();
     self.new_output.link.remove();
@@ -243,9 +241,7 @@ pub fn deinit(self: *Server) noreturn {
     self.new_xdg_toplevel_decoration.link.remove();
     self.new_layer_surface.link.remove();
 
-    self.seat.deinit();
     self.root.deinit();
-    self.cursor.deinit();
 
     self.backend.destroy();
 
@@ -263,16 +259,10 @@ pub fn deinit(self: *Server) noreturn {
 // --------- Backend event handlers ---------
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
-    switch (device.type) {
-        .keyboard => _ = Keyboard.init(device),
-        .pointer => self.cursor.wlr_cursor.attachInputDevice(device),
-        else => {
-            std.log.err("New input request for input that is not a keyboard or pointer: {s}", .{device.name orelse "(null)"});
-        },
-    }
+    self.getDefaultSeat().addInputDevice(device);
 
     // We should really only set true capabilities
-    self.seat.wlr_seat.setCapabilities(.{
+    self.getDefaultSeat().wlr_seat.setCapabilities(.{
         .pointer = true,
         .keyboard = true,
     });
@@ -301,13 +291,13 @@ fn handleNewLayerSurface(listener: *wl.Listener(*wlr.LayerSurfaceV1), layer_surf
     const self: *Server = @fieldParentPtr("new_layer_surface", listener);
     std.log.debug("requested layer shell\n", .{});
     if (layer_surface.output == null) {
-        if (self.seat.focused_output == null) {
+        if (self.getDefaultSeat().focused_output == null) {
             std.log.err("No output available for new layer surface", .{});
             layer_surface.destroy();
             return;
         }
 
-        layer_surface.output = self.seat.focused_output.?.wlr_output;
+        layer_surface.output = self.getDefaultSeat().focused_output.?.wlr_output;
     }
 
     _ = LayerSurface.init(layer_surface);
@@ -323,15 +313,15 @@ fn handleRequestActivate(
     const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
 
     if (scene_node_data.* == .view) {
-        if (self.seat.focused_output) |output| {
+        if (self.getDefaultSeat().focused_output) |output| {
 
             // If an enabled fullscreen view exists, ignore the activation
             if (output.getEnabledFullscreen()) |view| {
-                self.seat.focusSurface(.{ .view = view });
+                self.getDefaultSeat().focusSurface(.{ .view = view });
                 return;
             }
         }
-        self.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
+        self.getDefaultSeat().focusSurface(Seat.FocusData{ .view = scene_node_data.view });
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
@@ -344,8 +334,8 @@ fn handleNewVirtualPointer(
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
     const device = &event.new_pointer.pointer.base;
 
-    self.cursor.wlr_cursor.attachInputDevice(device);
-    self.cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    self.getDefaultSeat().cursor.wlr_cursor.attachInputDevice(device);
+    self.getDefaultSeat().cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
 }
 
 fn handleNewVirtualKeyboard(
@@ -356,7 +346,7 @@ fn handleNewVirtualKeyboard(
     const device = &event.keyboard.base;
 
     const keyboard = Keyboard.init(device);
-    _ = self.seat.keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+    _ = self.getDefaultSeat().keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
 }
 
 fn handleNewIdleInhibitor(
