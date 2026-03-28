@@ -103,9 +103,7 @@ pub fn processCursorMotion(
     var iter = self.seat.constraints.iterator(.forward);
     while (iter.next()) |constraint| constraint.activate();
 
-    // ensure the cursor is not doing anything else
-    if (self.mode == .normal) if (self.seat.active_constraint) |active_constraint| {
-
+    if (self.seat.active_constraint) |active_constraint| {
         // get the view from the constrained surface
         const view = View.fromSurface(active_constraint.constraint.surface);
         if (view) |v| if (self.seat.focused_surface) |fs| if (fs == .view and v == fs.view) {
@@ -127,7 +125,7 @@ pub fn processCursorMotion(
                 dy = y_out - sy;
             }
         };
-    };
+    }
 
 
     // send relative motion
