@@ -92,22 +92,62 @@ pub fn processCursorMotion(
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    // process the cursor motion
-    self.wlr_cursor.move(device, delta_x, delta_y);
+    var dx = delta_x;
+    var dy = delta_y;
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
+
+    // try and activate a cursor constraint
+    var iter = self.seat.constraints.iterator(.forward);
+    while (iter.next()) |constraint| constraint.activate();
+
+    // ensure the cursor is not doing anything else
+    if (self.mode == .normal) if (self.seat.active_constraint) |active_constraint| {
+
+        // get the view from the constrained surface
+        const view = View.fromSurface(active_constraint.constraint.surface);
+        if (view) |v| if (self.seat.focused_surface) |fs| if (fs == .view and v == fs.view) {
+            const sx = self.wlr_cursor.x - @as(f64, @floatFromInt(v.geometry.x)) - @as(f64, @floatFromInt(v.border_width));
+            const sy = self.wlr_cursor.y - @as(f64, @floatFromInt(v.geometry.y)) - @as(f64, @floatFromInt(v.border_width));
+            var x_out: f64 = 0;
+            var y_out: f64 = 0;
+
+            if (wlr.region.confine(
+                &active_constraint.constraint.region,
+                sx,
+                sy,
+                sx + delta_x,
+                sy + delta_y,
+                &x_out,
+                &y_out
+            )) {
+                dx = x_out - sx;
+                dy = y_out - sy;
+            }
+        };
+    };
+
 
     // send relative motion
     server.relative_pointer_manager.sendRelativeMotion(
         self.seat.wlr_seat,
         @as(u64, time_msec) * std.time.us_per_ms,
-        delta_x,
-        delta_y,
+        dx,
+        dy,
         unaccel_dx,
         unaccel_dy
     );
 
-    // tell the idle notifier that we've recieved activity now that it's been
-    // fully processed
-    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
+    // process the cursor motion, on a non-drm backend only sending relative
+    // pointer motion will cause pointer constraints to behave incorrectly.
+    // Sending regular movement isn't perfect, but does still allow using
+    // constraints in another compositor.
+    const ac = self.seat.active_constraint;
+    if (ac == null or (ac != null and ac.?.constraint.type == .locked and !server.backend.isDrm())) {
+        self.wlr_cursor.move(device, dx, dy);
+    }
 
     const view: ?*View = blk: {
         if (self.seat.focused_surface) |fs| {

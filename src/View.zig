@@ -233,6 +233,32 @@ pub fn setActivated(self: *View, activated: bool) void {
     server.events.exec("ViewSetFocusPost", .{ self.id, activated });
 }
 
+pub fn fromSurface(surface: *wlr.Surface) ?*View {
+    var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
+    while (xdg_surface) |xs| {
+        switch (xs.role) {
+            .toplevel => {
+                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xs.data));
+                return if (scene_node_data.* == .view) scene_node_data.view else null;
+            },
+            .popup => {
+                if (xs.popups.first() == null or xs.popups.first().?.parent == null) {
+                    return null;
+                }
+
+                const tmp_xdg_surface = wlr.XdgSurface.tryFromWlrSurface(
+                    xs.popups.first().?.parent.?
+                ) orelse return fromSurface(xs.popups.first().?.parent.?);
+
+                xdg_surface = tmp_xdg_surface;
+            },
+            .none => return null,
+        }
+    }
+
+    return null;
+}
+
 // --------- XdgTopLevel event handlers ---------
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
