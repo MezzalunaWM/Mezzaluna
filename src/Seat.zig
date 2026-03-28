@@ -17,6 +17,7 @@ const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 const Input = @import("lua/Input.zig");
+const PointerConstraint = @import("PointerConstraint.zig");
 
 const server = &@import("main.zig").server;
 const gpa = std.heap.c_allocator;
@@ -42,6 +43,8 @@ focused_output: ?*Output,
 keyboard_group: *KeyboardGroup,
 cursor: Cursor, // all mice in a seat share one cursor
 xkb_keymap: *xkb.Keymap, // TODO: configure this via lua later
+active_constraint: ?*PointerConstraint = null,
+constraints: wl.list.Head(PointerConstraint, .link),
 
 // per seat lua data
 keymaps: std.AutoHashMap(u64, Input.KeymapData),
@@ -76,6 +79,7 @@ pub fn init(name: [*:0]const u8) !*Seat {
         .xkb_keymap = xkb_keymap.ref(),
         .cursor = undefined,
         .link = undefined,
+        .constraints = undefined,
 
         .keymaps = undefined,
         .mousemaps = undefined,
@@ -91,6 +95,7 @@ pub fn init(name: [*:0]const u8) !*Seat {
 
     self.keymaps = .init(gpa);
     self.mousemaps = .init(gpa);
+    self.constraints.init();
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
     self.wlr_seat.events.request_set_selection.add(&self.request_set_selection);

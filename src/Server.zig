@@ -20,6 +20,7 @@ const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
 const Utils = @import("Utils.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const PointerConstraint = @import("PointerConstraint.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -52,6 +53,7 @@ xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
 
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
+pointer_constraints: *wlr.PointerConstraintsV1,
 
 // Lua data
 remote_lua_manager: ?*RemoteLuaManager,
@@ -75,6 +77,8 @@ new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(handleNewVirtu
 
 new_idle_inhibitor: wl.Listener(*wlr.IdleInhibitorV1) = .init(handleNewIdleInhibitor),
 drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest),
+
+new_pointer_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(handleNewPointerConstraint),
 
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
@@ -131,6 +135,7 @@ pub fn init(self: *Server) void {
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(self.wl_server),
 
         .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server),
+        .pointer_constraints = try wlr.PointerConstraintsV1.create(self.wl_server),
 
         // lua stuff
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
@@ -192,6 +197,8 @@ pub fn init(self: *Server) void {
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
 
     self.idle_inhibit_manager.events.new_inhibitor.add(&self.new_idle_inhibitor);
+
+    self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
     self.events.exec("ServerStartPost", .{});
 }
@@ -376,4 +383,11 @@ fn handleDrmRequest(
         std.log.err("Failed to grant drm lease request.", .{});
         request.reject();
     }
+}
+
+fn handleNewPointerConstraint(
+    _: *wl.Listener(*wlr.PointerConstraintV1),
+    constraint: *wlr.PointerConstraintV1,
+) void {
+    _ = PointerConstraint.init(constraint);
 }
