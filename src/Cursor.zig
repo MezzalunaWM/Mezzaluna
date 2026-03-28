@@ -138,21 +138,10 @@ pub fn processCursorMotion(
         unaccel_dy
     );
 
-    const ac_type = if (self.seat.active_constraint) |ac| ac.constraint.type else null;
+    if (self.seat.active_constraint != null) return;
 
-    // on drm we don't need to send actual movement
-    if (ac_type == .locked and server.backend.isDrm()) return;
-
-    // process the cursor motion, on a non-drm backend only sending relative
-    // pointer motion will cause pointer constraints to behave incorrectly.
-    // Sending regular movement isn't perfect, but does still allow using
-    // constraints in another compositor.
-    if (ac_type == null or (ac_type == .locked and !server.backend.isDrm())) {
-        self.wlr_cursor.move(device, dx, dy);
-
-        // exit if locked, we don't wanna go and switch focus
-        if (ac_type == .locked) return;
-    }
+    // process the cursor motion
+    self.wlr_cursor.move(device, dx, dy);
 
     const view: ?*View = blk: {
         if (self.seat.focused_surface) |fs| {
