@@ -48,6 +48,8 @@ pub fn init(self: *Root) void {
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
 
+    if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
+
     self.scene.tree.node.data = &self.scene_node_data;
 
     self.output_manager.events.apply.add(&self.output_manager_apply);
