@@ -56,6 +56,10 @@ pub fn del(L: *zlua.Lua) i32 {
         L.pushBoolean(false);
         return 1;
     };
+    if (seat == server.getDefaultSeat()) {
+        L.pushBoolean(false);
+        return 1;
+    }
 
     seat.deinit();
     L.pushBoolean(true);
