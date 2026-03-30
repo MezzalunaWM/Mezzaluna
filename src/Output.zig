@@ -108,6 +108,8 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     // TODO: Allow user to define output positions
     const layout_output = try server.root.output_layout.addAuto(self.wlr_output);
     server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
+    self.arrangeLayers();
+
     self.setFocused();
 
     self.wlr_output.data = self;
