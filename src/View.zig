@@ -121,7 +121,9 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.saved_surface_tree.node.setEnabled(false);
 
     // Add new Toplevel to root of the tree
-    if (server.seat.focused_output) |output| {
+    if (server.getDefaultSeat().focused_output) |output| {
+        self.scene_tree = try output.layers.content.createSceneTree();
+        self.surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base);
         self.output = output;
         self.scene_tree.node.reparent(output.layers.content);
     }
@@ -400,6 +402,32 @@ pub fn applySending(self: *View) void {
     // self.resizeBorders();
 }
 
+pub fn fromSurface(surface: *wlr.Surface) ?*View {
+    var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
+    while (xdg_surface) |xs| {
+        switch (xs.role) {
+            .toplevel => {
+                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xs.data));
+                return if (scene_node_data.* == .view) scene_node_data.view else null;
+            },
+            .popup => {
+                if (xs.popups.first() == null or xs.popups.first().?.parent == null) {
+                    return null;
+                }
+
+                const tmp_xdg_surface = wlr.XdgSurface.tryFromWlrSurface(
+                    xs.popups.first().?.parent.?
+                ) orelse return fromSurface(xs.popups.first().?.parent.?);
+
+                xdg_surface = tmp_xdg_surface;
+            },
+            .none => return null,
+        }
+    }
+
+    return null;
+}
+
 // --------- XdgTopLevel event handlers ---------
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
@@ -416,9 +444,9 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 
     server.events.exec("ViewUnmapPre", .{view.id});
 
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .view and fs.view == view) {
-            server.seat.focusSurface(null);
+            server.getDefaultSeat().focusSurface(null);
         }
     }
 

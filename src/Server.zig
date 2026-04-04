@@ -7,14 +7,12 @@ const xev = @import("xev");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
-const Cursor = @import("Cursor.zig");
 const Keyboard = @import("Keyboard.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
-const Input = @import("lua/Input.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
@@ -22,41 +20,46 @@ const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
 const Utils = @import("Utils.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const PointerConstraint = @import("PointerConstraint.zig");
 
 const gpa = std.heap.c_allocator;
 
-wl_server: *wl.Server,
-compositor: *wlr.Compositor,
-renderer: *wlr.Renderer,
-backend: *wlr.Backend,
-event_loop: *wl.EventLoop,
-session: ?*wlr.Session,
-remote_lua_manager: ?*RemoteLuaManager,
-idle_inhibit_manager: *wlr.IdleInhibitManagerV1,
-idle_notifier: *IdleNotifier,
 running: bool,
+event_loop: *wl.EventLoop,
 xev_event_loop: xev.Loop,
 
+wl_server: *wl.Server,
+session: ?*wlr.Session,
+compositor: *wlr.Compositor,
 shm: *wlr.Shm,
+backend: *wlr.Backend,
+renderer: *wlr.Renderer,
+drm_lease_manager: ?*wlr.DrmLeaseManagerV1 = null,
+linux_dmabuf: ?*wlr.LinuxDmabufV1 = null,
+linux_drm_syncobj_manager: ?*wlr.LinuxDrmSyncobjManagerV1 = null,
+
+idle_inhibit_manager: *wlr.IdleInhibitManagerV1,
+idle_notifier: *IdleNotifier,
+allocator: *wlr.Allocator,
+root: Root,
+seats: wl.list.Head(Seat, .link),
+
+virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
+virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
+
 xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
-virtual_pointer_manager: *wlr.VirtualPointerManagerV1,
-virtual_keyboard_manager: *wlr.VirtualKeyboardManagerV1,
 
-allocator: *wlr.Allocator,
-
-root: Root,
-seat: Seat,
-cursor: Cursor,
+relative_pointer_manager: *wlr.RelativePointerManagerV1,
+pointer_constraints: *wlr.PointerConstraintsV1,
 
 // Lua data
-keymaps: std.AutoHashMap(u64, Input.KeymapData),
-mousemaps: std.AutoHashMap(u64, Input.MousemapData),
+remote_lua_manager: ?*RemoteLuaManager,
+remote_lua_clients: std.DoublyLinkedList,
 hooks: std.AutoHashMap(i32, *Hook.HookData),
 events: Hook.Events,
-remote_lua_clients: std.DoublyLinkedList,
 async_callbacks: std.AutoHashMap(usize, *Async.AsyncData),
 
 // Backend listeners
@@ -73,6 +76,9 @@ new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) 
 new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(handleNewVirtualKeyboard),
 
 new_idle_inhibitor: wl.Listener(*wlr.IdleInhibitorV1) = .init(handleNewIdleInhibitor),
+drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest),
+
+new_pointer_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(handleNewPointerConstraint),
 
 pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
@@ -96,39 +102,62 @@ pub fn init(self: *Server) void {
     };
 
     self.* = .{
+        // event loop
+        .running = true,
+        .event_loop = event_loop,
+        .xev_event_loop = try .init(.{}),
+
+        // core wayland
         .wl_server = wl_server,
+        .session = session,
+        .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
+        .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
         .backend = backend,
         .renderer = renderer,
         .allocator = wlr.Allocator.autocreate(backend, renderer) catch {
             std.log.err("Allocator create failed, exiting with 5", .{});
             std.process.exit(5);
         },
-        .running = true,
-        .xev_event_loop = try .init(.{}),
+        .root = undefined,
+        .seats = undefined,
+        .drm_lease_manager = wlr.DrmLeaseManagerV1.create(self.wl_server, self.backend),
+
+        // additional wayland protocols
         .idle_inhibit_manager = try wlr.IdleInhibitManagerV1.create(wl_server),
         .idle_notifier = .init(),
+
         .xdg_shell = try wlr.XdgShell.create(wl_server, 6),
         .layer_shell = try wlr.LayerShellV1.create(wl_server, 5),
         .xdg_toplevel_decoration_manager = try wlr.XdgDecorationManagerV1.create(self.wl_server),
         .xdg_activation = try wlr.XdgActivationV1.create(self.wl_server),
+
         .virtual_pointer_manager = try wlr.VirtualPointerManagerV1.create(self.wl_server),
         .virtual_keyboard_manager = try wlr.VirtualKeyboardManagerV1.create(self.wl_server),
-        .event_loop = event_loop,
-        .session = session,
-        .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
-        .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
-        // TODO: let the user configure a cursor theme and side lua
-        .root = undefined,
-        .seat = undefined,
-        .cursor = undefined,
+
+        .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server),
+        .pointer_constraints = try wlr.PointerConstraintsV1.create(self.wl_server),
+
+        // lua stuff
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
-        .keymaps = .init(gpa),
-        .mousemaps = .init(gpa),
+        .remote_lua_clients = .{},
         .hooks = .init(gpa),
         .events = try .init(gpa),
-        .remote_lua_clients = .{},
         .async_callbacks = .init(gpa),
     };
+
+    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
+    }
+    if (renderer.features.timeline and backend.features.timeline) {
+        const drm_fd = renderer.getDrmFd();
+        if (drm_fd >= 0) {
+            self.linux_drm_syncobj_manager = wlr.LinuxDrmSyncobjManagerV1.create(wl_server, 1, drm_fd);
+        }
+    }
+
+    if (self.drm_lease_manager != null) {
+        self.drm_lease_manager.?.events.request.add(&self.drm_lease_request);
+    }
 
     self.renderer.initServer(wl_server) catch {
         std.log.err("Renderer init failed, exiting with 6", .{});
@@ -136,8 +165,10 @@ pub fn init(self: *Server) void {
     };
 
     self.root.init();
-    self.seat.init();
-    self.cursor.init();
+
+    // create the default seat
+    self.seats.init();
+    self.seats.append(try Seat.init("default"));
 
     _ = try wlr.Subcompositor.create(self.wl_server);
     _ = try wlr.DataDeviceManager.create(self.wl_server);
@@ -166,6 +197,8 @@ pub fn init(self: *Server) void {
     self.virtual_keyboard_manager.events.new_virtual_keyboard.add(&self.new_virtual_keyboard);
 
     self.idle_inhibit_manager.events.new_inhibitor.add(&self.new_idle_inhibitor);
+
+    self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
     self.events.exec("ServerStartPost", .{});
 }
@@ -214,6 +247,10 @@ pub fn dispatchEvents(self: *Server, loop: *xev.Loop) void {
     self.wl_server.flushClients();
 }
 
+pub fn getDefaultSeat(self: *Server) *Seat {
+    return self.seats.first() orelse unreachable; // shouldn't ever be null
+}
+
 pub fn deinit(self: *Server) noreturn {
     self.new_input.link.remove();
     self.new_output.link.remove();
@@ -222,9 +259,7 @@ pub fn deinit(self: *Server) noreturn {
     self.new_xdg_toplevel_decoration.link.remove();
     self.new_layer_surface.link.remove();
 
-    self.seat.deinit();
     self.root.deinit();
-    self.cursor.deinit();
 
     self.backend.destroy();
 
@@ -242,16 +277,10 @@ pub fn deinit(self: *Server) noreturn {
 // --------- Backend event handlers ---------
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
-    switch (device.type) {
-        .keyboard => _ = Keyboard.init(device),
-        .pointer => self.cursor.wlr_cursor.attachInputDevice(device),
-        else => {
-            std.log.err("New input request for input that is not a keyboard or pointer: {s}", .{device.name orelse "(null)"});
-        },
-    }
+    self.getDefaultSeat().addInputDevice(device);
 
     // We should really only set true capabilities
-    self.seat.wlr_seat.setCapabilities(.{
+    self.getDefaultSeat().wlr_seat.setCapabilities(.{
         .pointer = true,
         .keyboard = true,
     });
@@ -280,13 +309,13 @@ fn handleNewLayerSurface(listener: *wl.Listener(*wlr.LayerSurfaceV1), layer_surf
     const self: *Server = @fieldParentPtr("new_layer_surface", listener);
     std.log.debug("requested layer shell\n", .{});
     if (layer_surface.output == null) {
-        if (self.seat.focused_output == null) {
+        if (self.getDefaultSeat().focused_output == null) {
             std.log.err("No output available for new layer surface", .{});
             layer_surface.destroy();
             return;
         }
 
-        layer_surface.output = self.seat.focused_output.?.wlr_output;
+        layer_surface.output = self.getDefaultSeat().focused_output.?.wlr_output;
     }
 
     _ = LayerSurface.init(layer_surface);
@@ -302,15 +331,15 @@ fn handleRequestActivate(
     const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
 
     if (scene_node_data.* == .view) {
-        if (self.seat.focused_output) |output| {
+        if (self.getDefaultSeat().focused_output) |output| {
 
             // If an enabled fullscreen view exists, ignore the activation
             if (output.getEnabledFullscreen()) |view| {
-                self.seat.focusSurface(.{ .view = view });
+                self.getDefaultSeat().focusSurface(.{ .view = view });
                 return;
             }
         }
-        self.seat.focusSurface(Seat.FocusData{ .view = scene_node_data.view });
+        self.getDefaultSeat().focusSurface(Seat.FocusData{ .view = scene_node_data.view });
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
@@ -323,8 +352,8 @@ fn handleNewVirtualPointer(
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
     const device = &event.new_pointer.pointer.base;
 
-    self.cursor.wlr_cursor.attachInputDevice(device);
-    self.cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    self.getDefaultSeat().cursor.wlr_cursor.attachInputDevice(device);
+    self.getDefaultSeat().cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
 }
 
 fn handleNewVirtualKeyboard(
@@ -335,7 +364,7 @@ fn handleNewVirtualKeyboard(
     const device = &event.keyboard.base;
 
     const keyboard = Keyboard.init(device);
-    _ = self.seat.keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+    _ = self.getDefaultSeat().keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
 }
 
 fn handleNewIdleInhibitor(
@@ -343,4 +372,22 @@ fn handleNewIdleInhibitor(
     inhibitor: *wlr.IdleInhibitorV1,
 ) void {
     _ = IdleInhibitor.init(inhibitor);
+}
+
+fn handleDrmRequest(
+    _: *wl.Listener(*wlr.DrmLeaseRequestV1),
+    request: *wlr.DrmLeaseRequestV1,
+) void {
+    const lease = request.grant();
+    if (lease == null) {
+        std.log.err("Failed to grant drm lease request.", .{});
+        request.reject();
+    }
+}
+
+fn handleNewPointerConstraint(
+    _: *wl.Listener(*wlr.PointerConstraintV1),
+    constraint: *wlr.PointerConstraintV1,
+) void {
+    _ = PointerConstraint.init(constraint);
 }

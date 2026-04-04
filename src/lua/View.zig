@@ -9,6 +9,7 @@ const Lua = @import("Lua.zig");
 const View = @import("../View.zig");
 const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 const LuaUtils = @import("LuaUtils.zig");
+const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
 
@@ -69,9 +70,18 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the id for the focused view
-/// ---@return integer?
+/// ---@param integer? seat seat id, nil for the default seat
+/// ---@return integer? result nil if the seat provided doesn't exist
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-    if (server.seat.focused_surface) |fs| {
+    const seat = if (!L.isNil(1)) blk: {
+        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
+        break :blk LuaUtils.seatFromId(seat_id) orelse {
+            L.pushNil();
+            return 1;
+        };
+    } else server.getDefaultSeat();
+
+    if (seat.focused_surface) |fs| {
         if (fs == .view) {
             L.pushInteger(@intCast(fs.view.id));
             return 1;
@@ -118,32 +128,28 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 
-    _ = L.pushString("x");
-    _ = L.getTable(2);
+    _ = L.getField(2, "x");
     const x: i32 = if (L.isNil(-1))
         view.?.current.geometry.x
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("y");
-    _ = L.getTable(2);
+    _ = L.getField(2, "y");
     const y: i32 = if (L.isNil(-1))
         view.?.current.geometry.y
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("width");
-    _ = L.getTable(2);
+    _ = L.getField(2, "width");
     const width: i32 = if (L.isNil(-1))
         view.?.current.geometry.width
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
-    _ = L.pushString("height");
-    _ = L.getTable(2);
+    _ = L.getField(2, "height");
     const height: i32 = if (L.isNil(-1))
         view.?.current.geometry.height
     else
@@ -166,21 +172,17 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
 
     L.newTable();
 
-    _ = L.pushString("x");
     L.pushInteger(@intCast(view.?.current.geometry.x));
-    L.setTable(-3);
+    L.setField(-2, "x");
 
-    _ = L.pushString("y");
     L.pushInteger(@intCast(view.?.current.geometry.y));
-    L.setTable(-3);
+    L.setField(-2, "y");
 
-    _ = L.pushString("width");
     L.pushInteger(@intCast(view.?.current.geometry.width));
-    L.setTable(-3);
+    L.setField(-2, "width");
 
-    _ = L.pushString("height");
     L.pushInteger(@intCast(view.?.current.geometry.height));
-    L.setTable(-3);
+    L.setField(-2, "height");
 
     return 1;
 }
@@ -195,21 +197,17 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 
     L.newTable();
 
-    _ = L.pushString("x");
     L.pushInteger(@intCast(view.?.previous_geometry.x));
-    L.setTable(-3);
+    L.setField(-2, "x");
 
-    _ = L.pushString("y");
     L.pushInteger(@intCast(view.?.previous_geometry.y));
-    L.setTable(-3);
+    L.setField(-2, "y");
 
-    _ = L.pushString("width");
     L.pushInteger(@intCast(view.?.previous_geometry.width));
-    L.setTable(-3);
+    L.setField(-2, "width");
 
-    _ = L.pushString("height");
     L.pushInteger(@intCast(view.?.previous_geometry.height));
-    L.setTable(-3);
+    L.setField(-2, "height");
 
     return 1;
 }
@@ -220,9 +218,9 @@ pub fn set_focused(L: *zlua.Lua) i32 {
     const view_id: ?c_longlong = L.optInteger(1);
 
     if (view_id == null) {
-        server.seat.focusSurface(null);
+        server.getDefaultSeat().focusSurface(null);
     } else if (server.root.viewById(@intCast(view_id.?))) |view| {
-        server.seat.focusSurface(.{ .view = view });
+        server.getDefaultSeat().focusSurface(.{ .view = view });
     }
 
     L.pushNil();

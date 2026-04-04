@@ -4,12 +4,15 @@ const std = @import("std");
 const zlua = @import("zlua");
 
 const View = @import("../View.zig");
+const Seat = @import("../Seat.zig");
+const Utils = @import("../Utils.zig");
 const Bridge = @import("Bridge.zig");
 const Remote = @import("Remote.zig");
 const Lua = @import("Lua.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
 const server = &@import("../main.zig").server;
+const gpa = std.heap.c_allocator;
 
 pub fn coerceNumber(comptime x: type, number: zlua.Number) error{InvalidNumber}!x {
     const size = switch (@typeInfo(x)) {
@@ -59,13 +62,21 @@ pub fn toStringEx(L: *zlua.Lua) [:0]const u8 {
 
 pub fn viewById(view_id: u64) ?*View {
     if (view_id == 0) {
-        if (server.seat.focused_surface) |fs| {
+        if (server.getDefaultSeat().focused_surface) |fs| {
             if (fs == .view) return fs.view;
         }
     } else {
         return server.root.viewById(view_id);
     }
     return null;
+}
+
+pub fn seatFromId(id: u32) ?*Seat {
+    var iter = server.seats.iterator(.forward);
+    var j: u32 = 0;
+    return while (iter.next()) |s| : (j += 1) {
+        if (id == j) break s;
+    } else null;
 }
 
 pub fn handleError(L: *zlua.Lua) void {

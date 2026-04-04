@@ -63,6 +63,9 @@ pub fn init(self: *Root) void {
     self.hidden_tree.node.setEnabled(false);
 
     self.hidden_tree.node.data = &self.scene_node_data;
+
+    if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
+
     self.scene.tree.node.data = &self.scene_node_data;
 
     self.output_manager.events.apply.add(&self.output_manager_apply);

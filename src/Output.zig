@@ -108,6 +108,8 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     // TODO: Allow user to define output positions
     const layout_output = try server.root.output_layout.addAuto(self.wlr_output);
     server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
+    self.arrangeLayers();
+
     self.setFocused();
 
     self.wlr_output.data = self;
@@ -141,11 +143,11 @@ pub fn deinit(self: *Output) void {
 }
 
 pub fn setFocused(self: *Output) void {
-    if (server.seat.focused_output) |prev_output| {
+    if (server.getDefaultSeat().focused_output) |prev_output| {
         prev_output.focused = false;
     }
 
-    server.seat.focused_output = self;
+    server.getDefaultSeat().focused_output = self;
     self.focused = true;
 }
 
@@ -210,7 +212,7 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
 // Get the first enabled fullscreened view
 pub fn getEnabledFullscreen(self: *Output) ?*View {
     for(self.fullscreens.items) |view| {
-        if(view.scene_tree.node.enabled) 
+        if(view.scene_tree.node.enabled)
             return view;
     }
 

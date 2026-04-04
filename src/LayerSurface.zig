@@ -40,7 +40,7 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     }
     self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
-    if (server.seat.focused_output) |output| {
+    if (server.getDefaultSeat().focused_output) |output| {
         self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {
             .background => try output.layers.background.createSceneLayerSurfaceV1(wlr_layer_surface),
             .bottom => try output.layers.bottom.createSceneLayerSurfaceV1(wlr_layer_surface),
@@ -85,16 +85,16 @@ fn handleMap(listener: *wl.Listener(void)) void {
     const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
     layer_suraface.output.arrangeLayers();
     if (layer_suraface.wlr_layer_surface.current.keyboard_interactive != .none) {
-        server.seat.focusSurface(.{ .layer_surface = layer_suraface });
+        server.getDefaultSeat().focusSurface(.{ .layer_surface = layer_suraface });
     }
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const layer_surface: *LayerSurface = @fieldParentPtr("unmap", listener);
 
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .layer_surface and fs.layer_surface == layer_surface) {
-            server.seat.focusSurface(null);
+            server.getDefaultSeat().focusSurface(null);
         }
     }
 
