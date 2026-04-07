@@ -17,6 +17,14 @@ const posix = std.posix;
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
+const Layers = struct {
+    background: *wlr.SceneTree,
+    bottom: *wlr.SceneTree,
+    content: *wlr.SceneTree,
+    top: *wlr.SceneTree,
+    overlay: *wlr.SceneTree,
+};
+
 focused: bool,
 id: u64,
 fullscreens: std.ArrayList(*View),
@@ -28,13 +36,7 @@ scene_node_data: SceneNodeData,
 scene_output: *wlr.SceneOutput,
 non_exclusive_area: wlr.Box,
 
-layers: struct {
-    background: *wlr.SceneTree,
-    bottom: *wlr.SceneTree,
-    content: *wlr.SceneTree,
-    top: *wlr.SceneTree,
-    overlay: *wlr.SceneTree,
-},
+layers: Layers,
 
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
