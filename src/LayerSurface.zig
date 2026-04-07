@@ -40,16 +40,18 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     }
     self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
+    // layersurfaces are always given the the default seat
     if (server.getDefaultSeat().focused_output) |output| {
-        self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {
-            .background => try output.layers.background.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .bottom => try output.layers.bottom.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .top => try output.layers.top.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .overlay => try output.layers.overlay.createSceneLayerSurfaceV1(wlr_layer_surface),
-            else => {
-                std.log.err("New layer surface of unidentified type", .{});
-                unreachable;
-            },
+        self.scene_layer_surface = blk: {
+            inline for (std.meta.fields(@TypeOf(wlr_layer_surface.current.layer))) |field| {
+                if (std.mem.eql(u8, @tagName(wlr_layer_surface.current.layer), field.name)) {
+                    const layer = @field(output.layers, field.name);
+                    break :blk try layer.createSceneLayerSurfaceV1(wlr_layer_surface);
+                }
+            }
+            std.debug.panic("New layer surface which we do not support: `{s}`", .{
+                @tagName(wlr_layer_surface.current.layer),
+            });
         };
     }
 
