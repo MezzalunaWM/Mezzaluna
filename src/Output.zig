@@ -36,14 +36,6 @@ layers: struct {
     overlay: *wlr.SceneTree,
 },
 
-layer_scene_node_data: struct {
-    background: SceneNodeData,
-    bottom: SceneNodeData,
-    content: SceneNodeData,
-    top: SceneNodeData,
-    overlay: SceneNodeData,
-},
-
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
 destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
@@ -68,14 +60,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
             .content = try self.tree.createSceneTree(),
             .top = try self.tree.createSceneTree(),
             .overlay = try self.tree.createSceneTree(),
-        },
-
-        .layer_scene_node_data = .{
-            .background = .{ .output_layer = self.layers.background },
-            .bottom = .{ .output_layer = self.layers.bottom },
-            .content = .{ .output_layer = self.layers.content },
-            .top = .{ .output_layer = self.layers.top },
-            .overlay = .{ .output_layer = self.layers.overlay },
         },
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),
@@ -114,12 +98,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
 
     self.wlr_output.data = self;
     self.tree.node.data = &self.scene_node_data;
-
-    self.layers.background.node.data = &self.layer_scene_node_data.background;
-    self.layers.bottom.node.data = &self.layer_scene_node_data.bottom;
-    self.layers.content.node.data = &self.layer_scene_node_data.content;
-    self.layers.top.node.data = &self.layer_scene_node_data.top;
-    self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
 
     server.events.exec("OutputInitPost", .{self.id});
 
