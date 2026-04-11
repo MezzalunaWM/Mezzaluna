@@ -207,14 +207,22 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 }
 
 /// ---Remove focus from current view, and set to given id
+/// ---@param seat_id integer Id of the seat to be focused, 0 for default seat
 /// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
-    const view_id: ?c_longlong = L.optInteger(1);
+    const seat = if (!L.isNil(1)) blk: {
+        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
+        break :blk LuaUtils.seatFromId(seat_id) orelse {
+            L.pushNil();
+            return 1;
+        };
+    } else server.getDefaultSeat();
+    const view_id: ?c_longlong = L.optInteger(2);
 
     if (view_id == null) {
-        server.getDefaultSeat().focusSurface(null);
+        seat.focusSurface(null);
     } else if (server.root.viewById(@intCast(view_id.?))) |view| {
-        server.getDefaultSeat().focusSurface(.{ .view = view });
+        seat.focusSurface(.{ .view = view });
     }
 
     L.pushNil();

@@ -136,7 +136,7 @@ M.add_view = function(view_id)
 		table.insert(tag.stack, #tag.stack + 1, view_id)
 	end
 
-	if M.config.focus_on_spawn then mez.view.set_focused(view_id) end
+	if M.config.focus_on_spawn then mez.view.set_focused(0, view_id) end
 
 	M.tile_tag(M.state.tag_id)
 end
@@ -151,30 +151,30 @@ M.focus_next = function()
 	if type == "floating" then
 		if view_idx == #tag.floating then
 			if tag.master ~= nil then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.floating[1])
+				mez.view.set_focused(0, tag.floating[1])
 			end
 		else
-			mez.view.set_focused(tag.floating[view_idx + 1])
+			mez.view.set_focused(0, tag.floating[view_idx + 1])
 		end
 	elseif type == "master" then
 		if #tag.stack ~= 0 then
-			mez.view.set_focused(tag.stack[1])
+			mez.view.set_focused(0, tag.stack[1])
 		elseif #tag.floating ~= 0 then
-			mez.view.set_focused(tag.floating[1])
+			mez.view.set_focused(0, tag.floating[1])
 		else
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		if view_idx == #tag.stack then
 			if #tag.floating ~= 0 then
-				mez.view.set_focused(tag.floating[1])
+				mez.view.set_focused(0, tag.floating[1])
 			else
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			end
 		else
-			mez.view.set_focused(tag.stack[view_idx + 1])
+			mez.view.set_focused(0, tag.stack[view_idx + 1])
 		end
 	end
 end
@@ -189,28 +189,28 @@ M.focus_prev = function()
 	if type == "floating" then
 		if view_idx == 1 then
 			if #tag.stack ~= 0 then
-				mez.view.set_focused(tag.stack[#tag.stack])
+				mez.view.set_focused(0, tag.stack[#tag.stack])
 			elseif tag.master ~= nil then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.floating[#tag.floating])
+				mez.view.set_focused(0, tag.floating[#tag.floating])
 			end
 		else
-			mez.view.set_focused(tag.floating[view_idx - 1])
+			mez.view.set_focused(0, tag.floating[view_idx - 1])
 		end
 	elseif type == "master" then
 		if #tag.floating ~= 0 then
-			mez.view.set_focused(tag.floating[#tag.floating])
+			mez.view.set_focused(0, tag.floating[#tag.floating])
 		elseif #tag.stack ~= 0 then
-			mez.view.set_focused(tag.stack[#tag.stack])
+			mez.view.set_focused(0, tag.stack[#tag.stack])
 		else
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		if view_idx == 1 then
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		else
-			mez.view.set_focused(tag.stack[view_idx - 1])
+			mez.view.set_focused(0, tag.stack[view_idx - 1])
 		end
 	end
 end
@@ -231,7 +231,7 @@ M.remove_view = function(view_id)
 		tag.master = table.remove(tag.stack, 1)
 
 		if M.config.refocus_on_kill then
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		local is_last = #tag.stack == view_idx
@@ -240,9 +240,9 @@ M.remove_view = function(view_id)
 
 		if M.config.refocus_on_kill then
 			if #tag.stack == 0 then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.stack[is_last and view_idx - 1 or view_idx])
+				mez.view.set_focused(0, tag.stack[is_last and view_idx - 1 or view_idx])
 			end
 		end
 	end
@@ -264,18 +264,18 @@ M.tag_enable = function (tag_idx)
 
         if utils.find_view(tag.last_focused) == nil then
           if tag.master then
-            mez.view.set_focused(tag.master)
+            mez.view.set_focused(0, tag.master)
           elseif #tag.floating ~= 0 then
-            mez.view.set_focused(tag.floating[1])
+            mez.view.set_focused(0, tag.floating[1])
           end
         else
-          mez.view.set_focused(tag.last_focused)
+          mez.view.set_focused(0, tag.last_focused)
         end
       else
         if tag.master then
-          mez.view.set_focused(tag.master)
+          mez.view.set_focused(0, tag.master)
         elseif #tag.floating ~= 0 then
-          mez.view.set_focused(tag.floating[1])
+          mez.view.set_focused(0, tag.floating[1])
         end
       end
 		else
@@ -352,7 +352,7 @@ M.make_float = function (view_id)
 	end
 
 	mez.view.raise_to_top(tag.floating[#tag.floating])
-	mez.view.set_focused(tag.floating[#tag.floating])
+	mez.view.set_focused(0, tag.floating[#tag.floating])
 	M.tile_tag(tag_idx)
 end
 
