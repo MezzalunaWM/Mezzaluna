@@ -16,9 +16,11 @@ pub fn build(b: *std.Build) void {
     scanner.addSystemProtocol("staging/cursor-shape/cursor-shape-v1.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
     scanner.addSystemProtocol("unstable/pointer-constraints/pointer-constraints-unstable-v1.xml");
+    scanner.addSystemProtocol("staging/color-management/color-management-v1.xml");
     scanner.addCustomProtocol(b.path("protocols/wlr-layer-shell-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocols/mez-remote-lua-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocols/wlr-output-power-management-unstable-v1.xml"));
+    scanner.addCustomProtocol(b.path("protocols/virtual-keyboard-unstable-v1.xml"));
 
     // Generate protocol code
     scanner.generate("zmez_remote_lua_manager_v1", 1);
@@ -35,6 +37,8 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wp_cursor_shape_manager_v1", 1);
     scanner.generate("zwlr_output_power_manager_v1", 1);
     scanner.generate("zwp_pointer_constraints_v1", 1);
+    scanner.generate("zwp_virtual_keyboard_manager_v1", 1);
+    scanner.generate("wp_color_manager_v1", 1);
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
     const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
@@ -49,7 +53,7 @@ pub fn build(b: *std.Build) void {
     wlroots.addImport("pixman", pixman);
 
     wlroots.resolved_target = target;
-    wlroots.linkSystemLibrary("wlroots-0.19", .{});
+    wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
     const mez = b.addExecutable(.{
         .name = "mez",

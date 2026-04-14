@@ -17,8 +17,8 @@
             .hash = "xkbcommon-0.3.0-VDqIe3K9AQB2fG5ZeRcMC9i7kfrp5m2rWgLrmdNn9azr",
         },
         .wlroots = .{
-            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/v0.19.3.tar.gz",
-            .hash = "wlroots-0.19.3-jmOlcuL_AwBHhLCwpFsXbTizE3q9BugFmGX-XIxqcPMc",
+            .url = "https://codeberg.org/ifreund/zig-wlroots/archive/v0.20.0.tar.gz",
+            .hash = "wlroots-0.20.0-jmOlcmtCBADS6eoJ6mkeiSNZkibrhD-c5Qwn-LiM86r1",
         },
         .zlua = .{
             .url = "git+https://github.com/natecraddock/ziglua?ref=0.6.0#315b7f25efd29d9e2143d6c0ab685bb7f640450f",
