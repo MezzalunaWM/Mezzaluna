@@ -144,17 +144,11 @@ pub fn toggleFullscreen(self: *View) void {
 
     const fullscreens = &self.output.?.fullscreens;
     if(self.output.?.getEnabledFullscreen() == self) {
-        // ViewSetFullscreenPre
-        // Before making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPre", .{self.id, false});
+        server.events.exec("ViewSetFullscreenPre", .{self.id, false}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 
         self.scene_tree.node.reparent(self.output.?.layers.content);
 
-        // ViewSetFullscreenPost
-        // After making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPost", .{self.id, false});
+        server.events.exec("ViewSetFullscreenPost", .{self.id, false}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 
         if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
             _ = self.output.?.fullscreens.swapRemove(i);
@@ -168,14 +162,14 @@ pub fn toggleFullscreen(self: *View) void {
         _ = v.toggleFullscreen();
     }
 
-    server.events.exec("ViewSetFullscreenPre", .{self.id, true});
+    server.events.exec("ViewSetFullscreenPre", .{self.id, true}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
     self.scene_tree.node.reparent(self.output.?.layers.top);
 
     self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
     fullscreens.append(gpa, self) catch Utils.oomPanic();
     _ = self.xdg_toplevel.setFullscreen(true);
-    server.events.exec("ViewSetFullscreenPost", .{self.id, true});
+    server.events.exec("ViewSetFullscreenPost", .{self.id, true}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 }
 
 // Null values are set to their corresponding current geometry values
@@ -226,11 +220,9 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
-    // Before a view's focus is set
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "Before a view's focus is set");
     _ = self.xdg_toplevel.setActivated(activated);
-    // After a view's focus is set
-    server.events.exec("ViewSetFocusPost", .{ self.id, activated });
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated }, "After a view's focus is set");
 }
 
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
