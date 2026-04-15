@@ -4,11 +4,21 @@ const zlua = @import("zlua");
 
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const Utils = @import("../Utils.zig");
 const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 const posix = std.posix;
+const gpa = std.heap.c_allocator;
+
+const Mode = struct {
+    width: i32,
+    height: i32,
+    refresh: i32,
+    preferred: bool,
+};
 
 fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
@@ -56,15 +66,66 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get refresh rate for the output
+const get_output_state = struct {
+    rate: i32,
+    scale: f32,
+    resolution: wlr.Box,
+    available_area: wlr.Box,
+    transform: [:0]const u8,
+    make: [:0]const u8,
+    serial: [:0]const u8,
+    model: [:0]const u8,
+    description: [:0]const u8,
+    name: [:0]const u8,
+    modes: []Mode,
+};
+
+/// ---Get the state of an output
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return integer?
-pub fn get_rate(L: *zlua.Lua) i32 {
+/// ---@return get_output_state?
+pub fn get_state(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
     const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
-        L.pushInteger(@intCast(o.wlr_output.refresh));
+        const output_layout = server.root.output_layout.get(o.wlr_output) orelse {
+            L.pushNil();
+            return 1;
+        };
+
+        const modes: []Mode = gpa.alloc(Mode, o.wlr_output.modes.length()) catch Utils.oomPanic();
+        defer gpa.free(modes);
+        var iter = o.wlr_output.modes.iterator(.forward);
+
+        L.pushAny(get_output_state {
+            .scale = o.wlr_output.scale,
+            .resolution = .{
+                .width = o.wlr_output.width,
+                .height = o.wlr_output.height,
+                .x = output_layout.x,
+                .y = output_layout.y,
+            },
+            .rate = o.wlr_output.refresh,
+            .available_area = o.non_exclusive_area,
+            .transform = @tagName(o.wlr_output.transform),
+            .make = std.mem.span(o.wlr_output.make orelse "(null)"),
+            .serial = std.mem.span(o.wlr_output.serial orelse "(null)"),
+            .model = std.mem.span(o.wlr_output.model orelse "(null)"),
+            .description = std.mem.span(o.wlr_output.description orelse "(null)"),
+            .name = std.mem.span(o.wlr_output.name),
+            .modes = blk: {
+                var i: u32 = 0; // I wonder how many modes a display can have
+                while (iter.next()) |mode| : (i += 1) {
+                    modes[i] = Mode{
+                        .width = mode.width,
+                        .height = mode.height,
+                        .refresh = mode.refresh,
+                        .preferred = mode.preferred,
+                    };
+                }
+                break: blk modes;
+            },
+        }) catch unreachable;
         return 1;
     }
 
@@ -72,176 +133,39 @@ pub fn get_rate(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Set the scale for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@param scale number
-pub fn set_scale(L: *zlua.Lua) i32 {
+/// all setter data is optional
+const set_output_state = struct {
+    position: ?wlr.Box, // TODO(squibid): impl
+    scale: ?f32,
+    transform: ?wl.Output.Transform,
+    mode: ?Mode,
+};
+
+pub fn set_state(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+
     const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-
     if (output) |o| {
-        var state: wlr.Output.State = .init();
-        defer state.finish();
+        const lua_state = L.toAny(set_output_state, 2) catch unreachable;
 
-        // We don't allow scales below 0
-        const new_scale: f32 = @floatCast(L.checkNumber(2));
-        state.setScale(if (new_scale <= 0) o.wlr_output.scale else new_scale);
-        _ = o.wlr_output.commitState(&state);
+        var new_state: wlr.Output.State = .init();
+        defer new_state.finish();
+
+        if (lua_state.scale) |v| new_state.setScale(if (v <= 0) o.wlr_output.scale else v);
+        if (lua_state.transform) |v| new_state.setTransform(v);
+        if (lua_state.mode) |v| new_state.setCustomMode(v.width, v.height, v.refresh);
+
+        if (!o.wlr_output.testState(&new_state)) {
+            L.raiseErrorStr("Output state is not usable! `{any}`", .{ new_state });
+        }
+
+        _ = o.wlr_output.commitState(&new_state);
 
         o.arrangeLayers();
-    }
-
-    return 0;
-}
-
-/// ---Get the scale for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return number? scale
-pub fn get_scale(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-
-    if (output) |o| {
-        L.pushNumber(o.wlr_output.scale);
-        return 1;
-    }
-
-    return 0;
-}
-
-/// ---Get resolution in pixels of the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return { width: integer, height: integer }?
-pub fn get_resolution(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        L.newTable();
-
-        L.pushInteger(@intCast(o.wlr_output.width));
-        L.setField(-2, "width");
-
-        L.pushInteger(@intCast(o.wlr_output.height));
-        L.setField(-2, "height");
-
-        return 1;
+        return 0;
     }
 
     L.pushNil();
-    return 1;
-}
-
-/// ---Get the serial for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return string?
-pub fn get_serial(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        if (o.wlr_output.serial == null) {
-            L.pushNil();
-            return 1;
-        }
-
-        _ = L.pushString(std.mem.span(o.wlr_output.serial.?));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the make for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return string?
-pub fn get_make(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        if (o.wlr_output.make == null) {
-            L.pushNil();
-            return 1;
-        }
-
-        _ = L.pushString(std.mem.span(o.wlr_output.make.?));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the model for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return string?
-pub fn get_model(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        if (o.wlr_output.model == null) {
-            L.pushNil();
-            return 1;
-        }
-
-        _ = L.pushString(std.mem.span(o.wlr_output.model.?));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the description for the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return string?
-pub fn get_description(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        if (o.wlr_output.description == null) {
-            L.pushNil();
-            return 1;
-        }
-
-        _ = L.pushString(std.mem.span(o.wlr_output.description.?));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the name of the output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return string
-pub fn get_name(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-    if (output) |o| {
-        _ = L.pushString(std.mem.span(o.wlr_output.name));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Get the space not exclusively occupied
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return Box?
-pub fn get_available_area(L: *zlua.Lua) i32 {
-    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
-
-    if (output == null) return 0;
-
-    L.pushAny(output.?.non_exclusive_area) catch unreachable;
     return 1;
 }
 

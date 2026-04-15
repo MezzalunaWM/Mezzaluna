@@ -283,9 +283,10 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 
     server.events.exec("ViewUnmapPre", .{view.id});
 
-    if (server.getDefaultSeat().focused_surface) |fs| {
-        if (fs == .view and fs.view == view) {
-            server.getDefaultSeat().focusSurface(null);
+    var iter = server.seats.iterator(.forward);
+    while (iter.next()) |seat| {
+        if (seat.focused_surface) |fs| {
+            if (fs == .view and fs.view == view) seat.focusSurface(null);
         }
     }
 
