@@ -2,6 +2,7 @@
 zig-out/
 convert
 
+start.sh
 session_logs
 
 runtime/mez_types.lua

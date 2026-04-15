@@ -4,8 +4,11 @@ const zlua = @import("zlua");
 
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
+const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
+const wlr = @import("wlroots");
+const posix = std.posix;
 
 fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
@@ -33,9 +36,18 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the id for the focused output
-/// ---@return integer?
+/// ---@param integer? seat seat id, nil for the default seat
+/// ---@return integer? result nil if the seat provided doesn't exist
 pub fn get_focused_id(L: *zlua.Lua) i32 {
-    if (server.seat.focused_output) |output| {
+    const seat = if (!L.isNil(1)) blk: {
+        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
+        break :blk LuaUtils.seatFromId(seat_id) orelse {
+            L.pushNil();
+            return 1;
+        };
+    } else server.getDefaultSeat();
+
+    if (seat.focused_output) |output| {
         L.pushInteger(@intCast(output.id));
         return 1;
     }
@@ -50,7 +62,7 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
 pub fn get_rate(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         L.pushInteger(@intCast(o.wlr_output.refresh));
         return 1;
@@ -60,23 +72,58 @@ pub fn get_rate(L: *zlua.Lua) i32 {
     return 1;
 }
 
+/// ---Set the scale for the output
+/// ---@param output_id integer 0 maps to focused output
+/// ---@param scale number
+pub fn set_scale(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
+
+    if (output) |o| {
+        var state: wlr.Output.State = .init();
+        defer state.finish();
+
+        // We don't allow scales below 0
+        const new_scale: f32 = @floatCast(L.checkNumber(2));
+        state.setScale(if (new_scale <= 0) o.wlr_output.scale else new_scale);
+        _ = o.wlr_output.commitState(&state);
+
+        o.arrangeLayers();
+    }
+
+    return 0;
+}
+
+/// ---Get the scale for the output
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return number? scale
+pub fn get_scale(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
+
+    if (output) |o| {
+        L.pushNumber(o.wlr_output.scale);
+        return 1;
+    }
+
+    return 0;
+}
+
 /// ---Get resolution in pixels of the output
 /// ---@param output_id integer 0 maps to focused output
 /// ---@return { width: integer, height: integer }?
 pub fn get_resolution(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         L.newTable();
 
-        _ = L.pushString("width");
         L.pushInteger(@intCast(o.wlr_output.width));
-        L.setTable(-3);
+        L.setField(-2, "width");
 
-        _ = L.pushString("height");
         L.pushInteger(@intCast(o.wlr_output.height));
-        L.setTable(-3);
+        L.setField(-2, "height");
 
         return 1;
     }
@@ -91,7 +138,7 @@ pub fn get_resolution(L: *zlua.Lua) i32 {
 pub fn get_serial(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         if (o.wlr_output.serial == null) {
             L.pushNil();
@@ -112,7 +159,7 @@ pub fn get_serial(L: *zlua.Lua) i32 {
 pub fn get_make(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         if (o.wlr_output.make == null) {
             L.pushNil();
@@ -133,7 +180,7 @@ pub fn get_make(L: *zlua.Lua) i32 {
 pub fn get_model(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         if (o.wlr_output.model == null) {
             L.pushNil();
@@ -154,7 +201,7 @@ pub fn get_model(L: *zlua.Lua) i32 {
 pub fn get_description(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         if (o.wlr_output.description == null) {
             L.pushNil();
@@ -171,11 +218,11 @@ pub fn get_description(L: *zlua.Lua) i32 {
 
 /// ---Get the name of the output
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return string 
+/// ---@return string
 pub fn get_name(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         _ = L.pushString(std.mem.span(o.wlr_output.name));
         return 1;
@@ -185,21 +232,31 @@ pub fn get_name(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---@class box
-/// ---@field x integer
-/// ---@field y integer
-/// ---@field width integer
-/// ---@field height integer
-
 /// ---Get the space not exclusively occupied
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return box
+/// ---@return Box?
 pub fn get_available_area(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
-    const output: ?*Output = if (output_id == 0) server.seat.focused_output else server.root.outputById(output_id);
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
+
+    if (output == null) return 0;
 
     L.pushAny(output.?.non_exclusive_area) catch unreachable;
+    return 1;
+}
 
+/// ---Get the id of the output's fullscreened view if it exists
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return integer?
+pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
+    if (output == null) return 0;
+
+    const view = output.?.getEnabledFullscreen();
+    if (view == null) return 0;
+
+    L.pushInteger(@intCast(view.?.id));
     return 1;
 }

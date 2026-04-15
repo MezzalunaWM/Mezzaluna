@@ -4,20 +4,45 @@ const std = @import("std");
 const config = @import("config");
 const zlua = @import("zlua");
 
+const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
-const Fs = @import("Fs.zig");
-const Input = @import("Input.zig");
-const Api = @import("Api.zig");
-const Hook = @import("Hook.zig");
-const View = @import("View.zig");
-const Output = @import("Output.zig");
-const Remote = @import("Remote.zig");
-const Async = @import("Async.zig");
 
 const gpa = std.heap.c_allocator;
+pub const log = std.log.scoped(.lua);
 
 state: *zlua.Lua,
+
+pub const Config = struct {
+    path: ?[]const u8,
+    enabled: bool,
+};
+pub fn init(self: *Lua, cfg: Config) !void {
+    self.state = try zlua.Lua.init(gpa);
+    errdefer self.state.deinit();
+    self.state.openLibs();
+
+    openMezLibs(self.state);
+
+    if (cfg.path) |path| {
+        defer gpa.free(path);
+        try setConfig(self.state, path);
+    }
+
+    // load lua files
+    loadRuntimeDir(self.state) catch |err| switch (err) {
+        error.OutOfMemory => Utils.oomPanic(),
+        else => log.err("{}", .{ err })
+    };
+    loadBaseConfig(self.state);
+    if (cfg.enabled) loadConfigDir(self.state);
+
+    log.debug("Loaded lua", .{});
+}
+
+pub fn deinit(self: *Lua) void {
+    self.state.deinit();
+}
 
 pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     const path_dir = try std.fs.path.joinZ(gpa, &[_][]const u8{
@@ -43,13 +68,10 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     });
     defer gpa.free(path_full);
 
-    self.doFile(path_full) catch {
-        const err = try self.toString(-1);
-        std.log.debug("Failed to run lua file: {s}", .{err});
-    };
+    self.doFile(path_full) catch LuaUtils.handleError(self);
 }
 
-pub fn setBaseConfig(self: *zlua.Lua, path: []const u8) !void {
+pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
     _ = try self.getGlobal("mez");
     defer self.pop(1);
     _ = self.getField(-1, "path");
@@ -58,32 +80,32 @@ pub fn setBaseConfig(self: *zlua.Lua, path: []const u8) !void {
     self.setField(-2, "config");
 }
 
-fn loadBaseConfig(self: *zlua.Lua) !void {
+fn loadBaseConfig(self: *zlua.Lua) void {
     const lua_path = "mez.path.base_config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Base config path not found. Is your runtime dir setup?", .{});
+        log.err("Base config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
-        std.log.err("Failed to pop the base config path from the lua stack. {}", .{err});
+        log.err("Failed to pop the base config path from the lua stack. {}", .{err});
         return;
     };
     self.pop(-1);
-    try self.doFile(path);
+    self.doFile(path) catch LuaUtils.handleError(self);
 }
 
-fn loadConfigDir(self: *zlua.Lua) !void {
+fn loadConfigDir(self: *zlua.Lua) void {
     const lua_path = "mez.path.config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
-        std.log.err("Config path not found. Is your runtime dir setup?", .{});
+        log.err("Config path not found. Is your runtime dir setup?", .{});
         return;
     }
     const path = self.toString(-1) catch |err| {
-        std.log.err("Failed to pop the config path from the lua stack. {}", .{err});
+        log.err("Failed to pop the config path from the lua stack. {}", .{err});
         return;
     };
     self.pop(-1);
-    try self.doFile(path);
+    self.doFile(path) catch LuaUtils.handleError(self);
 }
 
 pub fn openMezLibs(self: *zlua.Lua) void {
@@ -108,83 +130,19 @@ pub fn openMezLibs(self: *zlua.Lua) void {
         self.newTable();
         defer _ = self.setField(-2, "path");
     }
-    {
-        const fs_funcs = zlua.fnRegsFromType(Fs);
-        LuaUtils.newLib(self, fs_funcs);
-        self.setField(-2, "fs");
+    inline for (.{
+        .{ "api", @import("Api.zig") },
+        .{ "async", @import("Async.zig") },
+        .{ "fs", @import("Fs.zig") },
+        .{ "hook", @import("Hook.zig") },
+        .{ "input", @import("Input.zig") },
+        .{ "output", @import("Output.zig") },
+        .{ "remote", @import("Remote.zig") },
+        .{ "seat", @import("Seat.zig") },
+        .{ "view", @import("View.zig") },
+    }) |file| {
+        const funcs = zlua.fnRegsFromType(file[1]);
+        LuaUtils.newLib(self, funcs);
+        self.setField(-2, file[0]);
     }
-    {
-        const input_funcs = zlua.fnRegsFromType(Input);
-        LuaUtils.newLib(self, input_funcs);
-        self.setField(-2, "input");
-    }
-    {
-        const hook_funcs = zlua.fnRegsFromType(Hook);
-        LuaUtils.newLib(self, hook_funcs);
-        self.setField(-2, "hook");
-    }
-    {
-        const api_funcs = zlua.fnRegsFromType(Api);
-        LuaUtils.newLib(self, api_funcs);
-        self.setField(-2, "api");
-    }
-    {
-        const view_funcs = zlua.fnRegsFromType(View);
-        LuaUtils.newLib(self, view_funcs);
-        self.setField(-2, "view");
-    }
-    {
-        const output_funcs = zlua.fnRegsFromType(Output);
-        LuaUtils.newLib(self, output_funcs);
-        self.setField(-2, "output");
-    }
-    {
-        const remote_funcs = zlua.fnRegsFromType(Remote);
-        LuaUtils.newLib(self, remote_funcs);
-        self.setField(-2, "remote");
-    }
-    {
-        const async_funcs = zlua.fnRegsFromType(Async);
-        LuaUtils.newLib(self, async_funcs);
-        self.setField(-2, "async");
-    }
-}
-
-pub const Config = struct {
-    path: ?[]const u8,
-    enabled: bool,
-};
-pub fn init(self: *Lua, cfg: Config) !void {
-    self.state = try zlua.Lua.init(gpa);
-    errdefer self.state.deinit();
-    self.state.openLibs();
-
-    openMezLibs(self.state);
-
-    if (!cfg.enabled) {
-        try setBaseConfig(self.state, "");
-    } else if (cfg.path) |path| {
-        defer gpa.free(path);
-        try setBaseConfig(self.state, path);
-    }
-
-    loadRuntimeDir(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
-    };
-
-    loadBaseConfig(self.state) catch |err| if (err == error.LuaRuntime) {
-        std.log.warn("{s}", .{try self.state.toString(-1)});
-    };
-
-    if (cfg.enabled) {
-        loadConfigDir(self.state) catch |err| if (err == error.LuaRuntime) {
-            std.log.warn("{s}", .{try self.state.toString(-1)});
-        };
-    }
-
-    std.log.debug("Loaded lua", .{});
-}
-
-pub fn deinit(self: *Lua) void {
-    self.state.deinit();
 }

@@ -13,21 +13,22 @@ const Utils = @import("Utils.zig");
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
-mapped: bool,
-focused: bool,
-fullscreen: bool,
 id: u64,
 
-// workspace: Workspace,
 output: ?*Output,
+
 xdg_toplevel: *wlr.XdgToplevel,
 xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
+
 scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
+
 borders: [4]*wlr.SceneRect,
 border_width: i32,
 geometry: wlr.Box, // The total geometry including borders
+
+previous_geometry: wlr.Box,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -62,12 +63,10 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     errdefer gpa.destroy(self);
 
     self.* = .{
-        .focused = false,
-        .mapped = false,
-        .fullscreen = false,
         .id = @intFromPtr(xdg_toplevel),
         .output = null,
         .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
+        .previous_geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
         .xdg_toplevel = xdg_toplevel,
         .scene_tree = undefined,
         .surface_tree = undefined,
@@ -78,7 +77,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     };
 
     // Add new Toplevel to root of the tree
-    if (server.seat.focused_output) |output| {
+    if (server.getDefaultSeat().focused_output) |output| {
         self.scene_tree = try output.layers.content.createSceneTree();
         self.surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base);
         self.output = output;
@@ -113,6 +112,10 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 // Tell the client to close
 // It better behave!
 pub fn close(self: *View) void {
+    if(self.isFullscreen()) {
+        self.toggleFullscreen();
+    }
+
     self.xdg_toplevel.sendClose();
 }
 
@@ -120,47 +123,77 @@ pub fn setBorderColor(self: *View, color: *const [4]f32) void {
     for (self.borders) |border| border.setColor(color);
 }
 
-pub fn toggleFullscreen(self: *View) bool {
-    self.fullscreen = !self.fullscreen;
-    if (self.output) |output| {
-        if (self.fullscreen and output.fullscreen != self) {
-            // Check to see if another fullscreened view exists, if so replace it
-            if (output.getFullscreenedView()) |view| {
-                _ = view.toggleFullscreen();
-            }
-
-            self.scene_tree.node.reparent(output.layers.fullscreen);
-            self.setPosition(0, 0);
-            self.setSize(output.wlr_output.width, output.wlr_output.height);
-            output.fullscreen = self;
-        } else {
-            self.scene_tree.node.reparent(output.layers.content);
-            output.fullscreen = null;
-        }
+pub fn isFullscreen(self: *View) bool {
+    if(self.output == null) {
+        std.log.debug("View does not have an assigned output", .{});
+        unreachable;
     }
-    _ = self.xdg_toplevel.setFullscreen(self.fullscreen);
-    return self.fullscreen;
+
+    for(self.output.?.fullscreens.items) |view| {
+        if(view == self) return true;
+    }
+
+    return false;
 }
 
-pub fn setPosition(self: *View, x: i32, y: i32) void {
+pub fn toggleFullscreen(self: *View) void {
+    if(self.output == null) {
+        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
+        return;
+    }
+
+    const fullscreens = &self.output.?.fullscreens;
+    if(self.output.?.getEnabledFullscreen() == self) {
+        // ViewSetFullscreenPre
+        // Before making a view fullscreen within it's output
+        // passed view_id and true `true` if being fullscreened `false` otherwise
+        server.events.exec("ViewSetFullscreenPre", .{self.id, false});
+
+        self.scene_tree.node.reparent(self.output.?.layers.content);
+
+        // ViewSetFullscreenPost
+        // After making a view fullscreen within it's output
+        // passed view_id and true `true` if being fullscreened `false` otherwise
+        server.events.exec("ViewSetFullscreenPost", .{self.id, false});
+
+        if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
+            _ = self.output.?.fullscreens.swapRemove(i);
+        }
+        _ = self.xdg_toplevel.setFullscreen(false);
+        return;
+    }
+
+    // Check to see if another enabled fullscreen view exists, if so replace it
+    if (self.output.?.getEnabledFullscreen()) |v| {
+        _ = v.toggleFullscreen();
+    }
+
+    server.events.exec("ViewSetFullscreenPre", .{self.id, true});
+    self.scene_tree.node.reparent(self.output.?.layers.top);
+
+    self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
+
+    fullscreens.append(gpa, self) catch Utils.oomPanic();
+    _ = self.xdg_toplevel.setFullscreen(true);
+    server.events.exec("ViewSetFullscreenPost", .{self.id, true});
+}
+
+// Null values are set to their corresponding current geometry values
+pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
 
-    self.geometry.x = x;
-    self.geometry.y = y;
+    if(self.isFullscreen()) return;
+
+    self.previous_geometry = self.geometry;
+
+    self.geometry = .{
+        .x = x orelse self.geometry.x,
+        .y = y orelse self.geometry.y,
+        .width = @max(1 + 2 * self.border_width, width orelse self.geometry.width),
+        .height = @max(1 + 2 * self.border_width, height orelse self.geometry.height)
+    };
 
     self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
-
-    self.resizeBorders();
-}
-
-pub fn setSize(self: *View, width: i32, height: i32) void {
-    if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
-
-    // at the very least the client must be big enough to have borders
-    self.geometry.width = @max(1 + 2 * self.border_width, width);
-    self.geometry.height = @max(1 + 2 * self.border_width, height);
-
-    // This returns a configure serial for verifying the configure
     _ = self.xdg_toplevel.setSize(
         self.geometry.width - 2 * self.border_width,
         self.geometry.height - 2 * self.border_width,
@@ -177,6 +210,7 @@ pub fn resizeBorders(self: *View) void {
 
     // clip the surface tree to the size of the view
     self.surface_tree.node.subsurfaceTreeSetClip(&wlr.Box{
+        // use the offset relative to the surface geometry, not the output geometry
         .x = self.xdg_toplevel.base.geometry.x,
         .y = self.xdg_toplevel.base.geometry.y,
         .width = self.geometry.width - 2 * self.border_width,
@@ -189,6 +223,40 @@ pub fn resizeBorders(self: *View) void {
     self.borders[3].setSize(self.border_width, self.geometry.height);
     self.borders[1].node.setPosition(0, self.geometry.height - self.border_width);
     self.borders[2].node.setPosition(self.geometry.width - self.border_width, 0);
+}
+
+pub fn setActivated(self: *View, activated: bool) void {
+    // Before a view's focus is set
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    _ = self.xdg_toplevel.setActivated(activated);
+    // After a view's focus is set
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated });
+}
+
+pub fn fromSurface(surface: *wlr.Surface) ?*View {
+    var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
+    while (xdg_surface) |xs| {
+        switch (xs.role) {
+            .toplevel => {
+                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xs.data));
+                return if (scene_node_data.* == .view) scene_node_data.view else null;
+            },
+            .popup => {
+                if (xs.popups.first() == null or xs.popups.first().?.parent == null) {
+                    return null;
+                }
+
+                const tmp_xdg_surface = wlr.XdgSurface.tryFromWlrSurface(
+                    xs.popups.first().?.parent.?
+                ) orelse return fromSurface(xs.popups.first().?.parent.?);
+
+                xdg_surface = tmp_xdg_surface;
+            },
+            .none => return null,
+        }
+    }
+
+    return null;
 }
 
 // --------- XdgTopLevel event handlers ---------
@@ -206,7 +274,6 @@ fn handleMap(listener: *wl.Listener(void)) void {
         .right = true,
     });
 
-    view.mapped = true;
     server.events.exec("ViewMapPost", .{view.id}, "After a view is mapped to the screen. This view is now being displayed to the user.");
 }
 
@@ -215,12 +282,10 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
     server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
-    view.mapped = false; // we do this before any work is done so that nobody tries
-    // any funny business
 
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .view and fs.view == view) {
-            server.seat.focusSurface(null);
+            server.getDefaultSeat().focusSurface(null);
         }
     }
 

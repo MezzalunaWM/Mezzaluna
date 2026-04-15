@@ -75,7 +75,7 @@ fn asyncCallback(
     }
 
     Lua.state.protectedCall(.{ .args = 0 }) catch {
-        RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
+        LuaUtils.handleError(Lua.state);
         self.deinit();
         return .disarm;
     };
@@ -95,10 +95,10 @@ fn asyncCallback(
 
 /// ---@class async_options
 /// ---@field timeout number milliseconds
-/// ---@field once boolean 
+/// ---@field once boolean
 
 /// ---run some lua code later
-/// ---@param callback function 
+/// ---@param callback function
 /// ---@param options (number|async_options)? if a number this must be the
 /// --- timeout in milliseconds if nil defaults to 0 milliseconds aka run as
 /// --- soon as possible. This always runs once unless specified otherwise.
@@ -113,8 +113,7 @@ pub fn run(L: *zlua.Lua) i32 {
 
     switch (L.typeOf(2)) {
         .table => {
-            _ = L.pushString("timeout");
-            _ = L.getTable(2);
+            _ = L.getField(2, "timeout");
             if (L.isNumber(-1)) {
                 async.timeout = LuaUtils.coerceInteger(
                     u32,
@@ -122,8 +121,7 @@ pub fn run(L: *zlua.Lua) i32 {
                 ) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
             }
 
-            _ = L.pushString("once");
-            _ = L.getTable(2);
+            _ = L.getField(2, "once");
             if (L.isBoolean(-1)) async.once = L.toBoolean(-1);
         },
         .number => async.timeout = LuaUtils.coerceInteger(
@@ -142,7 +140,7 @@ pub fn run(L: *zlua.Lua) i32 {
 }
 
 /// ---cancel an upcoming timer
-/// ---@param id number 
+/// ---@param id number
 pub fn cancel(L: *zlua.Lua) i32 {
     const id = LuaUtils.coerceInteger(usize, L.checkInteger(1)) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
     const self = server.async_callbacks.get(id) orelse return 0;

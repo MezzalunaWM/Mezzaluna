@@ -1,17 +1,15 @@
 ---@class Master
----@field config MasterConfig
----@field state MasterState
 local M = {}
 
 local utils = {}
 
 ---Find view ID within all tags
----@param view_id number
+---@param view_id integer
 ---@return "master" | "floating" | "stacking" | nil view_type
 ---@return number | nil tag_index
 ---@return number | nil view_index
 utils.find_view = function(view_id)
-	if view_id == 0 then view_id = mez.view.get_focused_id() end
+	if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 
 	for i, curr_tag in ipairs(M.state.tags) do
 		local t = M.state.tags[i]
@@ -65,6 +63,8 @@ end
 ---@field refocus_on_kill boolean
 ---@field screen_gap number
 ---@field tile_gap number
+
+---@type MasterConfig
 local default_config = {
   mod_key = "alt",
 	master_ratio = 0.5,
@@ -91,41 +91,42 @@ local default_config = {
 M.tile_tag = function(tag_id)
 	local tag = M.state.tags[tag_id]
 
-	local res = mez.output.get_resolution(0)
+	local area = mez.output.get_available_area(0)
 
 	if tag.master == nil then return end
 
 	if #tag.stack == 0 then
-		mez.view.set_position(tag.master, M.config.screen_gap, M.config.screen_gap)
-		mez.view.set_size(
-			tag.master,
-			res.width - M.config.screen_gap * 2,
-			res.height - M.config.screen_gap * 2
-		)
+		mez.view.set_geometry(tag.master, {
+      x = M.config.screen_gap + area.x,
+      y = M.config.screen_gap + area.y,
+			width = area.width - M.config.screen_gap * 2,
+			height = area.height - M.config.screen_gap * 2
+    })
 	else
-		mez.view.set_position(tag.master, M.config.screen_gap, M.config.screen_gap)
-		mez.view.set_size(
-			tag.master,
-			res.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
-			res.height - M.config.screen_gap * 2
-		)
+		mez.view.set_geometry(tag.master, {
+      x = M.config.screen_gap + area.x,
+      y = M.config.screen_gap + area.y,
+			width = area.width * M.state.master_ratio - M.config.screen_gap - M.config.tile_gap,
+			height = area.height - M.config.screen_gap * 2
+    })
 
-		local stack_x = (res.width * M.state.master_ratio)
-		local stack_width = res.width * (1 - M.state.master_ratio) - M.config.tile_gap - M.config.screen_gap
-		local stack_height = (res.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
+		local stack_x = (area.width * M.state.master_ratio) + area.x
+		local stack_width = area.width * (1 - M.state.master_ratio) - M.config.tile_gap - M.config.screen_gap
+		local stack_height = (area.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
 
 		for i, view_id in ipairs(tag.stack) do
-			mez.view.set_position(view_id,
-			stack_x,
-			(stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap)
-
-			mez.view.set_size(view_id, stack_width, stack_height)
+			mez.view.set_geometry(view_id, {
+        x = stack_x,
+        y = (stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap + area.y,
+        width = stack_width,
+        height = stack_height
+      })
 		end
 	end
 end
 
 ---Add the id of a new view
----@param view_id number
+---@param view_id integer
 M.add_view = function(view_id)
 	local tag = M.state.tags[M.state.tag_id]
 
@@ -135,7 +136,7 @@ M.add_view = function(view_id)
 		table.insert(tag.stack, #tag.stack + 1, view_id)
 	end
 
-	if M.config.focus_on_spawn then mez.view.set_focused(view_id) end
+	if M.config.focus_on_spawn then mez.view.set_focused(0, view_id) end
 
 	M.tile_tag(M.state.tag_id)
 end
@@ -143,37 +144,37 @@ end
 ---Move the focus in a tag to the next view
 ---Order is master -> stack -> floating -> master
 M.focus_next = function()
-	local view_id = mez.view.get_focused_id()
+	local view_id = mez.view.get_focused_id(0)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 	local tag = M.state.tags[tag_idx]
 
 	if type == "floating" then
 		if view_idx == #tag.floating then
 			if tag.master ~= nil then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.floating[1])
+				mez.view.set_focused(0, tag.floating[1])
 			end
 		else
-			mez.view.set_focused(tag.floating[view_idx + 1])
+			mez.view.set_focused(0, tag.floating[view_idx + 1])
 		end
 	elseif type == "master" then
 		if #tag.stack ~= 0 then
-			mez.view.set_focused(tag.stack[1])
+			mez.view.set_focused(0, tag.stack[1])
 		elseif #tag.floating ~= 0 then
-			mez.view.set_focused(tag.floating[1])
+			mez.view.set_focused(0, tag.floating[1])
 		else
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		if view_idx == #tag.stack then
 			if #tag.floating ~= 0 then
-				mez.view.set_focused(tag.floating[1])
+				mez.view.set_focused(0, tag.floating[1])
 			else
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			end
 		else
-			mez.view.set_focused(tag.stack[view_idx + 1])
+			mez.view.set_focused(0, tag.stack[view_idx + 1])
 		end
 	end
 end
@@ -181,43 +182,43 @@ end
 ---Move the focus in a tag to the previous view
 ---Order is master -> floating -> stack -> master
 M.focus_prev = function()
-	local view_id = mez.view.get_focused_id()
+	local view_id = mez.view.get_focused_id(0)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 	local tag = M.state.tags[tag_idx]
 
 	if type == "floating" then
 		if view_idx == 1 then
 			if #tag.stack ~= 0 then
-				mez.view.set_focused(tag.stack[#tag.stack])
+				mez.view.set_focused(0, tag.stack[#tag.stack])
 			elseif tag.master ~= nil then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.floating[#tag.floating])
+				mez.view.set_focused(0, tag.floating[#tag.floating])
 			end
 		else
-			mez.view.set_focused(tag.floating[view_idx - 1])
+			mez.view.set_focused(0, tag.floating[view_idx - 1])
 		end
 	elseif type == "master" then
 		if #tag.floating ~= 0 then
-			mez.view.set_focused(tag.floating[#tag.floating])
+			mez.view.set_focused(0, tag.floating[#tag.floating])
 		elseif #tag.stack ~= 0 then
-			mez.view.set_focused(tag.stack[#tag.stack])
+			mez.view.set_focused(0, tag.stack[#tag.stack])
 		else
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		if view_idx == 1 then
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		else
-			mez.view.set_focused(tag.stack[view_idx - 1])
+			mez.view.set_focused(0, tag.stack[view_idx - 1])
 		end
 	end
 end
 
 ---Remove a view_id from the layout
----@param view_id number
+---@param view_id integer
 M.remove_view = function(view_id)
-  if view_id == 0 then view_id = mez.view.get_focused_id() end
+  if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -230,7 +231,7 @@ M.remove_view = function(view_id)
 		tag.master = table.remove(tag.stack, 1)
 
 		if M.config.refocus_on_kill then
-			mez.view.set_focused(tag.master)
+			mez.view.set_focused(0, tag.master)
 		end
 	elseif type == "stacking" then
 		local is_last = #tag.stack == view_idx
@@ -239,9 +240,9 @@ M.remove_view = function(view_id)
 
 		if M.config.refocus_on_kill then
 			if #tag.stack == 0 then
-				mez.view.set_focused(tag.master)
+				mez.view.set_focused(0, tag.master)
 			else
-				mez.view.set_focused(tag.stack[is_last and view_idx - 1 or view_idx])
+				mez.view.set_focused(0, tag.stack[is_last and view_idx - 1 or view_idx])
 			end
 		end
 	end
@@ -263,22 +264,22 @@ M.tag_enable = function (tag_idx)
 
         if utils.find_view(tag.last_focused) == nil then
           if tag.master then
-            mez.view.set_focused(tag.master)
+            mez.view.set_focused(0, tag.master)
           elseif #tag.floating ~= 0 then
-            mez.view.set_focused(tag.floating[1])
+            mez.view.set_focused(0, tag.floating[1])
           end
         else
-          mez.view.set_focused(tag.last_focused)
+          mez.view.set_focused(0, tag.last_focused)
         end
       else
         if tag.master then
-          mez.view.set_focused(tag.master)
+          mez.view.set_focused(0, tag.master)
         elseif #tag.floating ~= 0 then
-          mez.view.set_focused(tag.floating[1])
+          mez.view.set_focused(0, tag.floating[1])
         end
       end
 		else
-			tag.last_focused = mez.view.get_focused_id()
+			tag.last_focused = mez.view.get_focused_id(0)
 		end
 
 		for _, v in ipairs(tag.floating) do
@@ -301,9 +302,9 @@ M.tag_enable = function (tag_idx)
 end
 
 ---Move a stack window to the master, and vice versa
----@param view_id number
+---@param view_id integer
 M.zoom = function (view_id)
-	if view_id == 0 then view_id = mez.view.get_focused_id() end
+	if view_id == 0 then view_id = mez.view.get_focused_id(0) end
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
 	if type == "floating" or type == "master" or M.state.tag_id ~= tag_idx then return end
@@ -328,7 +329,7 @@ M.change_ratio = function (delta)
 end
 
 ---Move a view from tiling to floating
----@param view_id number
+---@param view_id integer
 M.make_float = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -350,13 +351,13 @@ M.make_float = function (view_id)
 		)
 	end
 
-	mez.view.set_focused(tag.floating[#tag.floating])
 	mez.view.raise_to_top(tag.floating[#tag.floating])
+	mez.view.set_focused(0, tag.floating[#tag.floating])
 	M.tile_tag(tag_idx)
 end
 
 ---Move a view from floating to tiling
----@param view_id number
+---@param view_id integer
 M.make_tile = function (view_id)
 	local type, tag_idx, view_idx = utils.find_view(view_id)
 
@@ -375,16 +376,18 @@ end
 
 M.set_fullscreen = function (view_id)
 	local _, tag_idx, _ = utils.find_view(view_id)
+  mez.view.toggle_fullscreen(view_id)
 
-	if not mez.view.toggle_fullscreen(view_id) then
+	if not mez.view.get_fullscreen(view_id) then
+    mez.view.set_geometry(view_id, mez.view.get_previous_geometry(view_id))
 		M.tile_tag(tag_idx)
 	end
 end
 
----@param view_id number
+---@param view_id integer
 ---@param tag_id number
 M.send_view = function (view_id, tag_id)
-  if view_id == 0 then view_id = mez.view.get_focused_id() end
+  if view_id == 0 then view_id = mez.view.get_focused_id(0) end
   if tag_id == M.state.tag_id then return end
 
 	local type, _, _ = utils.find_view(view_id)
@@ -399,7 +402,7 @@ M.send_view = function (view_id, tag_id)
     if tag.master == nil then
       tag.master = view_id
     else
-      table.insert(tag.stack, #tag.stack, view_id)
+      tag.stack[#tag.stack + 1] = view_id
     end
   end
 
@@ -437,25 +440,41 @@ M.setup = function(config)
 	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
 	mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })
 	mez.input.add_keymap(M.config.mod_key, "Return", { press = function () M.zoom(0) end })
-	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.05) end })
-	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.05) end })
+	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.03) end })
+	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.03) end })
 	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.set_fullscreen(0) end })
 
 	for i = 1, M.config.tag_count do
-		mez.input.add_keymap(M.config.mod_key, tostring(i), { press = function () M.tag_enable(i) end })
-		-- mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), { press = function () M.send_view(0, i) end })
+		mez.input.add_keymap(M.config.mod_key, tostring(i), {
+      press = function ()
+        M.tag_enable(i)
+      end
+    })
+
+		mez.input.add_keymap(M.config.mod_key.."|shift", tostring(i), {
+      press = function ()
+        M.send_view(0, i)
+      end
+    })
 	end
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_LEFT", {
 		press = function(view_id) M.make_float(view_id) end,
 		drag = function(view_id, pos, _, offset)
 			if view_id ~= nil then
-				mez.view.set_position(view_id, pos.x - offset.x, pos.y - offset.y)
+				mez.view.set_geometry(view_id, {
+          x = pos.x - offset.x,
+          y = pos.y - offset.y
+        })
 			end
 		end
 	})
 
-	mez.input.add_mousemap(M.config.mod_key, "BTN_MIDDLE", { press = function(view_id) M.make_tile(view_id) end })
+	mez.input.add_mousemap(M.config.mod_key, "BTN_MIDDLE", {
+    press = function(view_id)
+      M.make_tile(view_id)
+    end
+  })
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_RIGHT", {
     press = function(view_id) M.make_float(view_id) end,
@@ -466,7 +485,10 @@ M.setup = function(config)
 
 				if width <= 10 then width = 10 end
 				if height <= 10 then height = 10 end
-				mez.view.set_size(view_id, width, height)
+				mez.view.set_geometry(view_id, {
+          width = width,
+          height = height
+        })
 			end
 		end
 	})
@@ -477,7 +499,11 @@ M.setup = function(config)
 		end
 	end})
 
-	mez.hook.add("ViewRequestFullscreen", { callback = function () M.set_fullscreen(0) end })
+	mez.hook.add("ViewRequestFullscreen", {
+    callback = function (view_id)
+      M.set_fullscreen(view_id)
+    end
+  })
 end
 
 return M

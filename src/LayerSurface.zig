@@ -40,16 +40,18 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     }
     self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
-    if (server.seat.focused_output) |output| {
-        self.scene_layer_surface = switch (wlr_layer_surface.current.layer) {
-            .background => try output.layers.background.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .bottom => try output.layers.bottom.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .top => try output.layers.top.createSceneLayerSurfaceV1(wlr_layer_surface),
-            .overlay => try output.layers.overlay.createSceneLayerSurfaceV1(wlr_layer_surface),
-            else => {
-                std.log.err("New layer surface of unidentified type", .{});
-                unreachable;
-            },
+    // layersurfaces are always given the the default seat
+    if (server.getDefaultSeat().focused_output) |output| {
+        self.scene_layer_surface = blk: {
+            inline for (std.meta.fields(@TypeOf(wlr_layer_surface.current.layer))) |field| {
+                if (std.mem.eql(u8, @tagName(wlr_layer_surface.current.layer), field.name)) {
+                    const layer = @field(output.layers, field.name);
+                    break :blk try layer.createSceneLayerSurfaceV1(wlr_layer_surface);
+                }
+            }
+            std.debug.panic("New layer surface which we do not support: `{s}`", .{
+                @tagName(wlr_layer_surface.current.layer),
+            });
         };
     }
 
@@ -75,13 +77,6 @@ pub fn deinit(self: *LayerSurface) void {
     gpa.destroy(self);
 }
 
-pub fn allowKeyboard(self: *LayerSurface) void {
-    const keyboard_interactive = self.wlr_layer_surface.current.keyboard_interactive;
-    if (keyboard_interactive == .exclusive or keyboard_interactive == .on_demand) {
-        server.seat.wlr_seat.keyboardNotifyEnter(self.wlr_layer_surface.surface, &server.seat.keyboard_group.wlr_group.keyboard.keycodes, &server.seat.keyboard_group.wlr_group.keyboard.modifiers);
-    }
-}
-
 // --------- LayerSurface event handlers ---------
 fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfaceV1) void {
     const layer: *LayerSurface = @fieldParentPtr("destroy", listener);
@@ -91,15 +86,17 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
     layer_suraface.output.arrangeLayers();
-    layer_suraface.allowKeyboard();
+    if (layer_suraface.wlr_layer_surface.current.keyboard_interactive != .none) {
+        server.getDefaultSeat().focusSurface(.{ .layer_surface = layer_suraface });
+    }
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const layer_surface: *LayerSurface = @fieldParentPtr("unmap", listener);
 
-    if (server.seat.focused_surface) |fs| {
+    if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .layer_surface and fs.layer_surface == layer_surface) {
-            server.seat.focusSurface(null);
+            server.getDefaultSeat().focusSurface(null);
         }
     }
 

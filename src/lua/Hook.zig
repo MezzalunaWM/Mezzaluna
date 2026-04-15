@@ -132,9 +132,7 @@ pub const HookData = struct {
             i = k;
         }
 
-        Lua.state.protectedCall(.{ .args = i }) catch {
-            RemoteLua.sendNewLogEntry(Lua.state.toString(-1) catch unreachable);
-        };
+        Lua.state.protectedCall(.{ .args = i }) catch LuaUtils.handleError(Lua.state);
         Lua.state.pop(-1);
 
         if (self.options.once) @constCast(self).deinit();
@@ -172,14 +170,12 @@ pub fn add(L: *zlua.Lua) i32 {
         hook.events[0] = gpa.dupe(u8, s) catch Utils.oomPanic();
     }
 
-    _ = L.pushString("callback");
-    _ = L.getTable(2);
+    _ = L.getField(2, "callback");
     if (L.isFunction(-1)) {
         hook.options.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
     }
 
-    _ = L.pushString("once");
-    _ = L.getTable(2);
+    _ = L.getField(2, "once");
     if (L.isBoolean(-1)) {
         hook.options.once = L.toBoolean(-1);
     }

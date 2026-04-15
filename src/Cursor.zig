@@ -9,6 +9,7 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
 const View = @import("View.zig");
+const Seat = @import("Seat.zig");
 const Utils = @import("Utils.zig");
 const Mousemap = @import("lua/Input.zig").MousemapData;
 const c = @import("C.zig").c;
@@ -18,6 +19,7 @@ const server = &@import("main.zig").server;
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
 cursor_shape_manager: *wlr.CursorShapeManagerV1,
+seat: *Seat,
 
 motion: wl.Listener(*wlr.Pointer.event.Motion) = .init(handleMotion),
 motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) = .init(handleMotionAbsolute),
@@ -42,7 +44,7 @@ drag: ?struct {
     },
 },
 
-pub fn init(self: *Cursor) void {
+pub fn init(self: *Cursor, seat: *Seat) void {
     errdefer Utils.oomPanic();
 
     self.* = .{
@@ -50,6 +52,7 @@ pub fn init(self: *Cursor) void {
         .x_cursor_manager = try wlr.XcursorManager.create(null, 24),
         .cursor_shape_manager = try wlr.CursorShapeManagerV1.create(server.wl_server, 1),
         .drag = null,
+        .seat = seat,
     };
 
     try self.x_cursor_manager.load(1);
@@ -89,15 +92,59 @@ pub fn processCursorMotion(
     unaccel_dx: f64,
     unaccel_dy: f64,
 ) void {
-    // these will be used later when the relative pointer manager is setup
-    _ = unaccel_dx;
-    _ = unaccel_dy;
+    var dx = delta_x;
+    var dy = delta_y;
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
+
+    // try and activate a cursor constraint
+    var iter = self.seat.constraints.iterator(.forward);
+    while (iter.next()) |constraint| constraint.activate();
+
+    if (self.seat.active_constraint) |active_constraint| {
+        // get the view from the constrained surface
+        const view = View.fromSurface(active_constraint.constraint.surface);
+        if (view) |v| if (self.seat.focused_surface) |fs| if (fs == .view and v == fs.view) {
+            const sx = self.wlr_cursor.x - @as(f64, @floatFromInt(v.geometry.x)) - @as(f64, @floatFromInt(v.border_width));
+            const sy = self.wlr_cursor.y - @as(f64, @floatFromInt(v.geometry.y)) - @as(f64, @floatFromInt(v.border_width));
+            var x_out: f64 = 0;
+            var y_out: f64 = 0;
+
+            if (wlr.region.confine(
+                &active_constraint.constraint.region,
+                sx,
+                sy,
+                sx + delta_x,
+                sy + delta_y,
+                &x_out,
+                &y_out
+            )) {
+                dx = x_out - sx;
+                dy = y_out - sy;
+            }
+        };
+    }
+
+
+    // send relative motion
+    server.relative_pointer_manager.sendRelativeMotion(
+        self.seat.wlr_seat,
+        @as(u64, time_msec) * std.time.us_per_ms,
+        dx,
+        dy,
+        unaccel_dx,
+        unaccel_dy
+    );
+
+    if (self.seat.active_constraint != null) return;
 
     // process the cursor motion
-    self.wlr_cursor.move(device, delta_x, delta_y);
+    self.wlr_cursor.move(device, dx, dy);
 
     const view: ?*View = blk: {
-        if (server.seat.focused_surface) |fs| {
+        if (self.seat.focused_surface) |fs| {
             if (fs == .view) {
                 break :blk fs.view;
             }
@@ -105,15 +152,14 @@ pub fn processCursorMotion(
         break :blk null;
     };
 
+    var passthrough = true;
     if (self.mode == .drag) {
-        const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
-
-        std.debug.assert(self.drag != null);
+        const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
 
         // Proceed if mousemap for current mouse and modifier state's exist
-        if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
+        if (self.seat.mousemaps.get(Mousemap.hash(modifiers, @bitCast(self.drag.?.event_code)))) |map| {
             if (map.options.lua_drag_ref_idx > 0) {
-                const passthrough = map.callback(.drag, .{
+                passthrough = map.callback(.drag, .{
                     if (view != null) view.?.id else null, // view_id
                     .{ // pos
                         .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
@@ -128,7 +174,9 @@ pub fn processCursorMotion(
         }
     }
 
-    const output = server.seat.focused_output;
+    if(!passthrough) return;
+
+    const output = self.seat.focused_output;
     // Exit the switch if no focused output exists
     std.debug.assert(output != null);
 
@@ -142,20 +190,21 @@ pub fn processCursorMotion(
             }, "After the cursor moves, but before anyone is told about it.");
         }
 
-        server.seat.wlr_seat.pointerNotifyEnter(surfaceAtResult.?.surface, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
-        server.seat.wlr_seat.pointerNotifyMotion(time_msec, surfaceAtResult.?.sx, surfaceAtResult.?.sy);
+        self.seat.wlr_seat.pointerNotifyEnter(surface.surface, surface.sx, surface.sy);
+        self.seat.wlr_seat.pointerNotifyMotion(time_msec, surface.sx, surface.sy);
     } else {
-        server.seat.wlr_seat.pointerClearFocus();
+        self.seat.wlr_seat.pointerClearFocus();
         self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
     }
 }
 
 // --------- WLR Cursor event handlers ---------
 fn handleMotion(
-    _: *wl.Listener(*wlr.Pointer.event.Motion),
+    listener: *wl.Listener(*wlr.Pointer.event.Motion),
     event: *wlr.Pointer.event.Motion,
 ) void {
-    server.cursor.processCursorMotion(
+    const self: *Cursor = @fieldParentPtr("motion", listener);
+    self.processCursorMotion(
         event.time_msec,
         event.device,
         event.delta_x,
@@ -188,12 +237,12 @@ fn handleMotionAbsolute(
 
     const delta_x = layout_x - self.wlr_cursor.x;
     const delta_y = layout_y - self.wlr_cursor.y;
-    server.cursor.processCursorMotion(
+    self.processCursorMotion(
         event.time_msec,
         event.device,
         delta_x,
         delta_y,
-        delta_x, // absolute motions do not decelerate
+        delta_x, // absolute motions decelerate immediately
         delta_y,
     );
 }
@@ -202,7 +251,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
     const self: *Cursor = @fieldParentPtr("button", listener);
 
     const view: ?*View = blk: {
-        if (server.seat.focused_surface) |fs| {
+        if (self.seat.focused_surface) |fs| {
             if (fs == .view) {
                 break :blk fs.view;
             }
@@ -210,6 +259,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
         break :blk null;
     };
 
+    // Set drag information based on button type
     switch (event.state) {
         .pressed => {
             self.mode = .drag;
@@ -235,11 +285,6 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
         .released => {
             self.mode = .normal;
 
-            // How do we do this on the lua side
-            // if(self.drag.view) |view| {
-            //   _ = view.xdg_toplevel.setResizing(false);
-            // }
-
             self.drag.?.view = null;
         },
         else => {
@@ -258,8 +303,8 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
     var passthrough = true;
 
     // Proceed if mousemap for current mouse and modifier state's exist
-    const modifiers = server.seat.keyboard_group.wlr_group.keyboard.getModifiers();
-    if (server.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
+    const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
+    if (self.seat.mousemaps.get(Mousemap.hash(modifiers, @bitCast(event.button)))) |map| {
         const args = .{
             if (view != null) view.?.id else null, // view_id
             .{ // pos
@@ -289,8 +334,12 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
 
     // If no keymap exists for button event, forward it to a surface
     if (passthrough) {
-        _ = server.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
+        _ = self.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 }
 
 fn handleHoldBegin(listener: *wl.Listener(*wlr.Pointer.event.HoldBegin), event: *wlr.Pointer.event.HoldBegin) void {
@@ -304,10 +353,49 @@ fn handleHoldEnd(listener: *wl.Listener(*wlr.Pointer.event.HoldEnd), event: *wlr
 }
 
 fn handleAxis(
-    _: *wl.Listener(*wlr.Pointer.event.Axis),
+    listener: *wl.Listener(*wlr.Pointer.event.Axis),
     event: *wlr.Pointer.event.Axis,
 ) void {
-    server.seat.wlr_seat.pointerNotifyAxis(
+    const self: *Cursor = @fieldParentPtr("axis", listener);
+
+    const event_name = if(event.orientation == .vertical_scroll) "REL_WHEEL" else "REL_HWHEEL";
+    const event_code = c.libevdev_event_code_from_name(c.EV_REL, event_name);
+
+    var passthrough = true;
+
+    const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
+    if (self.seat.mousemaps.get(Mousemap.hash(modifiers, event_code))) |map| {
+        const view: ?*View = blk: {
+            if (self.seat.focused_surface) |fs| {
+                if (fs == .view) {
+                    break :blk fs.view;
+                }
+            }
+            break :blk null;
+        };
+
+        const args = .{
+            if (view != null) view.?.id else null, // view_id
+            .{ // pos
+                .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
+                .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
+            },
+            event.delta,
+            event.delta_discrete
+        };
+
+        if(map.options.lua_scroll_ref_idx > 0) {
+            passthrough = map.callback(.scroll, args);
+        }
+    }
+
+    // tell the idle notifier that we've recieved activity now that it's been
+    // fully processed
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
+
+    if(!passthrough) return;
+
+    self.seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
         event.orientation,
         event.delta,
@@ -317,8 +405,9 @@ fn handleAxis(
     );
 }
 
-fn handleFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
-    server.seat.wlr_seat.pointerNotifyFrame();
+fn handleFrame(listener: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
+    const self: *Cursor = @fieldParentPtr("frame", listener);
+    self.seat.wlr_seat.pointerNotifyFrame();
 }
 
 fn handleCursorShape(
@@ -326,7 +415,7 @@ fn handleCursorShape(
     event: *wlr.CursorShapeManagerV1.event.RequestSetShape,
 ) void {
     const self: *Cursor = @fieldParentPtr("request_set_cursor_shape", listener);
-    if (event.seat_client == server.seat.wlr_seat.pointer_state.focused_client) {
+    if (event.seat_client == self.seat.wlr_seat.pointer_state.focused_client) {
         self.wlr_cursor.setXcursor(self.x_cursor_manager, wlr.CursorShapeManagerV1.shapeName(event.shape));
     }
 }
