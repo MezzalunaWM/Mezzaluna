@@ -200,7 +200,7 @@ pub fn init(self: *Server) void {
 
     self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
-    self.events.exec("ServerStartPost", .{});
+    self.events.exec("ServerStartPost", .{}, "Just after Mezzaluna has successfully started.");
 }
 
 /// libwayland uses a bool which the event loop checks to see if the server

@@ -66,6 +66,15 @@ pub fn build(b: *std.Build) void {
 
     mez.root_module.link_libc = true;
 
+    const docgen = b.addExecutable(.{
+        .name = "docgen",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("docgen/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     mez.root_module.addImport("wayland", wayland);
     mez.root_module.addImport("xkbcommon", xkbcommon);
     mez.root_module.addImport("wlroots", wlroots);
@@ -87,9 +96,11 @@ pub fn build(b: *std.Build) void {
 
     const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir")
         orelse b.pathJoin(&.{b.install_prefix, "share"});
-    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
 
+    const event_gen = b.option(bool, "event_gen", "Should mez generate event docs? WARNING: This will prevent codegen!") orelse false;
+    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
     options.addOption([]const u8, "version", version);
+    options.addOption(bool, "event_gen", event_gen);
     mez.root_module.addOptions("config", options);
 
     // Installs a bin to prefix/bin/mez
@@ -128,5 +139,8 @@ pub fn build(b: *std.Build) void {
     remove_step.dependOn(&uninstall_runtime.step);
     remove_step.dependOn(&uninstall_bin.step);
 
-    // const doc_gen_step = b.step("doc-gen", "Generate documentation for the lua api");
+    const docgen_step = b.step("docgen", "Generate documentation for the lua api");
+    const docgen_cmd = b.addRunArtifact(docgen);
+    docgen_step.dependOn(&docgen_cmd.step);
+    docgen_cmd.step.dependOn(b.getInstallStep());
 }

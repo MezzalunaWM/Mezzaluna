@@ -144,17 +144,11 @@ pub fn toggleFullscreen(self: *View) void {
 
     const fullscreens = &self.output.?.fullscreens;
     if(self.output.?.getEnabledFullscreen() == self) {
-        // ViewSetFullscreenPre
-        // Before making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPre", .{self.id, false});
+        server.events.exec("ViewSetFullscreenPre", .{self.id, false}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 
         self.scene_tree.node.reparent(self.output.?.layers.content);
 
-        // ViewSetFullscreenPost
-        // After making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPost", .{self.id, false});
+        server.events.exec("ViewSetFullscreenPost", .{self.id, false}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 
         if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
             _ = self.output.?.fullscreens.swapRemove(i);
@@ -168,14 +162,14 @@ pub fn toggleFullscreen(self: *View) void {
         _ = v.toggleFullscreen();
     }
 
-    server.events.exec("ViewSetFullscreenPre", .{self.id, true});
+    server.events.exec("ViewSetFullscreenPre", .{self.id, true}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
     self.scene_tree.node.reparent(self.output.?.layers.top);
 
     self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
     fullscreens.append(gpa, self) catch Utils.oomPanic();
     _ = self.xdg_toplevel.setFullscreen(true);
-    server.events.exec("ViewSetFullscreenPost", .{self.id, true});
+    server.events.exec("ViewSetFullscreenPost", .{self.id, true}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
 }
 
 // Null values are set to their corresponding current geometry values
@@ -226,11 +220,9 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
-    // Before a view's focus is set
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "Before a view's focus is set");
     _ = self.xdg_toplevel.setActivated(activated);
-    // After a view's focus is set
-    server.events.exec("ViewSetFocusPost", .{ self.id, activated });
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated }, "After a view's focus is set");
 }
 
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
@@ -263,7 +255,7 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
 
-    server.events.exec("ViewMapPre", .{view.id});
+    server.events.exec("ViewMapPre", .{view.id}, "Before a view is mapped to the screen. This means the view is not yet displayed to the user.");
 
     // we're gonna tell the client that it's tiled so it doesn't try anything
     // stupid
@@ -274,14 +266,14 @@ fn handleMap(listener: *wl.Listener(void)) void {
         .right = true,
     });
 
-    server.events.exec("ViewMapPost", .{view.id});
+    server.events.exec("ViewMapPost", .{view.id}, "After a view is mapped to the screen. This view is now being displayed to the user.");
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
     std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
-    server.events.exec("ViewUnmapPre", .{view.id});
+    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
 
     if (server.getDefaultSeat().focused_surface) |fs| {
         if (fs == .view and fs.view == view) {
@@ -289,7 +281,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
-    server.events.exec("ViewUnmapPost", .{view.id});
+    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visibile to the user.");
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -356,12 +348,12 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopu
 
 fn handleRequestMove(listener: *wl.Listener(*wlr.XdgToplevel.event.Move), _: *wlr.XdgToplevel.event.Move) void {
     const view: *View = @fieldParentPtr("request_move", listener);
-    server.events.exec("ViewRequestMove", .{view.id});
+    server.events.exec("ViewRequestMove", .{view.id}, "Before the view requests to move.");
 }
 
 fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _: *wlr.XdgToplevel.event.Resize) void {
     const view: *View = @fieldParentPtr("request_resize", listener);
-    server.events.exec("ViewRequestResize", .{view.id});
+    server.events.exec("ViewRequestResize", .{view.id}, "Before the view requests to resize.");
 }
 
 fn handleAckConfigure(
@@ -374,23 +366,23 @@ fn handleAckConfigure(
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_fullscreen", listener);
-    server.events.exec("ViewRequestFullscreen", .{view.id});
+    server.events.exec("ViewRequestFullscreen", .{view.id}, "Before the view requests to be fullscreened.");
 }
 
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_minimize", listener);
-    server.events.exec("ViewRequestMinimize", .{view.id});
+    server.events.exec("ViewRequestMinimize", .{view.id}, "Before the view requests to be minimized.");
     std.log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_app_id", listener);
-    server.events.exec("ViewAppIdUpdate", .{view.id});
+    server.events.exec("ViewAppIdUpdate", .{view.id}, "Before the view requests to update its appid.");
     std.log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_title", listener);
-    server.events.exec("ViewTitleUpdate", .{view.id});
+    server.events.exec("ViewTitleUpdate", .{view.id}, "Before the view requests to update its title.");
     std.log.debug("request_set_title unimplemented", .{});
 }
