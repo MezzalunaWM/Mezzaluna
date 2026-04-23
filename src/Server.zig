@@ -29,6 +29,7 @@ event_loop: *wl.EventLoop,
 xev_event_loop: xev.Loop,
 
 wl_server: *wl.Server,
+xwayland: ?*wlr.Xwayland,
 session: ?*wlr.Session,
 compositor: *wlr.Compositor,
 shm: *wlr.Shm,
@@ -67,6 +68,8 @@ new_input: wl.Listener(*wlr.InputDevice) = .init(handleNewInput),
 new_output: wl.Listener(*wlr.Output) = .init(handleNewOutput),
 // backend.events.destroy
 new_xdg_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(handleNewXdgToplevel),
+new_xwayland_surface: wl.Listener(*wlr.XwaylandSurface) = .init(handleNewXwaylandSurface),
+xwayland_ready: wl.Listener(void) = .init(handleXwaylandReady),
 new_xdg_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewXdgPopup),
 new_xdg_toplevel_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(handleNewXdgToplevelDecoration),
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(handleNewLayerSurface),
@@ -109,6 +112,7 @@ pub fn init(self: *Server) void {
 
         // core wayland
         .wl_server = wl_server,
+        .xwayland = undefined,
         .session = session,
         .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
         .shm = try wlr.Shm.createWithRenderer(wl_server, 2, renderer),
@@ -200,6 +204,18 @@ pub fn init(self: *Server) void {
 
     self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
+    self.xwayland = wlr.Xwayland.create(self.wl_server, self.compositor, false) catch |err| switch (err) {
+        error.XwaylandCreateFailed => blk: {
+            std.log.err("Failed to start Xwayland server, continuing without it.", .{});
+            break :blk null;
+        },
+    };
+
+    if (self.xwayland) |xwayland| {
+        xwayland.events.ready.add(&self.xwayland_ready);
+        xwayland.events.new_surface.add(&self.new_xwayland_surface);
+    }
+
     self.events.exec("ServerStartPost", .{}, "Just after Mezzaluna has successfully started.");
 }
 
@@ -265,6 +281,7 @@ pub fn deinit(self: *Server) noreturn {
 
     self.wl_server.destroyClients();
     self.wl_server.destroy();
+    if (self.xwayland) |xwayland| xwayland.destroy();
 
     self.xev_event_loop.deinit();
 
@@ -292,6 +309,15 @@ fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {
     _ = View.init(xdg_toplevel);
+}
+
+fn handleXwaylandReady(_: *wl.Listener(void)) void {
+    std.log.debug("xwayland ready", .{});
+}
+
+fn handleNewXwaylandSurface(_: *wl.Listener(*wlr.XwaylandSurface), xwayland_surface: *wlr.XwaylandSurface) void {
+    _ = xwayland_surface;
+    std.log.debug("new xwayland surface request", .{});
 }
 
 fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
