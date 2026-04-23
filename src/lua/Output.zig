@@ -5,6 +5,7 @@ const zlua = @import("zlua");
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
+const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
 
 const server = &@import("../main.zig").server;
 const wlr = @import("wlroots");
@@ -53,6 +54,42 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
     }
 
     L.pushNil();
+    return 1;
+}
+
+/// Returns all the ids of views within an output
+/// ---@param output_id integer 0 maps to focused output
+/// ---@return integer[]?
+pub fn get_views(L: *zlua.Lua) i32 {
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
+
+    const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
+    if (output == null) {
+        L.raiseErrorStr("Output with id %d not found\n", .{output_id});
+    }
+
+    var index: i32 = 1;
+    L.newTable();
+
+    const content = output.?.layers.content;
+    if (@intFromPtr(content) == 0) unreachable;
+    if (content.children.length() == 0) return 1; // No children
+
+    var view_it = content.children.iterator(.forward);
+    while (view_it.next()) |v| {
+        if (v.data == null) unreachable;
+
+        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
+
+        if (scene_node_data.* == .view) {
+            L.pushInteger(@intCast(index));
+            L.pushInteger(@intCast(scene_node_data.view.id));
+            L.setTable(-3);
+
+            index += 1;
+        }
+    }
+
     return 1;
 }
 

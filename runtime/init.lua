@@ -7,8 +7,9 @@ do
 
   mez.inspect = require("inspect").inspect
   mez.packadd = function(path)
-    package.path = package.path..";"..mez.fs.joinpath(path, "init.lua")
-    package.path = package.path..";"..mez.fs.joinpath(path, "lua", "?.lua")
+    package.path = package.path .. ";" .. mez.fs.joinpath(path, "init.lua")
+    package.path = package.path .. ";" .. mez.fs.joinpath(path, "lua", "init.lua")
+    package.path = package.path .. ";" .. mez.fs.joinpath(path, "lua", "?.lua")
   end
 end
 
@@ -39,9 +40,14 @@ end
 local plugin_dir = mez.fs.joinpath(env_data, "mez", "plugins")
 -- TODO: we should make a function for this in mez.fs instead of using the shell
 os.execute("mkdir -p " .. plugin_dir)
+
+package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, "?", "lua", "?.lua")
+package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, "?", "lua", "init.lua")
+package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, "?", "init.lua")
+
 for plugin_name, kind in mez.fs.open_directory(plugin_dir) do
   if kind == "directory" or kind == "sym_link" then
-    mez.packadd(mez.fs.joinpath(plugin_dir, plugin_name))
+    package.path = package.path .. ";" .. mez.fs.joinpath(plugin_dir, plugin_name, "lua", "?.lua")
   end
 end
 

@@ -4,8 +4,8 @@ local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
 
-local master = require("master")
-master.setup({ mod_key = mod })
+-- local master = require("master")
+-- master.setup({ mod_key = mod })
 
 -- local euclid = require("euclid")
 -- euclid.setup({ mod_key = mod })
@@ -54,7 +54,7 @@ mez.hook.add("ViewMapPre", {
 
 mez.hook.add("ViewPointerMotion", {
 	callback = function (view_id, _, _)
-		mez.view.set_focused(view_id)
+		mez.view.set_focused(0, view_id)
 	end
 })
 
