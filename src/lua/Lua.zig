@@ -34,8 +34,8 @@ pub fn init(self: *Lua, cfg: Config) !void {
         error.OutOfMemory => Utils.oomPanic(),
         else => log.err("{}", .{ err })
     };
-    loadBaseConfig(self.state);
     if (cfg.enabled) loadConfigDir(self.state);
+    loadBaseConfig(self.state);
 
     log.debug("Loaded lua", .{});
 }
