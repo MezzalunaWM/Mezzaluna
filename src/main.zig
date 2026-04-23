@@ -93,14 +93,6 @@ pub fn main() !void {
     };
     std.posix.sigaction(std.posix.SIG.CHLD, &act, null);
 
-    // tell the kernel to reap the children
-    var act = std.posix.Sigaction{
-        .handler = .{ .handler = std.posix.SIG.IGN },
-        .mask = std.posix.sigemptyset(),
-        .flags = std.posix.SA.NOCLDWAIT,
-    };
-    std.posix.sigaction(std.posix.SIG.CHLD, &act, null);
-
     if (res.args.c) |cmd| {
         var child = std.process.Child.init(&[_][]const u8{ cmd }, gpa);
         child.env_map = &env_map;
