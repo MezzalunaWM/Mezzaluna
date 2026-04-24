@@ -54,7 +54,7 @@ mez.hook.add("ViewMapPre", {
 
 mez.hook.add("ViewPointerMotion", {
 	callback = function (view_id, _, _)
-		mez.view.set_focused(view_id)
+		mez.view.set_focused(0, view_id)
 	end
 })
 

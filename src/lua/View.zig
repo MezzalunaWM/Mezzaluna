@@ -17,8 +17,8 @@ fn view_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
 }
 
-// ---Get the ids for all available views
-// ---@return integer[]?
+/// ---Get the ids for all available views
+/// ---@return integer[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var output_it = server.root.output_layout.outputs.iterator(.forward);
 
