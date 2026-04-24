@@ -170,12 +170,13 @@ pub fn get_state(L: *zlua.Lua) i32 {
     return 1;
 }
 
+// TODO: remove the default values once we switch to a commit after 22cad3a
 /// all setter data is optional
 const set_output_state = struct {
-    position: ?wlr.Box, // TODO(squibid): impl
-    scale: ?f32,
-    transform: ?wl.Output.Transform,
-    mode: ?Mode,
+    position: ?wlr.Box = null, // TODO(squibid): impl
+    scale: ?f32 = null,
+    transform: ?wl.Output.Transform = null,
+    mode: ?Mode = null,
 };
 
 pub fn set_state(L: *zlua.Lua) i32 {
