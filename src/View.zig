@@ -6,7 +6,7 @@ const wlr = @import("wlroots");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const Utils = @import("Utils.zig");
 

@@ -11,7 +11,7 @@ const gpa = std.heap.c_allocator;
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const Utils = @import("Utils.zig");
 

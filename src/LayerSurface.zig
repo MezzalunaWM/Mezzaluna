@@ -6,7 +6,7 @@ const wlr = @import("wlroots");
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;

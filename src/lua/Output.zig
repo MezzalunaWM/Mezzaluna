@@ -5,7 +5,7 @@ const zlua = @import("zlua");
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
-const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("../SceneNode.zig");
 
 const server = &@import("../main.zig").server;
 const wlr = @import("wlroots");
@@ -71,23 +71,17 @@ pub fn get_views(L: *zlua.Lua) i32 {
     var index: i32 = 1;
     L.newTable();
 
-    const content = output.?.layers.content;
-    if (@intFromPtr(content) == 0) unreachable;
-    if (content.children.length() == 0) return 1; // No children
+    var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
+        output.?.layers.content,
+        output.?.layers.top,
+    }), .forward);
+    while (iter.next()) |node_data| {
+        if (node_data.* != .view) continue;
 
-    var view_it = content.children.iterator(.forward);
-    while (view_it.next()) |v| {
-        if (v.data == null) unreachable;
-
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
-
-        if (scene_node_data.* == .view) {
-            L.pushInteger(@intCast(index));
-            L.pushInteger(@intCast(scene_node_data.view.id));
-            L.setTable(-3);
-
-            index += 1;
-        }
+        L.pushInteger(@intCast(index));
+        L.pushInteger(@intCast(node_data.view.id));
+        L.setTable(-3);
+        index += 1;
     }
 
     return 1;

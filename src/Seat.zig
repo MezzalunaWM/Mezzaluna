@@ -15,7 +15,7 @@ const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 

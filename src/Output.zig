@@ -11,7 +11,7 @@ const Server = @import("Server.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const posix = std.posix;
 const gpa = std.heap.c_allocator;
