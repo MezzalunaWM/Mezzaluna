@@ -7,7 +7,7 @@ const wl = @import("wayland").server.wl;
 const Output = @import("../Output.zig");
 const Lua = @import("Lua.zig");
 const View = @import("../View.zig");
-const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("../SceneNode.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
 
@@ -35,34 +35,17 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
         if (!output.state.enabled) continue;
 
         // Only search the content and fullscreen layers for views
-        const layers = [_]*wlr.SceneTree{
+        var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
             output.layers.content,
             output.layers.top,
-        };
+        }), .forward);
+        while (iter.next()) |node_data| {
+            if (node_data.* != .view) continue;
 
-        for (layers) |layer| {
-            if (layer.children.length() == 0) continue; // No children
-
-            if (@intFromPtr(layer) == 0) unreachable;
-
-            var view_it = layer.children.iterator(.forward);
-
-            while (view_it.next()) |v| {
-                if (v.data == null) {
-                    Lua.log.err("Unassigned arbitrary data in scene graph", .{});
-                    unreachable;
-                }
-
-                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
-
-                if (scene_node_data.* == .view) {
-                    L.pushInteger(@intCast(index));
-                    L.pushInteger(@intCast(scene_node_data.view.id));
-                    L.setTable(-3);
-
-                    index += 1;
-                }
-            }
+            L.pushInteger(@intCast(index));
+            L.pushInteger(@intCast(node_data.view.id));
+            L.setTable(-3);
+            index += 1;
         }
     }
 
