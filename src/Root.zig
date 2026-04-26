@@ -11,11 +11,11 @@ const gpa = std.heap.c_allocator;
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
+const SceneNode = @import("SceneNode.zig");
 
 const Utils = @import("Utils.zig");
 
-scene_node_data: SceneNodeData,
+scene_node_data: SceneNode.Data,
 
 scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
@@ -58,19 +58,15 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var it = self.scene.tree.children.iterator(.forward);
-
-    while (it.next()) |node| {
-        if (node.data == null) continue;
-
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-        switch (scene_node_data.*) {
-            .output => {
-                scene_node_data.output.deinit();
-            },
+    var iter = SceneNode.iterator(
+        @constCast(&[_]*wlr.SceneTree{ &self.scene.tree }),
+        .forward
+    );
+    while (iter.next()) |node_data| {
+        switch (node_data.*) {
+            .output => |output| output.deinit(),
             else => {
-                std.log.debug("The root has a child that is not an output", .{});
-                unreachable;
+                std.debug.panic("The root has a child that is not an output", .{});
             },
         }
     }
@@ -85,23 +81,17 @@ pub fn viewById(self: *Root, id: u64) ?*View {
 
     while (output_it.next()) |o| {
         if (o.output.data == null) {
-            std.log.err("Wlr_output arbitrary data not assigned", .{});
-            unreachable;
+            std.debug.panic("Wlr_output arbitrary data not assigned", .{});
         }
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
-
-        for(layers) |l| {
-            var node_it = l.children.iterator(.forward);
-            while (node_it.next()) |node| {
-                if (node.data == null) continue;
-
-                const view_snd: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
-
-                if (view_snd.* == .view and view_snd.view.id == id) {
-                    return view_snd.view;
-                }
+        var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
+            output.layers.content,
+            output.layers.top,
+        }), .forward);
+        while (iter.next()) |node_data| {
+            if (node_data.* == .view and node_data.view.id == id) {
+                return node_data.view;
             }
         }
     }
