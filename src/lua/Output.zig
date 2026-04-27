@@ -106,8 +106,9 @@ pub fn get_views(L: *zlua.Lua) i32 {
 const get_output_state = struct {
     rate: i32,
     scale: f32,
-    resolution: wlr.Box,
+    resolution: struct { width: c_int = 0, height: c_int = 0 },
     available_area: wlr.Box,
+    position: struct { x: c_int, y: c_int },
     transform: [:0]const u8,
     make: [:0]const u8,
     serial: [:0]const u8,
@@ -125,11 +126,7 @@ pub fn get_state(L: *zlua.Lua) i32 {
 
     const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
-        const output_layout = server.root.output_layout.get(o.wlr_output) orelse {
-            L.pushNil();
-            return 1;
-        };
-
+        const output_layout = server.root.output_layout.get(o.wlr_output);
         const modes: []Mode = gpa.alloc(Mode, o.wlr_output.modes.length()) catch Utils.oomPanic();
         defer gpa.free(modes);
         var iter = o.wlr_output.modes.iterator(.forward);
@@ -139,8 +136,10 @@ pub fn get_state(L: *zlua.Lua) i32 {
             .resolution = .{
                 .width = o.wlr_output.width,
                 .height = o.wlr_output.height,
-                .x = output_layout.x,
-                .y = output_layout.y,
+            },
+            .position = .{
+                .x = if (output_layout) |l| l.x else 0,
+                .y = if (output_layout) |l| l.y else 0,
             },
             .rate = o.wlr_output.refresh,
             .available_area = o.non_exclusive_area,
@@ -173,7 +172,7 @@ pub fn get_state(L: *zlua.Lua) i32 {
 // TODO: remove the default values once we switch to a commit after 22cad3a
 /// all setter data is optional
 const set_output_state = struct {
-    position: ?wlr.Box = null, // TODO(squibid): impl
+    position: ?struct { x: c_int = 0, y: c_int = 0 } = null,
     scale: ?f32 = null,
     transform: ?wl.Output.Transform = null,
     mode: ?Mode = null,
@@ -184,7 +183,9 @@ pub fn set_state(L: *zlua.Lua) i32 {
 
     const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
-        const lua_state = L.toAny(set_output_state, 2) catch unreachable;
+        const lua_state = L.toAny(set_output_state, 2) catch |err| {
+            L.raiseErrorStr("Output state is not usable! `%s`", .{ @errorName(err).ptr });
+        };
 
         var new_state: wlr.Output.State = .init();
         defer new_state.finish();
@@ -192,9 +193,18 @@ pub fn set_state(L: *zlua.Lua) i32 {
         if (lua_state.scale) |v| new_state.setScale(if (v <= 0) o.wlr_output.scale else v);
         if (lua_state.transform) |v| new_state.setTransform(v);
         if (lua_state.mode) |v| new_state.setCustomMode(v.width, v.height, v.refresh);
+        // TEST: this, make sure it actually changes where the output is placed
+        // if it doesn't we'll have to remove the output from the layout and
+        // then add it back with the new position.
+        if (lua_state.position) |v| {
+            if (server.root.output_layout.get(o.wlr_output)) |layout| {
+                layout.x = v.x;
+                layout.y = v.y;
+            }
+        }
 
         if (!o.wlr_output.testState(&new_state)) {
-            L.raiseErrorStr("Output state is not usable! `{any}`", .{ new_state });
+            L.raiseErrorStr("Output state is not usable!", .{});
         }
 
         _ = o.wlr_output.commitState(&new_state);
