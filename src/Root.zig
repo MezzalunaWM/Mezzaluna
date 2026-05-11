@@ -18,7 +18,6 @@ const Utils = @import("Utils.zig");
 scene_node_data: SceneNode.Data,
 
 scene: *wlr.Scene,
-scene_output_layout: *wlr.SceneOutputLayout,
 output_layout: *wlr.OutputLayout,
 output_manager: *wlr.OutputManagerV1,
 output_power_manager: *wlr.OutputPowerManagerV1,
@@ -45,7 +44,6 @@ pub fn init(self: *Root) void {
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
-        .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
 
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);

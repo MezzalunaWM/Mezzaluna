@@ -286,8 +286,17 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
     });
 }
 
-fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    _ = Output.init(wlr_output);
+fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+    const self: *Server = @fieldParentPtr("new_output", listener);
+    const output = Output.init(wlr_output) orelse {
+        std.log.err("Failed to create new output", .{});
+        return;
+    };
+
+    // TODO: Allow user to define output positions
+    _ = self.root.output_layout.addAuto(output.wlr_output) catch {
+        std.log.err("failed to add output to the output layout :(", .{});
+    };
 }
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {
