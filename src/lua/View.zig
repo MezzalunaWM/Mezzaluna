@@ -32,7 +32,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
         }
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        if (!output.state.enabled) continue;
+        if (!output.wlr_output.enabled) continue;
 
         // Only search the content and fullscreen layers for views
         var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{

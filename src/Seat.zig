@@ -169,10 +169,6 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 }
 
 pub fn focusOutput(self: *Seat, output: *Output) void {
-    if (self.focused_output) |prev_output| {
-        prev_output.focused = false;
-    }
-
     self.focused_output = output;
 }
 

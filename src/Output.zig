@@ -25,12 +25,10 @@ const Layers = struct {
     overlay: *wlr.SceneTree,
 };
 
-focused: bool,
 id: u64,
 fullscreens: std.ArrayList(*View),
 
 wlr_output: *wlr.Output,
-state: wlr.Output.State,
 tree: *wlr.SceneTree,
 scene_node_data: SceneNodeData,
 scene_output: *wlr.SceneOutput,
@@ -49,7 +47,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     const self = try gpa.create(Output);
 
     self.* = .{
-        .focused = false,
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
         .tree = try server.root.scene.tree.createSceneTree(),
@@ -66,7 +63,6 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),
         .scene_node_data = SceneNodeData{ .output = self },
-        .state = wlr.Output.State.init()
     };
 
     wlr_output.events.frame.add(&self.frame);
@@ -80,22 +76,19 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
         return null;
     }
 
-    self.state.setEnabled(true);
+    self.wlr_output.data = self;
+    self.tree.node.data = &self.scene_node_data;
 
-    if (wlr_output.preferredMode()) |mode| {
-        self.state.setMode(mode);
-    }
+    var state = wlr.Output.State.init();
+    defer state.finish();
 
-    if (!wlr_output.commitState(&self.state)) {
+    state.setEnabled(true);
+    if (wlr_output.preferredMode()) |mode| state.setMode(mode);
+
+    if (!wlr_output.commitState(&state)) {
         std.log.err("Unable to commit state to output {s}", .{wlr_output.name});
         return null;
     }
-
-    // TODO: Allow user to define output positions
-    self.setFocused();
-
-    self.wlr_output.data = self;
-    self.tree.node.data = &self.scene_node_data;
 
     server.events.exec("OutputInitPost", .{self.id}, "After a new output is initialized. You're probably looking for OutputStateChange.");
 
@@ -109,8 +102,6 @@ pub fn deinit(self: *Output) void {
     self.request_state.link.remove();
     self.destroy.link.remove();
 
-    self.state.finish();
-
     self.wlr_output.destroy();
 
     server.events.exec("OutputDeinitPost", .{}, "After an output is de-initialized.");
@@ -119,12 +110,7 @@ pub fn deinit(self: *Output) void {
 }
 
 pub fn setFocused(self: *Output) void {
-    if (server.getDefaultSeat().focused_output) |prev_output| {
-        prev_output.focused = false;
-    }
-
     server.getDefaultSeat().focused_output = self;
-    self.focused = true;
 }
 
 const SurfaceAtResult = struct {

@@ -297,6 +297,10 @@ fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output)
     _ = self.root.output_layout.addAuto(output.wlr_output) catch {
         std.log.err("failed to add output to the output layout :(", .{});
     };
+
+    if (self.getDefaultSeat().focused_output == null) {
+        self.getDefaultSeat().focusOutput(output);
+    }
 }
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {
