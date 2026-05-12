@@ -21,8 +21,12 @@ pub fn Iterator(comptime direction: wl.list.Direction) type {
         node_iter: wl.list.Head(wlr.SceneNode, .link).Iterator(direction),
         i: u32,
         pub fn next(self: *@This()) ?*Data {
-            std.debug.assert(@intFromPtr(self.trees[self.i]) != 0);
-            if (self.trees[self.i].children.length() == 0) return self.next();
+            if (self.i >= self.trees.len) return null;
+            self.node_iter = self.trees[self.i].children.iterator(direction);
+            if (self.trees[self.i].children.length() == 0) {
+                self.i += 1;
+                return self.next();
+            }
 
             while (self.node_iter.next()) |node| {
                 if (node.data == null) continue;
@@ -30,9 +34,6 @@ pub fn Iterator(comptime direction: wl.list.Direction) type {
             }
 
             self.i += 1;
-            if (self.i >= self.trees.len) return null;
-
-            self.node_iter = self.trees[self.i].children.iterator(direction);
             return self.next();
         }
     };
