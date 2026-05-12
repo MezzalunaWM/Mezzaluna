@@ -91,7 +91,7 @@ local default_config = {
 M.tile_tag = function(tag_id)
 	local tag = M.state.tags[tag_id]
 
-	local area = mez.output.get_available_area(0)
+  local area = mez.output.get_state(0).available_area
 
 	if tag.master == nil then return end
 
