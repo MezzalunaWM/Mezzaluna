@@ -11,7 +11,6 @@ const SceneNodeData = @import("SceneNode.zig").Data;
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
-output: *Output,
 scene_node_data: SceneNodeData,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
 scene_layer_surface: *wlr.SceneLayerSurfaceV1,
@@ -28,17 +27,15 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     const self = try gpa.create(LayerSurface);
 
     self.* = .{
-        .output = undefined,
         .wlr_layer_surface = wlr_layer_surface,
         .scene_layer_surface = undefined,
         .scene_node_data = .{ .layer_surface = self },
     };
 
     if (wlr_layer_surface.output.?.data == null) {
-        std.log.err("Wlr_output arbitrary data not assigned", .{});
+        std.log.err("wlr_output arbitrary data not assigned", .{});
         unreachable;
     }
-    self.output = @ptrCast(@alignCast(wlr_layer_surface.output.?.data));
 
     // layersurfaces are always given the the default seat
     if (server.getDefaultSeat().focused_output) |output| {
@@ -77,6 +74,10 @@ pub fn deinit(self: *LayerSurface) void {
     gpa.destroy(self);
 }
 
+pub fn getOutput(self: *LayerSurface) *Output {
+    return @alignCast(@ptrCast(self.wlr_layer_surface.output.?.data));
+}
+
 // --------- LayerSurface event handlers ---------
 fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfaceV1) void {
     const layer: *LayerSurface = @fieldParentPtr("destroy", listener);
@@ -85,7 +86,7 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 
 fn handleMap(listener: *wl.Listener(void)) void {
     const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
-    layer_suraface.output.arrangeLayers();
+    layer_suraface.getOutput().arrangeLayers();
     if (layer_suraface.wlr_layer_surface.current.keyboard_interactive != .none) {
         server.getDefaultSeat().focusSurface(.{ .layer_surface = layer_suraface });
     }
@@ -101,7 +102,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     }
 
     // FIXME: this crashes mez when killing mez
-    layer_surface.output.arrangeLayers();
+    layer_surface.getOutput().arrangeLayers();
 
     // TODO: Idk if this should be deiniting the layer surface entirely
     layer_surface.deinit();
@@ -111,5 +112,5 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const layer_surface: *LayerSurface = @fieldParentPtr("commit", listener);
 
     if (!layer_surface.wlr_layer_surface.initial_commit) return;
-    layer_surface.output.arrangeLayers();
+    layer_surface.getOutput().arrangeLayers();
 }
