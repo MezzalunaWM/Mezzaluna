@@ -37,20 +37,17 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
         unreachable;
     }
 
-    // layersurfaces are always given the the default seat
-    if (server.getDefaultSeat().focused_output) |output| {
-        self.scene_layer_surface = blk: {
-            inline for (std.meta.fields(@TypeOf(wlr_layer_surface.current.layer))) |field| {
-                if (std.mem.eql(u8, @tagName(wlr_layer_surface.current.layer), field.name)) {
-                    const layer = @field(output.layers, field.name);
-                    break :blk try layer.createSceneLayerSurfaceV1(wlr_layer_surface);
-                }
+    self.scene_layer_surface = blk: {
+        inline for (std.meta.fields(@TypeOf(wlr_layer_surface.current.layer))) |field| {
+            if (std.mem.eql(u8, @tagName(wlr_layer_surface.current.layer), field.name)) {
+                const layer = @field(self.getOutput().layers, field.name);
+                break :blk try layer.createSceneLayerSurfaceV1(wlr_layer_surface);
             }
-            std.debug.panic("New layer surface which we do not support: `{s}`", .{
-                @tagName(wlr_layer_surface.current.layer),
-            });
-        };
-    }
+        }
+        std.debug.panic("New layer surface which we do not support: `{s}`", .{
+            @tagName(wlr_layer_surface.current.layer),
+        });
+    };
 
     self.wlr_layer_surface.surface.data = &self.scene_node_data;
     self.scene_layer_surface.tree.node.data = &self.scene_node_data;
