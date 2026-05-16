@@ -17,7 +17,7 @@ const gpa = std.heap.c_allocator;
 const Mode = struct {
     width: i32,
     height: i32,
-    refresh: i32,
+    refresh: f64,
     preferred: bool,
 };
 
@@ -98,16 +98,16 @@ pub fn get_views(L: *zlua.Lua) i32 {
 }
 
 const get_output_state = struct {
-    rate: i32,
+    refresh: f64,
     scale: f32,
     resolution: struct { width: c_int = 0, height: c_int = 0 },
     available_area: wlr.Box,
     position: struct { x: c_int, y: c_int },
     transform: [:0]const u8,
-    make: [:0]const u8,
-    serial: [:0]const u8,
-    model: [:0]const u8,
-    description: [:0]const u8,
+    make: ?[:0]const u8,
+    serial: ?[:0]const u8,
+    model: ?[:0]const u8,
+    description: ?[:0]const u8,
     name: [:0]const u8,
     modes: []Mode,
 };
@@ -135,13 +135,13 @@ pub fn get_state(L: *zlua.Lua) i32 {
                 .x = if (output_layout) |l| l.x else 0,
                 .y = if (output_layout) |l| l.y else 0,
             },
-            .rate = o.wlr_output.refresh,
+            .refresh = @as(f64, @floatFromInt(o.wlr_output.refresh)) / 1000.0,
             .available_area = o.non_exclusive_area,
             .transform = @tagName(o.wlr_output.transform),
-            .make = std.mem.span(o.wlr_output.make orelse "(null)"),
-            .serial = std.mem.span(o.wlr_output.serial orelse "(null)"),
-            .model = std.mem.span(o.wlr_output.model orelse "(null)"),
-            .description = std.mem.span(o.wlr_output.description orelse "(null)"),
+            .make = if (o.wlr_output.make) |m| std.mem.span(m) else null,
+            .serial = if (o.wlr_output.make) |s| std.mem.span(s) else null,
+            .model = if (o.wlr_output.model) |m| std.mem.span(m) else null,
+            .description = if (o.wlr_output.description) |d| std.mem.span(d) else null,
             .name = std.mem.span(o.wlr_output.name),
             .modes = blk: {
                 var i: u32 = 0; // I wonder how many modes a display can have
@@ -149,7 +149,7 @@ pub fn get_state(L: *zlua.Lua) i32 {
                     modes[i] = Mode{
                         .width = mode.width,
                         .height = mode.height,
-                        .refresh = mode.refresh,
+                        .refresh = @as(f64, @floatFromInt(mode.refresh)) / 1000.0,
                         .preferred = mode.preferred,
                     };
                 }
@@ -186,10 +186,7 @@ pub fn set_state(L: *zlua.Lua) i32 {
 
         if (lua_state.scale) |v| new_state.setScale(if (v <= 0) o.wlr_output.scale else v);
         if (lua_state.transform) |v| new_state.setTransform(v);
-        if (lua_state.mode) |v| new_state.setCustomMode(v.width, v.height, v.refresh);
-        // TEST: this, make sure it actually changes where the output is placed
-        // if it doesn't we'll have to remove the output from the layout and
-        // then add it back with the new position.
+        if (lua_state.mode) |v| new_state.setCustomMode(v.width, v.height, @intFromFloat(v.refresh * 1000));
         if (lua_state.position) |v| {
             if (server.root.output_layout.get(o.wlr_output)) |layout| {
                 layout.x = v.x;
@@ -197,11 +194,13 @@ pub fn set_state(L: *zlua.Lua) i32 {
             }
         }
 
-        if (!o.wlr_output.testState(&new_state)) {
+        if (!o.wlr_output.testState(&new_state)
+            or !o.wlr_output.commitState(&new_state)) {
             L.raiseErrorStr("Output state is not usable!", .{});
         }
 
-        _ = o.wlr_output.commitState(&new_state);
+        // keep the output manager in sync with the output
+        server.root.configureOutputs();
 
         o.arrangeLayers();
         return 0;
