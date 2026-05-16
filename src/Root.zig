@@ -73,6 +73,26 @@ pub fn deinit(self: *Root) void {
     self.scene.tree.node.destroy();
 }
 
+pub fn configureOutputs(self: *const Root) void {
+    // update the config with all monitors and send it to the output_manager
+    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+
+    // TODO: do we ommit disabled monitors here?
+    var iter = self.scene.outputs.iterator(.forward);
+    while (iter.next()) |scene_output| {
+        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
+
+        if (self.output_layout.get(scene_output.output)) |_| {
+            _ = self.output_layout.addAuto(scene_output.output) catch Utils.oomPanic();
+        }
+
+        config_head.state.x = scene_output.x;
+        config_head.state.y = scene_output.y;
+    }
+
+    self.output_manager.setConfiguration(config);
+}
+
 // Search output_layout's outputs, and each outputs views
 pub fn viewById(self: *Root, id: u64) ?*View {
     var output_it = self.output_layout.outputs.iterator(.forward);
