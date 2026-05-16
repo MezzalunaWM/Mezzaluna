@@ -22,6 +22,7 @@ commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
 // new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
 
 pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
+    errdefer wlr_layer_surface.destroy();
     errdefer Utils.oomPanic();
 
     const self = try gpa.create(LayerSurface);
