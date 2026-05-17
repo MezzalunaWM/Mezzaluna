@@ -244,7 +244,9 @@ pub fn arrangeLayers(self: *Output) void {
                 else => continue,
             };
 
+            // TEST: should we set the layersurface to the correct output?
             if (layer_surface.output.wlr_output != self.wlr_output) continue;
+
             if (!layer_surface.wlr_layer_surface.initialized) continue;
 
             // TEST: river seems to try and prevent clients from taking an
