@@ -245,7 +245,7 @@ pub fn arrangeLayers(self: *Output) void {
             };
 
             // TEST: should we set the layersurface to the correct output?
-            if (layer_surface.output.wlr_output != self.wlr_output) continue;
+            if (layer_surface.getOutput().wlr_output != self.wlr_output) continue;
 
             if (!layer_surface.wlr_layer_surface.initialized) continue;
 
@@ -261,14 +261,14 @@ pub fn arrangeLayers(self: *Output) void {
 
             // set the position of the new layersurface relative to the output
             // it belongs to
-            const x = layer_surface.output.scene_output.x;
-            const y = layer_surface.output.scene_output.y;
+            const x = layer_surface.getOutput().scene_output.x;
+            const y = layer_surface.getOutput().scene_output.y;
             layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
             layer_surface.scene_layer_surface.tree.node.subsurfaceTreeSetClip(&.{
                 .x = 0,
                 .y = 0,
-                .width = layer_surface.output.wlr_output.width,
-                .height = layer_surface.output.wlr_output.height,
+                .width = layer_surface.getOutput().wlr_output.width,
+                .height = layer_surface.getOutput().wlr_output.height,
             });
         }
     }
