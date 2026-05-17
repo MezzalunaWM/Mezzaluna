@@ -286,8 +286,30 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
     });
 }
 
-fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    _ = Output.init(wlr_output);
+fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+    const self: *Server = @fieldParentPtr("new_output", listener);
+    const output = Output.init(wlr_output) orelse {
+        std.log.err("Failed to create new output", .{});
+        return;
+    };
+
+    // TODO: Allow user to define output positions
+    const layout_output = self.root.output_layout.addAuto(output.wlr_output) catch {
+        std.log.err("failed to add output to the output layout", .{});
+        return;
+    };
+
+    output.scene_output.setPosition(layout_output.x, layout_output.y);
+
+    // FIXME: without this the lua api can crash mez very easily. Thankfully we
+    // don't have a case for not having any output selected, but it'd still be
+    // better if we didn't crash.
+    if (self.getDefaultSeat().focused_output == null) {
+        self.getDefaultSeat().focusOutput(output);
+    }
+
+    Root.configureOutputs(&self.root);
+    output.arrangeLayers();
 }
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {

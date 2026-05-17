@@ -18,7 +18,6 @@ const Utils = @import("Utils.zig");
 scene_node_data: SceneNode.Data,
 
 scene: *wlr.Scene,
-scene_output_layout: *wlr.SceneOutputLayout,
 output_layout: *wlr.OutputLayout,
 output_manager: *wlr.OutputManagerV1,
 output_power_manager: *wlr.OutputPowerManagerV1,
@@ -45,7 +44,6 @@ pub fn init(self: *Root) void {
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
-        .scene_output_layout = try scene.attachOutputLayout(output_layout),
     };
 
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
@@ -73,6 +71,26 @@ pub fn deinit(self: *Root) void {
 
     self.output_layout.destroy();
     self.scene.tree.node.destroy();
+}
+
+pub fn configureOutputs(self: *const Root) void {
+    // update the config with all monitors and send it to the output_manager
+    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+
+    // TODO: do we ommit disabled monitors here?
+    var iter = self.scene.outputs.iterator(.forward);
+    while (iter.next()) |scene_output| {
+        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
+
+        if (self.output_layout.get(scene_output.output)) |_| {
+            _ = self.output_layout.addAuto(scene_output.output) catch Utils.oomPanic();
+        }
+
+        config_head.state.x = scene_output.x;
+        config_head.state.y = scene_output.y;
+    }
+
+    self.output_manager.setConfiguration(config);
 }
 
 // Search output_layout's outputs, and each outputs views
