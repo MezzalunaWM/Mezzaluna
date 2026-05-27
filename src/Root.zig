@@ -144,7 +144,7 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
 
 // First we make a copy of the surface tree
 pub fn applyPending(self: *Root) void {
-    std.log.debug("ROOT - Apply pending", .{});
+    std.log.debug("\tROOT - Apply pending", .{});
 
     var output_it = self.output_layout.outputs.iterator(.forward);
 
@@ -167,7 +167,7 @@ pub fn applyPending(self: *Root) void {
 }
 
 pub fn applySending(self: *Root) void {
-    std.log.debug("ROOT - Apply sending", .{});
+    std.log.debug("\tROOT - Apply sending", .{});
 
     var output_it = self.output_layout.outputs.iterator(.forward);
 

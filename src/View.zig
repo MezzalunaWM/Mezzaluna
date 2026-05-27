@@ -54,7 +54,18 @@ xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 saved_surface_tree: *wlr.SceneTree,
-scene_node_data: SceneNodeData,
+
+scene_tree_snd: SceneNodeData,
+surface_tree_snd: SceneNodeData,
+saved_tree_snd: SceneNodeData,
+surface_snd: SceneNodeData,
+
+previous_geometry: wlr.Box,
+border_width: i32,
+border_color: [4]f32,
+borders: [4]*wlr.SceneRect,
+
+borders_snd: SceneNodeData,
 
 // These three states are what (hopefully) make perfect frames possible
 // The *pending* state is state that has been queued and is waiting to be applied
@@ -63,11 +74,6 @@ scene_node_data: SceneNodeData,
 pending: ?State,
 sending: ?State,
 current: State,
-
-previous_geometry: wlr.Box,
-border_width: i32,
-border_color: [4]f32,
-borders: [4]*wlr.SceneRect,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -105,7 +111,12 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .scene_tree = try server.root.hidden_tree.createSceneTree(),
         .surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base),
         .saved_surface_tree = try self.scene_tree.createSceneTree(),
-        .scene_node_data = .{ .view = self },
+
+        .scene_tree_snd = .{ .view = self },
+        .surface_tree_snd = .{ .view_surface_tree = self },
+        .saved_tree_snd = .{ .view_saved_tree = self },
+        .surface_snd = .{ .view_surface = self },
+        .borders_snd = .{ .view_border = self },
 
         .border_width = 0,
         .border_color = .{ 0, 0, 0, 1 },
@@ -135,10 +146,12 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     }
 
     // Set a bunch of scene node data to point here
-    self.scene_tree.node.data = &self.scene_node_data;
-    self.surface_tree.node.data = &self.scene_node_data;
-    self.saved_surface_tree.node.data = &self.scene_node_data;
-    self.xdg_toplevel.base.data = &self.scene_node_data;
+    self.scene_tree.node.data = &self.scene_tree_snd;
+    self.surface_tree.node.data = &self.surface_tree_snd;
+    self.saved_surface_tree.node.data = &self.saved_tree_snd;
+
+    self.xdg_toplevel.base.data = &self.scene_tree_snd;
+    self.xdg_toplevel.base.surface.data = &self.surface_snd;
 
     // Add events too xdg_toplevel
     self.xdg_toplevel.events.destroy.add(&self.destroy);
@@ -300,13 +313,44 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
-    std.log.debug("\tApply pending {d}", .{self.id});
+    std.log.debug("\t\tApply pending {d}", .{self.id});
+
+    std.log.debug("surface tree children: {d}", .{self.surface_tree.children.length()});
+    if(self.surface_tree.children.first().?.data) |d| {
+        const snd: *SceneNodeData = @ptrCast(@alignCast(d));
+        std.log.debug("checking surface tree child", .{});
+        switch (snd.*) {
+            .view => {
+                std.log.debug("Its a view", .{});
+            },
+            .view_surface_tree => {
+                std.log.debug("Its a surface tree", .{});
+            },
+            .view_surface => {
+                std.log.debug("Its a surface...", .{});
+            },
+            .output_layer => {
+                std.log.debug("Its a output layer", .{});
+            },
+            .output => {
+                std.log.debug("Its an output", .{});
+            },
+            .root => {
+                std.log.debug("Its root", .{});
+            },
+            else => {
+                std.log.debug("Its NOTHING", .{});
+            }
+        }
+    } else {
+        std.log.debug("No data type shit", .{});
+    }
 
     self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
     
+    std.log.debug("\t\t...Hiding...", .{});
     self.surface_tree.node.setEnabled(false);
     self.saved_surface_tree.node.setEnabled(true);
-    std.log.debug("\tShowing the saved buffer tree", .{});
 
     if (self.pending == null) return;
     const pending = &self.pending.?;
@@ -321,26 +365,26 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
-        std.log.debug("\t\tGeometry configure {d}", .{self.id});
+        std.log.debug("\t\t\tGeometry configure {d}", .{self.id});
     }
 
     // Decoration mode
     if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
         serial = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
-        std.log.debug("\t\tDecoration configure {d}", .{self.id});
+        std.log.debug("\t\t\tDecoration configure {d}", .{self.id});
     }
 
     // WM Capabilities
     if (pending.wm_capabilities != current.wm_capabilities) {
         serial = self.xdg_toplevel.setWmCapabilities(pending.wm_capabilities);
-        std.log.debug("\t\tCapabilities configure {d}", .{self.id});
+        std.log.debug("\t\t\tCapabilities configure {d}", .{self.id});
     }
 
     // Activated
     if (pending.activated != current.activated) {
         serial = self.xdg_toplevel.setActivated(pending.activated);
 
-        std.log.debug("\t\tActivated configure {d}", .{self.id});
+        std.log.debug("\t\t\tActivated configure {d}", .{self.id});
 
         // After a view's focus is set
         server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
@@ -350,13 +394,13 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
     if (pending.tiled_edges != current.tiled_edges) {
         serial = self.xdg_toplevel.setTiled(pending.tiled_edges);
 
-        std.log.debug("\t\tTiling configure {d}", .{self.id});
+        std.log.debug("\t\t\tTiling configure {d}", .{self.id});
     }
 
     // Enabled
     // if (pending.enabled != current.enabled) {
     //     self.scene_tree.node.setEnabled(pending.enabled);
-    //     std.log.debug("\t\tEnabled configure {d}", .{self.id});
+    //     std.log.debug("\t\t\tEnabled configure {d}", .{self.id});
     // }
 
     if (serial) |s| {
@@ -368,16 +412,55 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
 }
 
 fn saveSurfaceTreeIter(buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, saved_surface_tree: *wlr.SceneTree) void {
-    std.log.debug("COPY IS HAPPENING", .{});
+    std.log.debug("\t\t\tMaking Buffer copy", .{});
 
     // Create new saved surface tree
     const saved = saved_surface_tree.createSceneBuffer(buffer.buffer) catch Utils.oomPanic();
 
+    if(buffer.node.parent.?.node.parent.?.node.data) |d| {
+        const parent_snd: *SceneNodeData = @ptrCast(@alignCast(d));
+        switch (parent_snd.*) {
+            .view => {
+                std.log.debug("Its a view", .{});
+            },
+            .view_surface_tree => {
+                std.log.debug("Its a surface tree", .{});
+            },
+            .view_surface => {
+                std.log.debug("Its a surface...", .{});
+            },
+            .output_layer => {
+                std.log.debug("Its a output layer", .{});
+            },
+            .output => {
+                std.log.debug("Its an output", .{});
+            },
+            .root => {
+                std.log.debug("Its root", .{});
+            },
+            else => {
+                std.log.debug("Its NOTHING", .{});
+            }
+        }
+    } else {
+        std.log.debug("This is untracked", .{});
+    }
+
+    std.log.debug("\t\t\t\tSaved tree children: {d}", .{saved_surface_tree.children.length()});
+
     // Copy all properties
     saved.node.setPosition(sx, sy);
+    std.log.debug("\t\t\t\tSet position, ({d}, {d})", .{sx, sy});
+
     saved.setDestSize(buffer.dst_width, buffer.dst_height);
+    std.log.debug("\t\t\t\tDestination_size ({d}, {d})", .{buffer.dst_width, buffer.dst_height});
+
     saved.setSourceBox(&buffer.src_box);
+    std.log.debug("\t\t\t\tSource box, ({d}, {d}, {d}, {d})", .{buffer.src_box.x, buffer.src_box.y, buffer.src_box.width, buffer.src_box.height});
+    
     saved.setTransform(buffer.transform);
+
+    std.log.debug("\t\t\tBuffer copy made", .{});
 }
 
 fn dropSavedSurfaceTree(self: *View) void {
@@ -389,13 +472,14 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
-    std.log.debug("\tApplying sending {d}", .{self.id});
+    std.log.debug("\t\tApplying sending {d}", .{self.id});
 
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
+    std.log.debug("\t\t...Revealing...", .{});
     self.surface_tree.node.setEnabled(true);
-    self.saved_surface_tree.node.setEnabled(false);
+    self.saved_surface_tree.node.setEnabled(true);
 
     self.dropSavedSurfaceTree();
 
@@ -486,7 +570,7 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
     if (view.xdg_toplevel.base.initial_commit) {
-        std.log.debug("\t\tInitial commit", .{});
+        std.log.debug("\t\t\tInitial commit", .{});
 
         // view.xdg_toplevel.configure(configure: *const Configure)
         server.root.applyPending();
@@ -521,7 +605,7 @@ fn handleAckConfigure(
         _ = server.root.configures.swapRemove(i);
     }
 
-    std.log.debug("\t\tHandling configure {d} | {d} left", .{ event.serial, server.root.configures.items.len });
+    std.log.debug("\t\t\tHandling configure {d} | {d} left", .{ event.serial, server.root.configures.items.len });
 
     if (server.root.configures.items.len == 0) {
         server.root.applySending();
