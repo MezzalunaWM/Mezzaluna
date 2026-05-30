@@ -82,12 +82,12 @@ pub fn configureOutputs(self: *const Root) void {
     while (iter.next()) |scene_output| {
         const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
 
-        if (self.output_layout.get(scene_output.output)) |_| {
-            _ = self.output_layout.addAuto(scene_output.output) catch Utils.oomPanic();
-        }
+        if (self.output_layout.get(scene_output.output)) |o| {
+            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch Utils.oomPanic();
 
-        config_head.state.x = scene_output.x;
-        config_head.state.y = scene_output.y;
+            config_head.state.x = o.x;
+            config_head.state.y = o.y;
+        }
     }
 
     self.output_manager.setConfiguration(config);
