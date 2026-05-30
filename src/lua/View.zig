@@ -424,3 +424,39 @@ pub fn setWmCapabilities(L: *zlua.Lua) i32 {
     _ = L;
     return 0;
 }
+
+/// ---Get the id of the view at a xy coordinate. Coordinates passed in should
+/// ---be relative to 0,0 on monitor coordinate space.
+/// ---@param x integer
+/// ---@param y integer
+/// ---@return view_id?
+pub fn at_xy(L: *zlua.Lua) i32 {
+    const x = L.checkInteger(1);
+    const y = L.checkInteger(2);
+
+    const wlr_output = server.root.output_layout.outputAt(@floatFromInt(x), @floatFromInt(y)) orelse {
+        L.pushNil();
+        return 1;
+    };
+
+    const output: *Output = @ptrCast(@alignCast(wlr_output.data.?));
+
+    var output_x: c_int = 0;
+    var output_y: c_int = 0;
+    if (server.root.output_layout.get(output.wlr_output)) |o| {
+        output_x = o.x;
+        output_y = o.y;
+    }
+
+    // convert to output relative coordinates
+    const surface = output.surfaceAt(
+        @floatFromInt(x - output_x),
+        @floatFromInt(y - output_y)
+    ) orelse {
+        L.pushNil();
+        return 1;
+    };
+
+    L.pushInteger(@intCast(surface.scene_node_data.view.id));
+    return 1;
+}

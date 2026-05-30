@@ -245,3 +245,22 @@ pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
     L.pushInteger(@intCast(view.?.id));
     return 1;
 }
+
+/// ---Get the id of the output at a xy coordinate
+/// ---@param x integer
+/// ---@param y integer
+/// ---@return output_id?
+pub fn at_xy(L: *zlua.Lua) i32 {
+    const x = L.checkInteger(1);
+    const y = L.checkInteger(2);
+
+    const wlr_output = server.root.output_layout.outputAt(@floatFromInt(x), @floatFromInt(y)) orelse {
+        L.pushNil();
+        return 1;
+    };
+
+    const output: *Output = @ptrCast(@alignCast(wlr_output.data.?));
+    L.pushInteger(@intCast(output.id));
+
+    return 1;
+}
