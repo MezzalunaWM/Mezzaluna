@@ -33,6 +33,8 @@ destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 pub fn init(device: *wlr.InputDevice) *Keyboard {
     const self = gpa.create(Keyboard) catch Utils.oomPanic();
 
+    // TODO: there is no world where pluggin in a keyboard should crash the
+    // compositor >:(
     errdefer {
         std.log.err("Unable to initialize new keyboard, exiting", .{});
         std.process.exit(6);

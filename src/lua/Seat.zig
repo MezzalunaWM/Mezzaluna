@@ -66,7 +66,11 @@ pub fn remove(L: *zlua.Lua) i32 {
     return 1;
 }
 
-// TODO(squibid): add_input_device
+// TODO: finish this
+pub fn add_intput_device(L: *zlua.Lua) i32 {
+    _ = L;
+    return 0;
+}
 
 /// ---Set the repeat information for a seat
 /// ---@param seat integer seat id

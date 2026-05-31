@@ -11,6 +11,7 @@ const KeyboardGroup = @import("KeyboardGroup.zig");
 const Keyboard = @import("Keyboard.zig");
 const Cursor = @import("Cursor.zig");
 const Utils = @import("Utils.zig");
+const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
@@ -175,7 +176,7 @@ pub fn focusOutput(self: *Seat, output: *Output) void {
 pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = Keyboard.init(device);
+            const keyboard = (input_device.get(device) orelse return).keyboard;
             self.keyboard_group.addKeyboard(keyboard);
         },
         .pointer => {

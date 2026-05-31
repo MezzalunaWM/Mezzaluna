@@ -133,6 +133,7 @@ pub fn openMezLibs(self: *zlua.Lua) void {
     inline for (.{
         .{ "api", @import("Api.zig") },
         .{ "async", @import("Async.zig") },
+        .{ "device", @import("Device.zig") },
         .{ "fs", @import("Fs.zig") },
         .{ "hook", @import("Hook.zig") },
         .{ "input", @import("Input.zig") },
