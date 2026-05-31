@@ -6,7 +6,6 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
 
 const Output = @import("Output.zig");
 const View = @import("View.zig");
@@ -17,7 +16,8 @@ const Utils = @import("Utils.zig");
 
 scene_node_data: SceneNodeData,
 
-configures: std.ArrayList(u32),
+pending_views: u32,
+pending_state_dirty: bool,
 
 scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
@@ -56,7 +56,8 @@ pub fn init(self: *Root) void {
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
 
-        .configures = std.ArrayList(u32).initCapacity(gpa, 8) catch Utils.oomPanic()
+        .pending_views = 0,
+        .pending_state_dirty = false,
     };
 
     // This hidden tree is, you guessed it, hidden
@@ -83,7 +84,6 @@ pub fn deinit(self: *Root) void {
         output.deinit();
     }
 
-    self.configures.deinit(gpa);
     self.output_layout.destroy();
     self.hidden_tree.node.destroy();
     self.scene.tree.node.destroy();
@@ -142,9 +142,14 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
     return null;
 }
 
-// First we make a copy of the surface tree
 pub fn applyPending(self: *Root) void {
-    std.log.debug("\tROOT - Apply pending", .{});
+    // Check if state is already sending and come back to new pending later
+    if (self.pending_views > 0) {
+        self.pending_state_dirty = true;
+        return;
+    }
+
+    self.pending_views = 0;
 
     var output_it = self.output_layout.outputs.iterator(.forward);
 
@@ -161,14 +166,17 @@ pub fn applyPending(self: *Root) void {
             const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
             if(view_snd.* != .view) continue;
 
-            view_snd.view.applyPending(&self.configures);
+            view_snd.view.applyPending();
         }
+    }
+
+    // Apply sending if no configures were sent
+    if (self.pending_views == 0) {
+        self.applySending();
     }
 }
 
 pub fn applySending(self: *Root) void {
-    std.log.debug("\tROOT - Apply sending", .{});
-
     var output_it = self.output_layout.outputs.iterator(.forward);
 
     while(output_it.next()) |o| {
@@ -186,6 +194,12 @@ pub fn applySending(self: *Root) void {
 
             view_snd.view.applySending();
         }
+    }
+
+    // Take care of state that was made pending while handling other sending state
+    if (self.pending_state_dirty) {
+        self.pending_state_dirty = false;
+        self.applyPending();
     }
 }
 

@@ -75,6 +75,9 @@ pending: ?State,
 sending: ?State,
 current: State,
 
+// After view configure, and waiting for new buffer commitment
+awaiting_buffer: bool,
+
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
 unmap: wl.Listener(void) = .init(handleUnmap),
@@ -125,18 +128,18 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .pending = State.init(),
         .sending = null,
         .current = .{},
+
+        .awaiting_buffer = false,
     };
 
     self.scene_tree.node.setEnabled(true);
-    self.surface_tree.node.setEnabled(false);
+    self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
     // Add new Toplevel to root of the tree
     if (server.getDefaultSeat().focused_output) |output| {
-        self.scene_tree = try output.layers.content.createSceneTree();
-        self.surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base);
-        self.output = output;
         self.scene_tree.node.reparent(output.layers.content);
+        self.output = output;
     }
 
     // Create border scene_rects
@@ -312,79 +315,46 @@ pub fn resizeBorders(self: *View) void {
     self.borders[2].node.setPosition(self.current.geometry.width - self.border_width, 0);
 }
 
-pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
-    std.log.debug("\t\tApply pending {d}", .{self.id});
-
-    std.log.debug("surface tree children: {d}", .{self.surface_tree.children.length()});
-    if(self.surface_tree.children.first().?.data) |d| {
-        const snd: *SceneNodeData = @ptrCast(@alignCast(d));
-        std.log.debug("checking surface tree child", .{});
-        switch (snd.*) {
-            .view => {
-                std.log.debug("Its a view", .{});
-            },
-            .view_surface_tree => {
-                std.log.debug("Its a surface tree", .{});
-            },
-            .view_surface => {
-                std.log.debug("Its a surface...", .{});
-            },
-            .output_layer => {
-                std.log.debug("Its a output layer", .{});
-            },
-            .output => {
-                std.log.debug("Its an output", .{});
-            },
-            .root => {
-                std.log.debug("Its root", .{});
-            },
-            else => {
-                std.log.debug("Its NOTHING", .{});
-            }
-        }
-    } else {
-        std.log.debug("No data type shit", .{});
-    }
-
-    self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
-    
-    std.log.debug("\t\t...Hiding...", .{});
-    self.surface_tree.node.setEnabled(false);
-    self.saved_surface_tree.node.setEnabled(true);
-
+pub fn applyPending(self: *View) void {
     if (self.pending == null) return;
     const pending = &self.pending.?;
     const current = &self.current;
 
-    var serial: ?u32 = null;
-
-    // Geometry
+    // Check if geometry has changed
     if (!wlr.Box.equal(&pending.geometry, &current.geometry)) {
-        self.scene_tree.node.setPosition(pending.geometry.x, pending.geometry.y);
-        serial = self.xdg_toplevel.setSize(
+        self.dropSavedSurfaceTree();
+
+        self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
+
+        self.surface_tree.node.setEnabled(false);
+        self.saved_surface_tree.node.setEnabled(true);
+
+        // Position is not something the client needs to consider so it happens instantly
+        // We wait till the client commits its new buffer to position
+
+        _ = self.xdg_toplevel.setSize(
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
         std.log.debug("\t\t\tGeometry configure {d}", .{self.id});
+
+        self.awaiting_buffer = true;
+        server.root.pending_views += 1;
     }
 
     // Decoration mode
     if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
-        serial = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
-        std.log.debug("\t\t\tDecoration configure {d}", .{self.id});
+        _ = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
     }
 
     // WM Capabilities
     if (pending.wm_capabilities != current.wm_capabilities) {
-        serial = self.xdg_toplevel.setWmCapabilities(pending.wm_capabilities);
-        std.log.debug("\t\t\tCapabilities configure {d}", .{self.id});
+        _ = self.xdg_toplevel.setWmCapabilities(pending.wm_capabilities);
     }
 
     // Activated
     if (pending.activated != current.activated) {
-        serial = self.xdg_toplevel.setActivated(pending.activated);
-
-        std.log.debug("\t\t\tActivated configure {d}", .{self.id});
+        _ = self.xdg_toplevel.setActivated(pending.activated);
 
         // After a view's focus is set
         server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
@@ -392,75 +362,24 @@ pub fn applyPending(self: *View, configures: *std.ArrayList(u32)) void {
 
     // Tiling
     if (pending.tiled_edges != current.tiled_edges) {
-        serial = self.xdg_toplevel.setTiled(pending.tiled_edges);
-
-        std.log.debug("\t\t\tTiling configure {d}", .{self.id});
-    }
-
-    // Enabled
-    // if (pending.enabled != current.enabled) {
-    //     self.scene_tree.node.setEnabled(pending.enabled);
-    //     std.log.debug("\t\t\tEnabled configure {d}", .{self.id});
-    // }
-
-    if (serial) |s| {
-        configures.append(gpa, s) catch Utils.oomPanic();
+        _ = self.xdg_toplevel.setTiled(pending.tiled_edges);
     }
 
     self.sending = self.pending;
     self.pending = null;
 }
 
-fn saveSurfaceTreeIter(buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, saved_surface_tree: *wlr.SceneTree) void {
-    std.log.debug("\t\t\tMaking Buffer copy", .{});
+fn saveSurfaceTreeIter(scene_buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, saved_surface_tree: *wlr.SceneTree) void {
+    const buffer = scene_buffer.buffer orelse return;
 
-    // Create new saved surface tree
-    const saved = saved_surface_tree.createSceneBuffer(buffer.buffer) catch Utils.oomPanic();
-
-    if(buffer.node.parent.?.node.parent.?.node.data) |d| {
-        const parent_snd: *SceneNodeData = @ptrCast(@alignCast(d));
-        switch (parent_snd.*) {
-            .view => {
-                std.log.debug("Its a view", .{});
-            },
-            .view_surface_tree => {
-                std.log.debug("Its a surface tree", .{});
-            },
-            .view_surface => {
-                std.log.debug("Its a surface...", .{});
-            },
-            .output_layer => {
-                std.log.debug("Its a output layer", .{});
-            },
-            .output => {
-                std.log.debug("Its an output", .{});
-            },
-            .root => {
-                std.log.debug("Its root", .{});
-            },
-            else => {
-                std.log.debug("Its NOTHING", .{});
-            }
-        }
-    } else {
-        std.log.debug("This is untracked", .{});
-    }
-
-    std.log.debug("\t\t\t\tSaved tree children: {d}", .{saved_surface_tree.children.length()});
+    // Create saved scene buffer
+    const saved = saved_surface_tree.createSceneBuffer(buffer) catch Utils.oomPanic();
 
     // Copy all properties
     saved.node.setPosition(sx, sy);
-    std.log.debug("\t\t\t\tSet position, ({d}, {d})", .{sx, sy});
-
-    saved.setDestSize(buffer.dst_width, buffer.dst_height);
-    std.log.debug("\t\t\t\tDestination_size ({d}, {d})", .{buffer.dst_width, buffer.dst_height});
-
-    saved.setSourceBox(&buffer.src_box);
-    std.log.debug("\t\t\t\tSource box, ({d}, {d}, {d}, {d})", .{buffer.src_box.x, buffer.src_box.y, buffer.src_box.width, buffer.src_box.height});
-    
-    saved.setTransform(buffer.transform);
-
-    std.log.debug("\t\t\tBuffer copy made", .{});
+    saved.setDestSize(scene_buffer.dst_width, scene_buffer.dst_height);
+    saved.setSourceBox(&scene_buffer.src_box);
+    saved.setTransform(scene_buffer.transform);
 }
 
 fn dropSavedSurfaceTree(self: *View) void {
@@ -472,18 +391,16 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
-    std.log.debug("\t\tApplying sending {d}", .{self.id});
-
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
-    std.log.debug("\t\t...Revealing...", .{});
+    self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
+    self.resizeBorders();
+
     self.surface_tree.node.setEnabled(true);
-    self.saved_surface_tree.node.setEnabled(true);
+    self.saved_surface_tree.node.setEnabled(false);
 
     self.dropSavedSurfaceTree();
-
-    // self.resizeBorders();
 }
 
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
@@ -534,6 +451,18 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
+    // If this view was part of an inflight transaction, clean up so the
+    // root counter doesn't get stuck and other views can be revealed.
+    if (view.awaiting_buffer) {
+        view.awaiting_buffer = false;
+        if (server.root.pending_views > 0) {
+            server.root.pending_views -= 1;
+        }
+        if (server.root.pending_views == 0) {
+            server.root.applySending();
+        }
+    }
+
     server.events.exec("ViewUnmapPost", .{view.id});
 }
 
@@ -570,15 +499,22 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
     if (view.xdg_toplevel.base.initial_commit) {
-        std.log.debug("\t\t\tInitial commit", .{});
-
-        // view.xdg_toplevel.configure(configure: *const Configure)
         server.root.applyPending();
         return;
     }
 
-    // resize on every commit
-    // view.resizeBorders();
+    if (view.awaiting_buffer) {
+        view.awaiting_buffer = false;
+
+        if (server.root.pending_views > 0) {
+            server.root.pending_views -= 1;
+        }
+
+        // All views have gotten their commitments
+        if (server.root.pending_views == 0) {
+            server.root.applySending();
+        }
+    }
 }
 
 // --------- XdgToplevel Event Handlers ---------
@@ -601,15 +537,10 @@ fn handleAckConfigure(
     _: *wl.Listener(*wlr.XdgSurface.Configure),
     event: *wlr.XdgSurface.Configure,
 ) void {
-    if (std.mem.indexOfScalar(u32, server.root.configures.items, event.serial)) |i| {
-        _ = server.root.configures.swapRemove(i);
-    }
-
-    std.log.debug("\t\t\tHandling configure {d} | {d} left", .{ event.serial, server.root.configures.items.len });
-
-    if (server.root.configures.items.len == 0) {
-        server.root.applySending();
-    }
+    _ = event;
+    // We no longer trigger applySending on ack. Instead we wait for the
+    // client to commit the new buffer (handleCommit), which is the correct
+    // point to reveal the live surface and drop the saved copy.
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {

@@ -9,9 +9,9 @@ const gpa = std.heap.c_allocator;
 const Utils = @import("Utils.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
-pub fn debugPrintSceneTree() void {
+pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
     std.log.debug("=== SCENE TREE DEBUG ===", .{});
-    printNode(&server.root.scene.tree.node, 0);
+    printNode(root, 0);
     std.log.debug("=== END SCENE TREE ===", .{});
 }
 
@@ -54,14 +54,25 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
                 writer.print(" → Output Layer", .{}) catch unreachable;
             },
             .view => |view| {
-                writer.print(" → View: id={} mapped={} focused={}", .{
+                writer.print(" → View: id={} mapped={}", .{
                     view.id,
-                    view.xdg_toplevel.base.surface.mapped,
-                    view.focused,
+                    view.xdg_toplevel.base.surface.mapped
                 }) catch unreachable;
                 if (view.xdg_toplevel.title) |title| {
                     writer.print(" title=\"{s}\"", .{title}) catch unreachable;
                 }
+            },
+            .view_border => {
+                writer.print(" → View border" , .{}) catch unreachable;
+            },
+            .view_surface_tree => {
+                writer.print(" → View surface tree", .{}) catch unreachable;
+            },
+            .view_saved_tree => {
+                writer.print(" → View saved tree", .{}) catch unreachable;
+            },
+            .view_surface => {
+                writer.print(" → View surface", .{}) catch unreachable;
             },
             .layer_surface => |layer| {
                 const layer_name = switch (layer.wlr_layer_surface.current.layer) {
