@@ -69,6 +69,20 @@ pub fn remove(L: *zlua.Lua) i32 {
 // TODO: finish this
 pub fn add_intput_device(L: *zlua.Lua) i32 {
     _ = L;
+
+/// ---Remove focus from current view, and set to given id
+/// ---@param seat_id integer Id of the seat to be focused, 0 for default seat
+/// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
+pub fn set_focused_view(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id) orelse seat_id_err(L);
+    const view_id: ?c_longlong = L.optInteger(2);
+
+    if (view_id == null) {
+        seat.focusSurface(null);
+    } else if (server.root.viewById(@intCast(view_id.?))) |view| {
+        seat.focusSurface(.{ .view = view });
+    }
     return 0;
 }
 
@@ -89,6 +103,20 @@ pub fn get_focused_view(L: *zlua.Lua) i32 {
 
     L.pushNil();
     return 1;
+}
+
+/// ---Remove focus from current output, and set to given id
+/// ---@param seat_id integer Id of the seat to be focused
+/// ---@param output_id integer? Id of the output to be focused
+pub fn set_focused_output(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id) orelse seat_id_err(L);
+
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(2)) catch L.raiseErrorStr("Invalid output id", .{});
+    if (server.root.outputById(output_id)) |output| {
+        seat.focusOutput(output);
+    }
+    return 0;
 }
 
 /// ---Get the focused output of a seat
