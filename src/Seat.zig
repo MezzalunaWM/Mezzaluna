@@ -120,6 +120,16 @@ pub fn deinit(self: *Seat) void {
     self.wlr_seat.destroy();
 }
 
+pub fn id(self: *Seat) u32 {
+    var iter_seat = server.seats.iterator(.forward);
+    var i: u32 = 0;
+    while (iter_seat.next()) |v| : (i += 1) {
+        if (v == self) return i;
+    }
+
+    std.debug.panic("Trying to get id of seat not in the server's list of seats!", .{});
+}
+
 pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
     if (to_focus == null) {
         self.focused_surface = to_focus;
