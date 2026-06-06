@@ -72,6 +72,41 @@ pub fn add_intput_device(L: *zlua.Lua) i32 {
     return 0;
 }
 
+/// ---Get the focused view of a seat
+/// ---@param seat_id seat seat id
+/// ---@return view_id? result nil if the seat provided doesn't exist or nothing is focused
+pub fn get_focused_view(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    if (seat) |s| if (s.focused_surface) |surface| switch (surface) {
+        .view => |v| {
+            L.pushInteger(@intCast(v.id));
+            return 1;
+        },
+        .layer_surface => {},
+    };
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Get the focused output of a seat
+/// ---@param seat_id seat seat id
+/// ---@return output_id? result nil if the seat provided doesn't exist or nothing is focused
+pub fn get_focused_output(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    if (seat) |s| if (s.focused_output) |output| {
+        L.pushInteger(@intCast(output.id));
+        return 1;
+    };
+
+    L.pushNil();
+    return 1;
+}
+
 /// ---Set the repeat information for a seat
 /// ---@param seat integer seat id
 /// ---@param rate integer

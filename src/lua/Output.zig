@@ -46,27 +46,6 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the id for the focused output
-/// ---@param integer? seat seat id, nil for the default seat
-/// ---@return integer? result nil if the seat provided doesn't exist
-pub fn get_focused_id(L: *zlua.Lua) i32 {
-    const seat = if (!L.isNil(1)) blk: {
-        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
-        break :blk LuaUtils.seatFromId(seat_id) orelse {
-            L.pushNil();
-            return 1;
-        };
-    } else server.getDefaultSeat();
-
-    if (seat.focused_output) |output| {
-        L.pushInteger(@intCast(output.id));
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
 /// ---Remove focus from current output, and set to given id
 /// ---@param seat_id integer Id of the seat to be focused, 0 for default seat
 /// ---@param output_id integer? Id of the output to be focused

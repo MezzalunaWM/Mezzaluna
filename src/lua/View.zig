@@ -52,29 +52,6 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the id for the focused view
-/// ---@param integer? seat seat id, nil for the default seat
-/// ---@return integer? result nil if the seat provided doesn't exist
-pub fn get_focused_id(L: *zlua.Lua) i32 {
-    const seat = if (!L.isNil(1)) blk: {
-        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
-        break :blk LuaUtils.seatFromId(seat_id) orelse {
-            L.pushNil();
-            return 1;
-        };
-    } else server.getDefaultSeat();
-
-    if (seat.focused_surface) |fs| {
-        if (fs == .view) {
-            L.pushInteger(@intCast(fs.view.id));
-            return 1;
-        }
-    }
-
-    L.pushNil();
-    return 1;
-}
-
 /// ---Close the view with view_id
 /// ---@param view_id integer 0 maps to focused view
 pub fn close(L: *zlua.Lua) i32 {
