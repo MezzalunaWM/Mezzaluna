@@ -191,6 +191,16 @@ pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
         },
         .pointer => {
             self.cursor.wlr_cursor.attachInputDevice(device);
+            device.data = &self.cursor;
+        },
+        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+    }
+
+    self.wlr_seat.setCapabilities(.{
+        .keyboard = true,
+        .pointer = true,
+    });
+}
         },
         else => |t| std.log.err("unsupported input method: {}", .{ t }),
     }

@@ -3,6 +3,7 @@ const Seat = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
+const wlr = @import("wlroots");
 
 const LuaUtils = @import("LuaUtils.zig");
 const Utils = @import("../Utils.zig");
@@ -41,6 +42,9 @@ pub fn create(L: *zlua.Lua) i32 {
         );
     }
 
+    // the new seat starts on the same output as the default seat
+    seat.focused_output = server.getDefaultSeat().focused_output;
+
     server.seats.append(seat);
 
     L.pushInteger(@intCast(server.seats.length() - 1));
@@ -66,9 +70,46 @@ pub fn remove(L: *zlua.Lua) i32 {
     return 1;
 }
 
-// TODO: finish this
-pub fn add_intput_device(L: *zlua.Lua) i32 {
-    _ = L;
+/// ---Get a seats name
+/// ---@param seat_id integer
+/// ---@return string seat name
+pub fn get_name(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    if (seat) |s| {
+        _ = L.pushString(std.mem.span(s.wlr_seat.name));
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Set a seats name
+/// ---@param seat_id integer
+/// ---@param name string
+pub fn set_name(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+    const name = L.toString(2) catch L.raiseErrorStr("Invalid seat name", .{});
+
+    if (seat) |s| s.wlr_seat.setName(name);
+    return 0;
+}
+
+/// ---add an input device to a seat
+/// ---@param seat integer seat id
+/// ---@param device userdata device
+pub fn add_device(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    const device = L.toUserdata(wlr.InputDevice, 2) catch L.raiseErrorStr("Unable to get device.", .{});
+
+    if (seat) |s| s.addInputDevice(device);
+    return 0;
+}
 
 /// ---Remove focus from current view, and set to given id
 /// ---@param seat_id integer Id of the seat to be focused, 0 for default seat
