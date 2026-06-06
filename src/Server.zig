@@ -383,10 +383,7 @@ fn handleNewVirtualPointer(
     event: *wlr.VirtualPointerManagerV1.event.NewPointer,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
-    const device = &event.new_pointer.pointer.base;
-
-    self.getDefaultSeat().cursor.wlr_cursor.attachInputDevice(device);
-    self.getDefaultSeat().cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    handleNewInput(&self.new_input, &event.new_pointer.pointer.base);
 }
 
 fn handleNewVirtualKeyboard(
@@ -394,10 +391,7 @@ fn handleNewVirtualKeyboard(
     event: *wlr.VirtualKeyboardV1,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_keyboard", listener);
-    const device = &event.keyboard.base;
-
-    const keyboard = Keyboard.init(device);
-    _ = self.getDefaultSeat().keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+    handleNewInput(&self.new_input, &event.keyboard.base);
 }
 
 fn handleNewIdleInhibitor(
