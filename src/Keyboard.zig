@@ -74,7 +74,13 @@ fn handleModifiers(listener: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Key
 
 fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
     const self: *Keyboard = @fieldParentPtr("key", listener);
-    const seat = self.group.?.seat;
+    const seat = if (self.group) |group| group.seat else {
+        std.log.warn(
+            "dropping keyboard event: `{}` no keyboard group available",
+            .{event}
+        );
+        return;
+    };
 
     // Translate libinput keycode -> xkbcommon
     const keycode = event.keycode + 8;

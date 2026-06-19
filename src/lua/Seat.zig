@@ -4,6 +4,7 @@ const Seat = @This();
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const LuaUtils = @import("LuaUtils.zig");
 const Utils = @import("../Utils.zig");
@@ -108,6 +109,19 @@ pub fn add_device(L: *zlua.Lua) i32 {
     const device = L.toUserdata(wlr.InputDevice, 2) catch L.raiseErrorStr("Unable to get device.", .{});
 
     if (seat) |s| s.addInputDevice(device);
+    return 0;
+}
+
+/// ---remove an input device to a seat
+/// ---@param seat integer seat id
+/// ---@param device userdata device
+pub fn remove_device(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    const device = L.toUserdata(wlr.InputDevice, 2) catch L.raiseErrorStr("Unable to get device.", .{});
+
+    if (seat) |s| s.removeInputDevice(device);
     return 0;
 }
 

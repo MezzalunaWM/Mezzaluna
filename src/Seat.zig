@@ -201,6 +201,16 @@ pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
         .pointer = true,
     });
 }
+
+pub fn removeInputDevice(self: *Seat, device: *wlr.InputDevice) void {
+    switch (device.type) {
+        .keyboard => {
+            const keyboard = (input_device.get(device) orelse return).keyboard;
+            self.keyboard_group.removeKeyboard(keyboard);
+        },
+        .pointer => {
+            self.cursor.wlr_cursor.detachInputDevice(device);
+            device.data = null;
         },
         else => |t| std.log.err("unsupported input method: {}", .{ t }),
     }

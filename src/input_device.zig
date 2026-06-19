@@ -29,6 +29,20 @@ pub fn create(device: *wlr.InputDevice) void {
     }
 }
 
+pub fn remove(device: *wlr.InputDevice) void {
+    switch (device.type) {
+        .keyboard => {
+            const keyboard = (get(device) orelse return).keyboard;
+            std.debug.assert(keyboard.group == null);
+            keyboard.deinit();
+        },
+        .pointer => {
+            std.debug.assert(device.data == null);
+        },
+        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+    }
+}
+
 pub fn get(device: *wlr.InputDevice) ?InputDevice {
     return switch (device.type) {
         .keyboard => .{ .keyboard = @alignCast(@ptrCast(device.data)) },
