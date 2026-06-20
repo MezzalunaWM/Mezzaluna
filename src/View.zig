@@ -226,7 +226,7 @@ pub fn setActivated(self: *View, activated: bool) void {
 
     server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "Before a view's focus is set");
 
-    _ = self.xdg_toplevel.setActivated(if (self.focus_count == 0) false else true);
+    _ = self.xdg_toplevel.setActivated(self.focus_count != 0);
 
     server.events.exec("ViewSetFocusPost", .{ self.id, activated, self.focus_count }, "After a view's focus is set");
 }
