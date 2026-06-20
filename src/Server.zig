@@ -280,7 +280,7 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
     const self: *Server = @fieldParentPtr("new_input", listener);
 
     // create the device
-    input_device.create(device);
+    input_device.init(device);
 
     self.events.exec("DeviceAddPre", .{ device }, "Called before a new device is added to the compositor.");
     const dev = input_device.get(device) orelse return;

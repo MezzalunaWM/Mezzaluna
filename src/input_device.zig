@@ -14,7 +14,7 @@ pub const InputDevice = union(wlr.InputDevice.Type) {
     @"switch": void,
 };
 
-pub fn create(device: *wlr.InputDevice) void {
+pub fn init(device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
             const keyboard = Keyboard.init(device);
