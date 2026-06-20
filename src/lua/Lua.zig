@@ -7,6 +7,7 @@ const zlua = @import("zlua");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
+const Options = @import("Options.zig");
 
 const gpa = std.heap.c_allocator;
 pub const log = std.log.scoped(.lua);
@@ -17,6 +18,7 @@ pub const Config = struct {
     path: ?[]const u8,
     enabled: bool,
 };
+
 pub fn init(self: *Lua, cfg: Config) !void {
     self.state = try zlua.Lua.init(gpa);
     errdefer self.state.deinit();
@@ -34,6 +36,7 @@ pub fn init(self: *Lua, cfg: Config) !void {
         error.OutOfMemory => Utils.oomPanic(),
         else => log.err("{}", .{ err })
     };
+
     loadBaseConfig(self.state);
     if (cfg.enabled) loadConfigDir(self.state);
 
@@ -80,6 +83,7 @@ pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
     self.setField(-2, "config");
 }
 
+
 fn loadBaseConfig(self: *zlua.Lua) void {
     const lua_path = "mez.path.base_config";
     if (!Bridge.getNestedField(self, @constCast(lua_path[0..]))) {
@@ -100,10 +104,12 @@ fn loadConfigDir(self: *zlua.Lua) void {
         log.err("Config path not found. Is your runtime dir setup?", .{});
         return;
     }
+
     const path = self.toString(-1) catch |err| {
         log.err("Failed to pop the config path from the lua stack. {}", .{err});
         return;
     };
+
     self.pop(-1);
     self.doFile(path) catch LuaUtils.handleError(self);
 }
@@ -126,10 +132,13 @@ pub fn openMezLibs(self: *zlua.Lua) void {
   //       would also make the users job much easier
     self.newTable();
     defer _ = self.setGlobal("mez");
-    {
-        self.newTable();
-        defer _ = self.setField(-2, "path");
-    }
+
+    self.newTable();
+    _ = self.setField(-2, "path");
+
+    Options.getDefaultOptions(self);
+    _ = self.setField(-2, "opt");
+
     inline for (.{
         .{ "api", @import("Api.zig") },
         .{ "async", @import("Async.zig") },

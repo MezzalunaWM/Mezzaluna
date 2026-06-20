@@ -1,5 +1,4 @@
 const View = @This();
-
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
@@ -9,6 +8,7 @@ const Output = @import("Output.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const Utils = @import("Utils.zig");
+const Options = @import("lua/Options.zig");
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
@@ -136,10 +136,14 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
-    // Add new Toplevel to root of the tree
-    if (server.getDefaultSeat().focused_output) |output| {
-        self.scene_tree.node.reparent(output.layers.content);
-        self.output = output;
+    {
+        const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
+        if(new_view_hidden != null and !new_view_hidden.?) {
+            if(server.getDefaultSeat().focused_output) |output| {
+                self.scene_tree.node.reparent(output.layers.content);
+                self.output = output;
+            }
+        }
     }
 
     // Create border scene_rects
@@ -189,10 +193,7 @@ pub fn setBorderColor(self: *View, color: *const [4]f32) void {
 }
 
 pub fn isFullscreen(self: *View) bool {
-    if (self.output == null) {
-        std.log.debug("View does not have an assigned output", .{});
-        unreachable;
-    }
+    if (self.output == null) { return false; }
 
     for (self.output.?.fullscreens.items) |view| {
         if (view == self) return true;
@@ -320,12 +321,11 @@ pub fn applyPending(self: *View) void {
     const pending = &self.pending.?;
     const current = &self.current;
 
-    // Check if geometry has changed
-    if (!wlr.Box.equal(&pending.geometry, &current.geometry)) {
-        self.dropSavedSurfaceTree();
+    if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
 
         self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
+        // Hiding
         self.surface_tree.node.setEnabled(false);
         self.saved_surface_tree.node.setEnabled(true);
 
@@ -336,7 +336,6 @@ pub fn applyPending(self: *View) void {
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
-        std.log.debug("\t\t\tGeometry configure {d}", .{self.id});
 
         self.awaiting_buffer = true;
         server.root.pending_views += 1;
@@ -397,6 +396,7 @@ pub fn applySending(self: *View) void {
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
     self.resizeBorders();
 
+    // Revealing
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
@@ -499,6 +499,7 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
     if (view.xdg_toplevel.base.initial_commit) {
+        view.dropSavedSurfaceTree();
         server.root.applyPending();
         return;
     }

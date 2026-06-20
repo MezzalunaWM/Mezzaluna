@@ -177,6 +177,27 @@ pub fn applyPending(self: *Root) void {
 }
 
 pub fn applySending(self: *Root) void {
+
+    std.log.debug("Going through hidden tree", .{});
+    // std.log.debug("The hidden tree has {d}")
+
+    var hidden_view_it = self.hidden_tree.children.safeIterator(.forward);
+    while(hidden_view_it.next()) |scene_node| {
+        std.log.debug("Getting the scene node data", .{});
+
+        if(scene_node.data == null) continue;
+        const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+
+        std.log.debug("Finished alignment, starting to reparent", .{});
+
+        if(view_snd.view.output orelse server.getDefaultSeat().focused_output) |o| {
+            view_snd.view.scene_tree.node.reparent(o.layers.content);
+        }
+
+        std.log.debug("Finished reparenting", .{});
+    }
+    std.log.debug("Finished", .{});
+
     var output_it = self.output_layout.outputs.iterator(.forward);
 
     while(output_it.next()) |o| {
