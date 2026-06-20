@@ -3,6 +3,8 @@ const Seat = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
+const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const LuaUtils = @import("LuaUtils.zig");
 const Utils = @import("../Utils.zig");
@@ -41,6 +43,9 @@ pub fn create(L: *zlua.Lua) i32 {
         );
     }
 
+    // the new seat starts on the same output as the default seat
+    seat.focused_output = server.getDefaultSeat().focused_output;
+
     server.seats.append(seat);
 
     L.pushInteger(@intCast(server.seats.length() - 1));
@@ -66,9 +71,141 @@ pub fn remove(L: *zlua.Lua) i32 {
     return 1;
 }
 
-// TODO(squibid): add_input_device
+/// ---Get a seats name
+/// ---@param seat_id integer
+/// ---@return string? seat name
+pub fn get_name(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
 
-/// ---Set the repeat information for a seat
+    if (seat) |s| {
+        _ = L.pushString(std.mem.span(s.wlr_seat.name));
+    } else L.pushNil();
+
+    return 1;
+}
+
+/// ---Set a seats name. Returns nil if no seat was found.
+/// ---@param seat_id integer
+/// ---@param name string
+pub fn set_name(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+    const name = L.toString(2) catch L.raiseErrorStr("Invalid seat name", .{});
+
+    if (seat) |s| {
+        s.wlr_seat.setName(name);
+        return 0;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---add an input device to a seat. Returns nil if no seat was found.
+/// ---@param seat integer seat id
+/// ---@param device userdata device
+pub fn add_device(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    const device = L.toUserdata(wlr.InputDevice, 2) catch L.raiseErrorStr("Unable to get device.", .{});
+
+    if (seat) |s| {
+        s.addInputDevice(device);
+        return 0;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---remove an input device to a seat. Returns nil if no seat was found.
+/// ---@param seat integer seat id
+/// ---@param device userdata device
+pub fn remove_device(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    const device = L.toUserdata(wlr.InputDevice, 2) catch L.raiseErrorStr("Unable to get device.", .{});
+
+    if (seat) |s| {
+        s.removeInputDevice(device);
+        return 0;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Remove focus from current view, and set to given id. Returns nil if no seat was found.
+/// ---@param seat_id integer Id of the seat to be focused, 0 for default seat
+/// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
+pub fn set_focused_view(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id) orelse seat_id_err(L);
+    const view_id: ?c_longlong = L.optInteger(2);
+
+    if (view_id == null) {
+        seat.focusSurface(null);
+    } else if (server.root.viewById(@intCast(view_id.?))) |view| {
+        seat.focusSurface(.{ .view = view });
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Get the focused view of a seat. Returns nil if no seat was found.
+/// ---@param seat_id seat seat id
+/// ---@return view_id? result nil if the seat provided doesn't exist or nothing is focused
+pub fn get_focused_view(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    if (seat) |s| if (s.focused_surface) |surface| switch (surface) {
+        .view => |v| {
+            L.pushInteger(@intCast(v.id));
+            return 1;
+        },
+        .layer_surface => {},
+    };
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Remove focus from current output, and set to given id. Returns nil if no seat was found.
+/// ---@param seat_id integer Id of the seat to be focused
+/// ---@param output_id integer? Id of the output to be focused
+pub fn set_focused_output(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id) orelse seat_id_err(L);
+
+    const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(2)) catch L.raiseErrorStr("Invalid output id", .{});
+    if (server.root.outputById(output_id)) |output| {
+        seat.focusOutput(output);
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Get the focused output of a seat
+/// ---@param seat_id seat seat id
+/// ---@return output_id? result nil if the seat provided doesn't exist or nothing is focused
+pub fn get_focused_output(L: *zlua.Lua) i32 {
+    const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch seat_id_err(L);
+    const seat = LuaUtils.seatFromId(seat_id);
+
+    if (seat) |s| if (s.focused_output) |output| {
+        L.pushInteger(@intCast(output.id));
+    } else L.pushNil();
+
+    return 1;
+}
+
+/// ---Set the repeat information for a seat. Returns nil if no seat was found.
 /// ---@param seat integer seat id
 /// ---@param rate integer
 /// ---@param delay integer
@@ -85,9 +222,11 @@ pub fn set_repeat_info(L: *zlua.Lua) i32 {
 
     if (seat) |s| {
         s.keyboard_group.wlr_group.keyboard.setRepeatInfo(rate, delay);
+        return 0;
     }
 
-    return 0;
+    L.pushNil();
+    return 1;
 }
 
 /// ---Get the repeat information of a seat

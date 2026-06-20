@@ -14,6 +14,7 @@ const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
 id: u64,
+focus_count: u32,
 
 output: ?*Output,
 
@@ -64,6 +65,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
     self.* = .{
         .id = @intFromPtr(xdg_toplevel),
+        .focus_count = 0,
         .output = null,
         .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
         .previous_geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
@@ -220,9 +222,13 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "Before a view's focus is set");
-    _ = self.xdg_toplevel.setActivated(activated);
-    server.events.exec("ViewSetFocusPost", .{ self.id, activated }, "After a view's focus is set");
+    if (activated) self.focus_count += 1 else self.focus_count -= 1;
+
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "Before a view's focus is set");
+
+    _ = self.xdg_toplevel.setActivated(self.focus_count != 0);
+
+    server.events.exec("ViewSetFocusPost", .{ self.id, activated, self.focus_count }, "After a view's focus is set");
 }
 
 pub fn fromSurface(surface: *wlr.Surface) ?*View {

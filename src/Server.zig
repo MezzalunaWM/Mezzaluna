@@ -15,6 +15,7 @@ const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
+const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
@@ -277,13 +278,23 @@ pub fn deinit(self: *Server) noreturn {
 // --------- Backend event handlers ---------
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
-    self.getDefaultSeat().addInputDevice(device);
 
-    // We should really only set true capabilities
-    self.getDefaultSeat().wlr_seat.setCapabilities(.{
-        .pointer = true,
-        .keyboard = true,
-    });
+    // create the device
+    input_device.init(device);
+
+    self.events.exec("DeviceAddPre", .{ device }, "Called before a new device is added to the compositor.");
+    const dev = input_device.get(device) orelse return;
+
+    // has the user already given the device to a seat?
+    const seated = switch (dev) {
+        .keyboard => |keyboard| if (keyboard.group != null) true else false,
+        .pointer => |pointer| if (pointer.base.data != null) true else false,
+        else => false,
+    };
+
+    if (!seated) self.getDefaultSeat().addInputDevice(device);
+
+    self.events.exec("DeviceAddPost", .{ device }, "Called after a new device is added to the compositor.");
 }
 
 fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
@@ -372,10 +383,7 @@ fn handleNewVirtualPointer(
     event: *wlr.VirtualPointerManagerV1.event.NewPointer,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
-    const device = &event.new_pointer.pointer.base;
-
-    self.getDefaultSeat().cursor.wlr_cursor.attachInputDevice(device);
-    self.getDefaultSeat().cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    handleNewInput(&self.new_input, &event.new_pointer.pointer.base);
 }
 
 fn handleNewVirtualKeyboard(
@@ -383,10 +391,7 @@ fn handleNewVirtualKeyboard(
     event: *wlr.VirtualKeyboardV1,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_keyboard", listener);
-    const device = &event.keyboard.base;
-
-    const keyboard = Keyboard.init(device);
-    _ = self.getDefaultSeat().keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+    handleNewInput(&self.new_input, &event.keyboard.base);
 }
 
 fn handleNewIdleInhibitor(

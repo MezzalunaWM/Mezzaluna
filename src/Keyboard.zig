@@ -33,6 +33,8 @@ destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 pub fn init(device: *wlr.InputDevice) *Keyboard {
     const self = gpa.create(Keyboard) catch Utils.oomPanic();
 
+    // TODO: there is no world where pluggin in a keyboard should crash the
+    // compositor >:(
     errdefer {
         std.log.err("Unable to initialize new keyboard, exiting", .{});
         std.process.exit(6);
@@ -72,7 +74,13 @@ fn handleModifiers(listener: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Key
 
 fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
     const self: *Keyboard = @fieldParentPtr("key", listener);
-    const seat = self.group.?.seat;
+    const seat = if (self.group) |group| group.seat else {
+        std.log.warn(
+            "dropping keyboard event: `{}` no keyboard group available",
+            .{event}
+        );
+        return;
+    };
 
     // Translate libinput keycode -> xkbcommon
     const keycode = event.keycode + 8;

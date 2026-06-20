@@ -50,6 +50,12 @@ pub fn addKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
     keyboard.group = self;
 }
 
+pub fn removeKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
+    _ = keyboard.wlr_keyboard.setKeymap(null);
+    self.wlr_group.removeKeyboard(keyboard.wlr_keyboard);
+    keyboard.group = null;
+}
+
 pub fn deinit(self: *KeyboardGroup) void {
     self.wlr_group.destroy();
     gpa.destroy(self);
