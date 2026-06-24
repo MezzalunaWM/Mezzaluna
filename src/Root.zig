@@ -143,6 +143,8 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
 }
 
 pub fn applyPending(self: *Root) void {
+    std.log.debug("ROOT - applyPending", .{});
+
     // Check if state is already sending and come back to new pending later
     if (self.pending_views > 0) {
         self.pending_state_dirty = true;
@@ -151,8 +153,17 @@ pub fn applyPending(self: *Root) void {
 
     self.pending_views = 0;
 
-    var output_it = self.output_layout.outputs.iterator(.forward);
+    var hidden_it = self.hidden_tree.children.iterator(.forward);
+    while(hidden_it.next()) |scene_node| {
+        if(scene_node.data == null) continue;
 
+        const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+        if(view_snd.* != .view) continue;
+
+        view_snd.view.applyPending();
+    }
+
+    var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
         if (o.output.data == null) continue;
 
@@ -177,26 +188,17 @@ pub fn applyPending(self: *Root) void {
 }
 
 pub fn applySending(self: *Root) void {
-
-    std.log.debug("Going through hidden tree", .{});
-    // std.log.debug("The hidden tree has {d}")
+    std.log.debug("ROOT - applySending", .{});
 
     var hidden_view_it = self.hidden_tree.children.safeIterator(.forward);
     while(hidden_view_it.next()) |scene_node| {
-        std.log.debug("Getting the scene node data", .{});
-
         if(scene_node.data == null) continue;
         const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-
-        std.log.debug("Finished alignment, starting to reparent", .{});
 
         if(view_snd.view.output orelse server.getDefaultSeat().focused_output) |o| {
             view_snd.view.scene_tree.node.reparent(o.layers.content);
         }
-
-        std.log.debug("Finished reparenting", .{});
     }
-    std.log.debug("Finished", .{});
 
     var output_it = self.output_layout.outputs.iterator(.forward);
 

@@ -263,7 +263,6 @@ fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
-    std.log.debug("Handling destroy", .{});
     const output: *Output = @fieldParentPtr("destroy", listener);
 
     std.log.debug("removing output: {s}", .{output.wlr_output.name});

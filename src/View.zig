@@ -317,6 +317,8 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn applyPending(self: *View) void {
+    std.log.debug("View {d} applyPending", .{@intFromPtr(self)});
+
     if (self.pending == null) return;
     const pending = &self.pending.?;
     const current = &self.current;
@@ -390,6 +392,8 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
+    std.log.debug("View {d} applySending", .{@intFromPtr(self)});
+
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
@@ -432,7 +436,6 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 // --------- XdgTopLevel event handlers ---------
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
-    std.log.debug("Mapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
     // TODO: Do we actually need these two in the end
     server.events.exec("ViewMapPre", .{view.id});
