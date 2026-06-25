@@ -26,7 +26,7 @@ const State = struct {
 
     tiled_edges: wlr.Edges,
 
-    // Give the default state we want views to start with
+    // Give the default state views start with, not what we want them to start with
     pub fn init() State {
         return .{
             .parent = server.root.hidden_tree,
@@ -141,6 +141,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
+    // Make sensible starting configurations
     {
         const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
         if(new_view_hidden != null and !new_view_hidden.?) {
@@ -150,6 +151,8 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         } else {
             self.setParent(server.root.hidden_tree);
         }
+
+        self.setDecorationMode(.server_side);
     }
 
     // Create border scene_rects
@@ -331,8 +334,6 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn applyPending(self: *View) void {
-    std.log.debug("\tView {d} applyPending", .{self.id});
-
     if (self.pending == null) return;
     const pending = &self.pending.?;
     const current = &self.current;
@@ -410,16 +411,11 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
-    std.log.debug("\tView {d} applySending", .{self.id});
-
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
 
-    if(self.scene_tree.node.parent.? != self.current.parent) {
-        std.log.debug("\tView {d} reparented", .{self.id});
+    if(self.scene_tree.node.parent.? != self.current.parent) 
         self.scene_tree.node.reparent(self.current.parent);
-        // std.log.debug("\t\t", .{self.current.parent.})
-    }
 
     // Get the output from the new parent
     if (self.scene_tree.node.parent) |st| {
@@ -474,12 +470,7 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 // --------- XdgTopLevel event handlers ---------
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
-
-    std.log.debug("\tView {d} mapped", .{view.id});
-
-    // TODO: Do we actually need these two in the end
-    server.events.exec("ViewMapPre", .{view.id});
-    server.events.exec("ViewMapPost", .{view.id});
+    std.log.debug("Mapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
@@ -541,16 +532,12 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
-    server.events.exec("ViewCommitPost", .{view.id});
+    server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit});
 
     if (view.xdg_toplevel.base.initial_commit) {
-        std.log.debug("\tView {d} commit (initial)", .{view.id});
         view.dropSavedSurfaceTree();
-        server.root.applyPending();
         return;
     }
-
-    std.log.debug("\tView {d} commit", .{view.id});
 
     if (view.awaiting_buffer) {
         view.awaiting_buffer = false;

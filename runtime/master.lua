@@ -434,7 +434,7 @@ M.setup = function(config)
 		}
 	end
 
-	mez.hook.add("ViewMapPre", { callback = function(view_id) M.add_view(view_id) end })
+	mez.hook.add("ViewCommitPost", { callback = function(view_id, initial) if initial then M.add_view(view_id) end end })
 	mez.hook.add("ViewUnmapPost", { callback = function(view_id) M.remove_view(view_id) end })
 
 	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })

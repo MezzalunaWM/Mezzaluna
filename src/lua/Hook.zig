@@ -109,7 +109,7 @@ pub const HookData = struct {
             i = k;
         }
 
-        Lua.state.protectedCall(.{ .args = i }) catch LuaUtils.handleError(Lua.state);
+        Lua.state.call(.{ .args = i });
         Lua.state.pop(-1);
 
         if (self.options.once) @constCast(self).deinit();

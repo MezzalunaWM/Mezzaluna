@@ -143,8 +143,6 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
 }
 
 pub fn applyPending(self: *Root) void {
-    std.log.debug("ROOT - applyPending", .{});
-
     // Check if state is already sending and come back to new pending later
     if (self.pending_views > 0) {
         self.pending_state_dirty = true;
@@ -190,8 +188,6 @@ pub fn applyPending(self: *Root) void {
 // If a view is moved from one scene tree to a "later" scene tree
 // it will applyPending twice. The second call should do nothing
 pub fn applySending(self: *Root) void {
-    std.log.debug("ROOT - applySending", .{});
-
     var hidden_it = self.hidden_tree.children.safeIterator(.forward);
     while(hidden_it.next()) |scene_node| {
         std.debug.assert(scene_node.data != null);
