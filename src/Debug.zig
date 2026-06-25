@@ -43,6 +43,9 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
             .root => {
                 writer.print(" → Root Scene Tree", .{}) catch unreachable;
             },
+            .hidden_tree => {
+                writer.print(" → Hidden tree", .{}) catch unreachable;
+            },
             .output => |output| {
                 writer.print(" → Output: {s} (focused={}, id={})", .{
                     output.wlr_output.name,

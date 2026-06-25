@@ -15,24 +15,28 @@ const server = &@import("main.zig").server;
 
 const State = struct {
     // The total geometry including borders
-    geometry: wlr.Box = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
-    activated: bool = false,
-    enabled: bool = false,
+    parent: *wlr.SceneTree,
 
-    decoration_mode: wlr.XdgToplevelDecorationV1.Mode = .none,
-    wm_capabilities: wlr.XdgToplevel.WmCapabilities = .{},
+    geometry: wlr.Box,
+    activated: bool,
+    enabled: bool,
 
-    tiled_edges: wlr.Edges = .{},
+    decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
+    wm_capabilities: wlr.XdgToplevel.WmCapabilities,
+
+    tiled_edges: wlr.Edges,
 
     // Give the default state we want views to start with
     pub fn init() State {
         return .{
+            .parent = server.root.hidden_tree,
+
             .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
             .activated = false,
             .enabled = true,
 
-            .decoration_mode = .server_side,
-            .wm_capabilities = .{ .fullscreen = true },
+            .decoration_mode = .none,
+            .wm_capabilities = .{ .fullscreen = true, },
 
             .tiled_edges = .{
                 .top = true,
@@ -111,6 +115,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .xdg_toplevel = xdg_toplevel,
         .xdg_toplevel_decoration = null,
 
+        // .scene_tree = try server.root.hidden_tree.createSceneTree(),
         .scene_tree = try server.root.hidden_tree.createSceneTree(),
         .surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base),
         .saved_surface_tree = try self.scene_tree.createSceneTree(),
@@ -127,7 +132,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
         .pending = State.init(),
         .sending = null,
-        .current = .{},
+        .current = .init(),
 
         .awaiting_buffer = false,
     };
@@ -140,9 +145,10 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
         if(new_view_hidden != null and !new_view_hidden.?) {
             if(server.getDefaultSeat().focused_output) |output| {
-                self.scene_tree.node.reparent(output.layers.content);
-                self.output = output;
+                self.setParent(output.layers.content);
             }
+        } else {
+            self.setParent(server.root.hidden_tree);
         }
     }
 
@@ -237,13 +243,21 @@ pub fn toggleFullscreen(self: *View) void {
     }
 
     server.events.exec("ViewSetFullscreenPre", .{ self.id, true });
-    self.scene_tree.node.reparent(self.output.?.layers.top);
 
+    self.setParent(self.output.?.layers.top);
     self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
 
     fullscreens.append(gpa, self) catch Utils.oomPanic();
     _ = self.xdg_toplevel.setFullscreen(true);
     server.events.exec("ViewSetFullscreenPost", .{ self.id, true });
+}
+
+pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
+    // TODO: How does this PROPERLY interact with fullscreen
+    if (self.isFullscreen()) return;
+
+    if (self.pending == null) self.pending = self.current;
+    self.pending.?.parent = parent;
 }
 
 // Null values are set to their corresponding current geometry values
@@ -317,30 +331,34 @@ pub fn resizeBorders(self: *View) void {
 }
 
 pub fn applyPending(self: *View) void {
-    std.log.debug("View {d} applyPending", .{@intFromPtr(self)});
+    std.log.debug("\tView {d} applyPending", .{self.id});
 
     if (self.pending == null) return;
     const pending = &self.pending.?;
     const current = &self.current;
 
+    var copied: bool = false;
+
     if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
+        if (!copied) {
+            self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
-        self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
+            // Hiding
+            self.surface_tree.node.setEnabled(false);
+            self.saved_surface_tree.node.setEnabled(true);
+            
+            self.awaiting_buffer = true;
+            server.root.pending_views += 1;
 
-        // Hiding
-        self.surface_tree.node.setEnabled(false);
-        self.saved_surface_tree.node.setEnabled(true);
+            copied = true;
+        }
 
         // Position is not something the client needs to consider so it happens instantly
         // We wait till the client commits its new buffer to position
-
         _ = self.xdg_toplevel.setSize(
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
-
-        self.awaiting_buffer = true;
-        server.root.pending_views += 1;
     }
 
     // Decoration mode
@@ -392,10 +410,30 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
-    std.log.debug("View {d} applySending", .{@intFromPtr(self)});
+    std.log.debug("\tView {d} applySending", .{self.id});
 
     if (self.sending != null) self.current = self.sending.?;
     self.sending = null;
+
+    if(self.scene_tree.node.parent.? != self.current.parent) {
+        std.log.debug("\tView {d} reparented", .{self.id});
+        self.scene_tree.node.reparent(self.current.parent);
+        // std.log.debug("\t\t", .{self.current.parent.})
+    }
+
+    // Get the output from the new parent
+    if (self.scene_tree.node.parent) |st| {
+        std.debug.assert(st.node.data != null);
+        const parent_snd: *SceneNodeData = @ptrCast(@alignCast(st.node.data.?));
+        std.debug.assert(parent_snd.* == .hidden_tree or parent_snd.* == .output_layer);
+
+        self.output = if (parent_snd.* == .hidden_tree) null else blk: {
+            std.debug.assert(parent_snd.*.output_layer.node.parent != null);
+            const output_snd: *SceneNodeData = @ptrCast(@alignCast(parent_snd.*.output_layer.node.parent.?.node.data));
+            std.debug.assert(output_snd.* == .output);
+            break :blk output_snd.output;
+        };
+    }
 
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
     self.resizeBorders();
@@ -436,6 +474,8 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 // --------- XdgTopLevel event handlers ---------
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
+
+    std.log.debug("\tView {d} mapped", .{view.id});
 
     // TODO: Do we actually need these two in the end
     server.events.exec("ViewMapPre", .{view.id});
@@ -501,11 +541,16 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
+    server.events.exec("ViewCommitPost", .{view.id});
+
     if (view.xdg_toplevel.base.initial_commit) {
+        std.log.debug("\tView {d} commit (initial)", .{view.id});
         view.dropSavedSurfaceTree();
         server.root.applyPending();
         return;
     }
+
+    std.log.debug("\tView {d} commit", .{view.id});
 
     if (view.awaiting_buffer) {
         view.awaiting_buffer = false;
@@ -537,11 +582,7 @@ fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _:
     server.events.exec("ViewRequestResize", .{view.id});
 }
 
-fn handleAckConfigure(
-    _: *wl.Listener(*wlr.XdgSurface.Configure),
-    event: *wlr.XdgSurface.Configure,
-) void {
-    _ = event;
+fn handleAckConfigure( _: *wl.Listener(*wlr.XdgSurface.Configure), _: *wlr.XdgSurface.Configure) void {
     // We no longer trigger applySending on ack. Instead we wait for the
     // client to commit the new buffer (handleCommit), which is the correct
     // point to reveal the live surface and drop the saved copy.

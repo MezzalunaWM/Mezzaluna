@@ -79,7 +79,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
         },
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),
-        .scene_node_data = SceneNodeData{ .output = self },
+        .scene_node_data = .{ .output = self },
         .state = wlr.Output.State.init()
     };
 

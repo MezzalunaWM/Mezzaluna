@@ -26,11 +26,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     L.newTable();
 
     while (output_it.next()) |o| {
-        if (o.output.data == null) {
-            Lua.log.err("Output arbitrary data not assigned", .{});
-            unreachable;
-        }
-
+        std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
         if (!output.state.enabled) continue;
 
@@ -43,21 +39,14 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
         for (layers) |layer| {
             if (layer.children.length() == 0) continue; // No children
 
-            if (@intFromPtr(layer) == 0) unreachable;
-
             var view_it = layer.children.iterator(.forward);
-
             while (view_it.next()) |v| {
-                if (v.data == null) {
-                    Lua.log.err("Unassigned arbitrary data in scene graph", .{});
-                    unreachable;
-                }
+                std.debug.assert(v.data != null);
+                const snd: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
 
-                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
-
-                if (scene_node_data.* == .view) {
+                if (snd.* == .view) {
                     L.pushInteger(@intCast(index));
-                    L.pushInteger(@intCast(scene_node_data.view.id));
+                    L.pushInteger(@intCast(snd.view.id));
                     L.setTable(-3);
 
                     index += 1;

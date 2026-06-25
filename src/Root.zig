@@ -13,6 +13,7 @@ const LayerSurface = @import("LayerSurface.zig");
 const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const Utils = @import("Utils.zig");
+const Debug = @import("Debug.zig");
 
 scene_node_data: SceneNodeData,
 
@@ -23,6 +24,7 @@ scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
 
 hidden_tree: *wlr.SceneTree,
+hidden_tree_snd: SceneNodeData,
 
 // All visible views should be accessed through these
 output_layout: *wlr.OutputLayout,
@@ -51,6 +53,7 @@ pub fn init(self: *Root) void {
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
 
         .hidden_tree = try scene.tree.createSceneTree(),
+        .hidden_tree_snd = .{ .hidden_tree = self.hidden_tree },
 
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
@@ -60,10 +63,7 @@ pub fn init(self: *Root) void {
         .pending_state_dirty = false,
     };
 
-    // This hidden tree is, you guessed it, hidden
-    self.hidden_tree.node.setEnabled(false);
-
-    self.hidden_tree.node.data = &self.scene_node_data;
+    self.hidden_tree.node.data = &self.hidden_tree_snd;
 
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
 
@@ -155,27 +155,27 @@ pub fn applyPending(self: *Root) void {
 
     var hidden_it = self.hidden_tree.children.iterator(.forward);
     while(hidden_it.next()) |scene_node| {
-        if(scene_node.data == null) continue;
+        std.debug.assert(scene_node.data != null);
 
         const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-        if(view_snd.* != .view) continue;
+        std.debug.assert(view_snd.* == .view);
 
         view_snd.view.applyPending();
     }
 
     var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
-        if (o.output.data == null) continue;
+        std.debug.assert(o.output.data != null);
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
         var view_it = output.layers.content.children.iterator(.forward);
 
         while(view_it.next()) |scene_node| {
-            if(scene_node.data == null) continue;
+            std.debug.assert(scene_node.data != null);
 
             const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-            if(view_snd.* != .view) continue;
+            std.debug.assert(view_snd.* == .view);
 
             view_snd.view.applyPending();
         }
@@ -187,33 +187,34 @@ pub fn applyPending(self: *Root) void {
     }
 }
 
+// If a view is moved from one scene tree to a "later" scene tree
+// it will applyPending twice. The second call should do nothing
 pub fn applySending(self: *Root) void {
     std.log.debug("ROOT - applySending", .{});
 
-    var hidden_view_it = self.hidden_tree.children.safeIterator(.forward);
-    while(hidden_view_it.next()) |scene_node| {
-        if(scene_node.data == null) continue;
+    var hidden_it = self.hidden_tree.children.safeIterator(.forward);
+    while(hidden_it.next()) |scene_node| {
+        std.debug.assert(scene_node.data != null);
         const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+        std.debug.assert(view_snd.* == .view);
 
-        if(view_snd.view.output orelse server.getDefaultSeat().focused_output) |o| {
-            view_snd.view.scene_tree.node.reparent(o.layers.content);
-        }
+        view_snd.view.applySending();
     }
 
     var output_it = self.output_layout.outputs.iterator(.forward);
-
     while(output_it.next()) |o| {
-        if (o.output.data == null) continue;
+        std.debug.assert(o.output.data != null);
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
         var view_it = output.layers.content.children.iterator(.forward);
 
-        while(view_it.next()) |scene_node| {
-            if(scene_node.data == null) continue;
+        var i: i32 = 0;
+        while(view_it.next()) |scene_node| : (i += 1) {
+            std.debug.assert(scene_node.data != null);
 
             const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-            if(view_snd.* != .view) continue;
+            std.debug.assert(view_snd.* == .view);
 
             view_snd.view.applySending();
         }
