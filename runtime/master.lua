@@ -179,6 +179,7 @@ M.focus_next = function()
 			mez.view.set_focused(tag.stack[view_idx + 1])
 		end
 	end
+  mez.view.apply()
 end
 
 ---Move the focus in a tag to the previous view
@@ -215,6 +216,7 @@ M.focus_prev = function()
 			mez.view.set_focused(tag.stack[view_idx - 1])
 		end
 	end
+  mez.view.apply()
 end
 
 ---Remove a view_id from the layout
@@ -466,6 +468,7 @@ M.setup = function(config)
           x = pos.x - offset.x,
           y = pos.y - offset.y
         })
+        mez.view.apply();
 			end
 		end
 	})

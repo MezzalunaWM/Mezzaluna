@@ -36,6 +36,8 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
 
     writer.print("{s} @ ({d}, {d}) enabled={}", .{ type_name, node.x, node.y, node.enabled }) catch unreachable;
 
+    var stop_recurse: bool = false;
+
     // Add associated data if present
     if (node.data) |data| {
         const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
@@ -64,6 +66,7 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
                 if (view.xdg_toplevel.title) |title| {
                     writer.print(" title=\"{s}\"", .{title}) catch unreachable;
                 }
+                stop_recurse = true;
             },
             .view_border => {
                 writer.print(" → View border" , .{}) catch unreachable;
@@ -113,6 +116,11 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
 
     // Print the complete line
     std.log.debug("{s}", .{buffer.items});
+
+    if(stop_recurse) {
+        writer.print("Recurse stopped prematurely\n", .{}) catch unreachable;
+        return;
+    }
 
     // Recursively print children if this is a tree
     if (node.type == .tree) {

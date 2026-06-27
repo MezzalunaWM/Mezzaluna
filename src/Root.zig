@@ -203,7 +203,7 @@ pub fn applySending(self: *Root) void {
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
-        var view_it = output.layers.content.children.iterator(.forward);
+        var view_it = output.layers.content.children.safeIterator(.forward);
 
         var i: i32 = 0;
         while(view_it.next()) |scene_node| : (i += 1) {

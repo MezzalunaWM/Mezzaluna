@@ -9,6 +9,7 @@ const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
 
 const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
+const Debug = @import("Debug.zig");
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
@@ -18,13 +19,13 @@ const State = struct {
     parent: *wlr.SceneTree,
 
     geometry: wlr.Box,
+    resizing: bool,
+
     activated: bool,
     enabled: bool,
 
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
-    wm_capabilities: wlr.XdgToplevel.WmCapabilities,
-
-    tiled_edges: wlr.Edges,
+    tilded_edges: wlr.Edges,
 
     // Give the default state views start with, not what we want them to start with
     pub fn init() State {
@@ -32,17 +33,17 @@ const State = struct {
             .parent = server.root.hidden_tree,
 
             .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
+            .resizing = false,
+
             .activated = false,
             .enabled = true,
 
             .decoration_mode = .none,
-            .wm_capabilities = .{ .fullscreen = true, },
-
-            .tiled_edges = .{
+            .tilded_edges = .{
                 .top = true,
-                .bottom = true,
-                .left = true,
                 .right = true,
+                .left = true,
+                .bottom = true
             }
         };
     }
@@ -79,7 +80,6 @@ pending: ?State,
 sending: ?State,
 current: State,
 
-// After view configure, and waiting for new buffer commitment
 awaiting_buffer: bool,
 
 // Surface Listeners
@@ -132,7 +132,28 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
         .pending = State.init(),
         .sending = null,
-        .current = .init(),
+        .current = .{
+            .parent = server.root.hidden_tree,
+
+            .geometry = .{
+                .x = self.scene_tree.node.x,
+                .y = self.scene_tree.node.y,
+                .width = self.xdg_toplevel.base.geometry.width,
+                .height = self.xdg_toplevel.base.geometry.height
+            },
+            .resizing = false,
+
+            .activated = false,
+            .enabled = true,
+
+            .decoration_mode = .none,
+            .tilded_edges = .{ 
+                .top = false,
+                .right = false,
+                .left = false,
+                .bottom = false
+            }
+        },
 
         .awaiting_buffer = false,
     };
@@ -153,6 +174,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         }
 
         self.setDecorationMode(.server_side);
+
     }
 
     // Create border scene_rects
@@ -259,7 +281,7 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
     // TODO: How does this PROPERLY interact with fullscreen
     if (self.isFullscreen()) return;
 
-    if (self.pending == null) self.pending = self.current;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.parent = parent;
 }
 
@@ -269,25 +291,36 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
 
     if (self.isFullscreen()) return;
 
-    if (self.pending == null) self.pending = self.current;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    self.pending.?.geometry = .{ 
-        .x = x orelse self.current.geometry.x, 
-        .y = y orelse self.current.geometry.y, 
-        .width = @max(1 + 2 * self.border_width, width orelse self.current.geometry.width), 
-        .height = @max(1 + 2 * self.border_width, height orelse self.current.geometry.height) 
+    const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
+    self.pending.?.geometry = .{
+        .x = x orelse geo_base.geometry.x,
+        .y = y orelse geo_base.geometry.y,
+        .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
+        .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
     };
 
-    // self.resizeBorders();
+    self.resizeBorders();
+}
+
+pub fn setResizing(self: *View, resizing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.resizing = resizing;
+}
+
+pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.tilded_edges = edges;
 }
 
 pub fn setDecorationMode(self: *View, mode: wlr.XdgToplevelDecorationV1.Mode) void {
-    if (self.pending == null) self.pending = self.current;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.decoration_mode = mode;
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
-    if (self.pending == null) self.pending = self.current;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
     // Before a view's focus is set
     server.events.exec("ViewSetFocusPre", .{ self.id, activated });
@@ -296,18 +329,8 @@ pub fn setActivated(self: *View, activated: bool) void {
 }
 
 pub fn setEnabled(self: *View, enabled: bool) void {
-    if (self.pending == null) self.pending = self.current;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.enabled = enabled;
-}
-
-fn setWmCapabilities(self: *View, wm_capabilities: wlr.XdgToplevel.WmCapabilities) void {
-    if (self.pending == null) self.pending = self.current;
-    self.pending.?.wm_capabilities = wm_capabilities;
-}
-
-fn setTiledEdges(self: *View, tiled_edges: wlr.Edges) void {
-    if (self.pending == null) self.pending = self.current;
-    self.pending.?.tiled_edges = tiled_edges;
 }
 
 /// this function handles all things related to sizing and positioning and
@@ -345,6 +368,7 @@ pub fn applyPending(self: *View) void {
             self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
             // Hiding
+            std.log.debug("Hiding trust surfaces", .{});
             self.surface_tree.node.setEnabled(false);
             self.saved_surface_tree.node.setEnabled(true);
             
@@ -362,14 +386,19 @@ pub fn applyPending(self: *View) void {
         );
     }
 
+    // Resizing
+    if(pending.resizing != current.resizing) {
+        _ = self.xdg_toplevel.setResizing(pending.resizing);
+    }
+
+    // Tiled edges
+    if(pending.tilded_edges != current.tilded_edges) {
+        _ = self.xdg_toplevel.setTiled(pending.tilded_edges);
+    }
+
     // Decoration mode
     if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
         _ = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
-    }
-
-    // WM Capabilities
-    if (pending.wm_capabilities != current.wm_capabilities) {
-        _ = self.xdg_toplevel.setWmCapabilities(pending.wm_capabilities);
     }
 
     // Activated
@@ -378,11 +407,6 @@ pub fn applyPending(self: *View) void {
 
         // After a view's focus is set
         server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
-    }
-
-    // Tiling
-    if (pending.tiled_edges != current.tiled_edges) {
-        _ = self.xdg_toplevel.setTiled(pending.tiled_edges);
     }
 
     self.sending = self.pending;
@@ -435,6 +459,7 @@ pub fn applySending(self: *View) void {
     self.resizeBorders();
 
     // Revealing
+    std.log.debug("Revealing true surfaces", .{});
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
@@ -488,10 +513,8 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     // If this view was part of an inflight transaction, clean up so the
     // root counter doesn't get stuck and other views can be revealed.
     if (view.awaiting_buffer) {
+        server.root.pending_views -|= 1;
         view.awaiting_buffer = false;
-        if (server.root.pending_views > 0) {
-            server.root.pending_views -= 1;
-        }
         if (server.root.pending_views == 0) {
             server.root.applySending();
         }
