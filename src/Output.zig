@@ -162,47 +162,41 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
     var sx: f64 = undefined;
     var sy: f64 = undefined;
 
-    const layers = [_]*wlr.SceneTree{ self.layers.overlay, self.layers.top, self.layers.content, self.layers.bottom, self.layers.background };
+    // const layers = [_]*wlr.SceneTree{ self.layers.overlay, self.layers.top, self.layers.content, self.layers.bottom, self.layers.background };
+    const layers = [_]*wlr.SceneTree{ self.layers.content };
 
     for (layers) |layer| {
         const node = layer.node.at(lx, ly, &sx, &sy);
         if (node == null) continue;
 
-        const surface: ?*wlr.Surface = blk: {
+        const surface: *wlr.Surface = blk: {
             if (node.?.type == .buffer) {
                 const scene_buffer = wlr.SceneBuffer.fromNode(node.?);
                 if (wlr.SceneSurface.tryFromBuffer(scene_buffer)) |scene_surface| {
                     break :blk scene_surface.surface;
                 }
             }
-            break :blk null;
+            continue;
         };
-        if (surface == null) continue;
 
-        const scene_node_data: *SceneNodeData = blk: {
-            var n = node.?;
-            while (true) {
-                if (@as(?*SceneNodeData, @ptrCast(@alignCast(n.data)))) |snd| {
-                    break :blk snd;
-                }
-                if (n.parent) |parent_tree| {
-                    n = &parent_tree.node;
-                } else {
-                    continue;
-                }
+        var n = node.?;
+        while(n != &self.tree.node) {
+            n = if (n.parent) |p| &p.node else continue;
+
+            if(n.data == null) continue;
+
+            const snd: *SceneNodeData = @ptrCast(@alignCast(n.data.?));
+            switch (snd.*) {
+                .layer_surface, .view => {
+                    return .{
+                        .scene_node_data = snd,
+                        .surface = surface,
+                        .sx = sx,
+                        .sy = sy,
+                    };
+                },
+                else => continue
             }
-        };
-
-        switch (scene_node_data.*) {
-            .layer_surface, .view => {
-                return SurfaceAtResult{
-                    .scene_node_data = scene_node_data,
-                    .surface = surface.?,
-                    .sx = sx,
-                    .sy = sy,
-                };
-            },
-            else => continue,
         }
     }
 

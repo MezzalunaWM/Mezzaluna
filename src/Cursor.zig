@@ -127,7 +127,6 @@ pub fn processCursorMotion(
         };
     }
 
-
     // send relative motion
     server.relative_pointer_manager.sendRelativeMotion(
         self.seat.wlr_seat,
