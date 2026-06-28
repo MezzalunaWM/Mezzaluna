@@ -81,6 +81,9 @@ sending: ?State,
 current: State,
 
 awaiting_buffer: bool,
+configure_serial: u32,
+configure_acked: bool,
+view_timer: *wl.EventSource,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -138,24 +141,22 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
             .geometry = .{
                 .x = self.scene_tree.node.x,
                 .y = self.scene_tree.node.y,
-                .width = self.xdg_toplevel.base.geometry.width,
-                .height = self.xdg_toplevel.base.geometry.height
+                .width = self.xdg_toplevel.current.width,
+                .height = self.xdg_toplevel.current.height
             },
-            .resizing = false,
+            .resizing = self.xdg_toplevel.current.resizing,
 
-            .activated = false,
+            .activated = self.xdg_toplevel.current.activated,
             .enabled = true,
 
             .decoration_mode = .none,
-            .tilded_edges = .{ 
-                .top = false,
-                .right = false,
-                .left = false,
-                .bottom = false
-            }
+            .tilded_edges = self.xdg_toplevel.current.tiled
         },
 
         .awaiting_buffer = false,
+        .configure_serial = 0,
+        .configure_acked = false,
+        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch Utils.oomPanic()
     };
 
     self.scene_tree.node.setEnabled(true);
@@ -172,9 +173,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         } else {
             self.setParent(server.root.hidden_tree);
         }
-
-        self.setDecorationMode(.server_side);
-
     }
 
     // Create border scene_rects
@@ -215,6 +213,8 @@ pub fn close(self: *View) void {
     if (self.isFullscreen()) {
         self.toggleFullscreen();
     }
+
+    self.setParent(server.root.hidden_tree);
 
     self.xdg_toplevel.sendClose();
 }
@@ -361,26 +361,21 @@ pub fn applyPending(self: *View) void {
     const pending = &self.pending.?;
     const current = &self.current;
 
-    var copied: bool = false;
+    var serial: u32 = 0;
 
     if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
-        if (!copied) {
-            self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
+        self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
-            // Hiding
-            std.log.debug("Hiding trust surfaces", .{});
-            self.surface_tree.node.setEnabled(false);
-            self.saved_surface_tree.node.setEnabled(true);
-            
-            self.awaiting_buffer = true;
-            server.root.pending_views += 1;
-
-            copied = true;
-        }
+        // Hiding
+        self.surface_tree.node.setEnabled(false);
+        self.saved_surface_tree.node.setEnabled(true);
+        
+        self.awaiting_buffer = true;
+        server.root.pending_views += 1;
 
         // Position is not something the client needs to consider so it happens instantly
         // We wait till the client commits its new buffer to position
-        _ = self.xdg_toplevel.setSize(
+        serial = self.xdg_toplevel.setSize(
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
@@ -388,12 +383,12 @@ pub fn applyPending(self: *View) void {
 
     // Resizing
     if(pending.resizing != current.resizing) {
-        _ = self.xdg_toplevel.setResizing(pending.resizing);
+        serial = @max(serial, self.xdg_toplevel.setResizing(pending.resizing));
     }
 
     // Tiled edges
     if(pending.tilded_edges != current.tilded_edges) {
-        _ = self.xdg_toplevel.setTiled(pending.tilded_edges);
+        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tilded_edges));
     }
 
     // Decoration mode
@@ -403,10 +398,15 @@ pub fn applyPending(self: *View) void {
 
     // Activated
     if (pending.activated != current.activated) {
-        _ = self.xdg_toplevel.setActivated(pending.activated);
+        serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
 
-        // After a view's focus is set
         server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
+    }
+
+    self.configure_serial = serial;
+    self.configure_acked = false;
+    if (self.awaiting_buffer) {
+        self.view_timer.timerUpdate(10) catch {};
     }
 
     self.sending = self.pending;
@@ -435,7 +435,8 @@ fn dropSavedSurfaceTree(self: *View) void {
 }
 
 pub fn applySending(self: *View) void {
-    if (self.sending != null) self.current = self.sending.?;
+    if(self.sending == null) return;
+    self.current = self.sending.?;
     self.sending = null;
 
     if(self.scene_tree.node.parent.? != self.current.parent) 
@@ -459,7 +460,6 @@ pub fn applySending(self: *View) void {
     self.resizeBorders();
 
     // Revealing
-    std.log.debug("Revealing true surfaces", .{});
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
@@ -493,14 +493,13 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 }
 
 // --------- XdgTopLevel event handlers ---------
-fn handleMap(listener: *wl.Listener(void)) void {
-    const view: *View = @fieldParentPtr("map", listener);
-    std.log.debug("Mapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
+fn handleMap(_: *wl.Listener(void)) void {
+    // const view: *View = @fieldParentPtr("map", listener);
+    // std.log.debug("Mapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
-    std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
     server.events.exec("ViewUnmapPre", .{view.id});
 
@@ -513,8 +512,11 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     // If this view was part of an inflight transaction, clean up so the
     // root counter doesn't get stuck and other views can be revealed.
     if (view.awaiting_buffer) {
+        view.view_timer.timerUpdate(0) catch {};
         server.root.pending_views -|= 1;
         view.awaiting_buffer = false;
+        view.configure_serial = 0;
+        view.configure_acked = false;
         if (server.root.pending_views == 0) {
             server.root.applySending();
         }
@@ -544,6 +546,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
     view.set_title.link.remove();
     view.set_app_id.link.remove();
 
+    view.view_timer.remove();
+
     view.xdg_toplevel.base.surface.data = null;
 
     view.scene_tree.node.destroy();
@@ -562,21 +566,39 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         return;
     }
 
-    if (view.awaiting_buffer) {
+    if (view.awaiting_buffer and view.configure_acked) {
         view.awaiting_buffer = false;
-
-        if (server.root.pending_views > 0) {
-            server.root.pending_views -= 1;
-        }
-
-        // All views have gotten their commitments
-        if (server.root.pending_views == 0) {
-            server.root.applySending();
-        }
+        view.configure_serial = 0;
+        view.view_timer.timerUpdate(0) catch {};
+        if (server.root.pending_views > 0) server.root.pending_views -= 1;
+        if (server.root.pending_views == 0) server.root.applySending();
     }
 }
 
 // --------- XdgToplevel Event Handlers ---------
+fn handleAckConfigure(listener: *wl.Listener(*wlr.XdgSurface.Configure), configure: *wlr.XdgSurface.Configure) void {
+    const view: *View = @fieldParentPtr("ack_configure", listener);
+
+    if (view.configure_serial == 0 or configure.serial < view.configure_serial) return;
+    view.configure_acked = true;
+    if (!view.awaiting_buffer) return;
+    view.awaiting_buffer = false;
+    view.configure_serial = 0;
+    view.view_timer.timerUpdate(0) catch {};
+    if (server.root.pending_views > 0) server.root.pending_views -= 1;
+    if (server.root.pending_views == 0) server.root.applySending();
+}
+
+fn handleViewTimer(data: *View) c_int {
+    if (!data.awaiting_buffer) return 0;
+    data.awaiting_buffer = false;
+    data.configure_serial = 0;
+    data.configure_acked = false;
+    if (server.root.pending_views > 0) server.root.pending_views -= 1;
+    if (server.root.pending_views == 0) server.root.applySending();
+    return 0;
+}
+
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopup) void {
     const view: *View = @fieldParentPtr("new_popup", listener);
     _ = Popup.init(xdg_popup, view.scene_tree);
@@ -590,12 +612,6 @@ fn handleRequestMove(listener: *wl.Listener(*wlr.XdgToplevel.event.Move), _: *wl
 fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _: *wlr.XdgToplevel.event.Resize) void {
     const view: *View = @fieldParentPtr("request_resize", listener);
     server.events.exec("ViewRequestResize", .{view.id});
-}
-
-fn handleAckConfigure( _: *wl.Listener(*wlr.XdgSurface.Configure), _: *wlr.XdgSurface.Configure) void {
-    // We no longer trigger applySending on ack. Instead we wait for the
-    // client to commit the new buffer (handleCommit), which is the correct
-    // point to reveal the live surface and drop the saved copy.
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
