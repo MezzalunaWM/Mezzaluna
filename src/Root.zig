@@ -166,16 +166,19 @@ pub fn applyPending(self: *Root) void {
         std.debug.assert(o.output.data != null);
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
 
-        var view_it = output.layers.content.children.iterator(.forward);
+        for(layers) |layer| {
+            var view_it = layer.children.iterator(.forward);
 
-        while(view_it.next()) |scene_node| {
-            std.debug.assert(scene_node.data != null);
+            while(view_it.next()) |scene_node| {
+                std.debug.assert(scene_node.data != null);
 
-            const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-            std.debug.assert(view_snd.* == .view);
+                const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+                std.debug.assert(view_snd.* == .view);
 
-            view_snd.view.applyPending();
+                view_snd.view.applyPending();
+            }
         }
     }
 
@@ -202,17 +205,20 @@ pub fn applySending(self: *Root) void {
         std.debug.assert(o.output.data != null);
 
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+        const layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
 
-        var view_it = output.layers.content.children.safeIterator(.forward);
+        for(layers) |layer| {
+            var view_it = layer.children.safeIterator(.forward);
 
-        var i: i32 = 0;
-        while(view_it.next()) |scene_node| : (i += 1) {
-            std.debug.assert(scene_node.data != null);
+            var i: i32 = 0;
+            while(view_it.next()) |scene_node| : (i += 1) {
+                std.debug.assert(scene_node.data != null);
 
-            const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-            std.debug.assert(view_snd.* == .view);
+                const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
+                std.debug.assert(view_snd.* == .view);
 
-            view_snd.view.applySending();
+                view_snd.view.applySending();
+            }
         }
     }
 

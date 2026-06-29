@@ -19,6 +19,7 @@ const State = struct {
     parent: *wlr.SceneTree,
 
     geometry: wlr.Box,
+    fullscreen: bool,
     resizing: bool,
 
     activated: bool,
@@ -26,6 +27,7 @@ const State = struct {
 
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
     tilded_edges: wlr.Edges,
+    closing: bool,
 
     // Give the default state views start with, not what we want them to start with
     pub fn init() State {
@@ -33,6 +35,7 @@ const State = struct {
             .parent = server.root.hidden_tree,
 
             .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
+            .fullscreen = false,
             .resizing = false,
 
             .activated = false,
@@ -44,7 +47,8 @@ const State = struct {
                 .right = true,
                 .left = true,
                 .bottom = true
-            }
+            },
+            .closing = false,
         };
     }
 };
@@ -144,13 +148,15 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
                 .width = self.xdg_toplevel.current.width,
                 .height = self.xdg_toplevel.current.height
             },
+            .fullscreen = self.xdg_toplevel.current.fullscreen,
             .resizing = self.xdg_toplevel.current.resizing,
 
             .activated = self.xdg_toplevel.current.activated,
             .enabled = true,
 
             .decoration_mode = .none,
-            .tilded_edges = self.xdg_toplevel.current.tiled
+            .tilded_edges = self.xdg_toplevel.current.tiled,
+            .closing = false,
         },
 
         .awaiting_buffer = false,
@@ -210,11 +216,9 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 // Tell the client to close
 // It better behave!
 pub fn close(self: *View) void {
-    if (self.isFullscreen()) {
-        self.toggleFullscreen();
+    if (self.current.fullscreen) {
+        self.setFullscreen(false);
     }
-
-    self.setParent(server.root.hidden_tree);
 
     self.xdg_toplevel.sendClose();
 }
@@ -223,76 +227,70 @@ pub fn setBorderColor(self: *View, color: *const [4]f32) void {
     for (self.borders) |border| border.setColor(color);
 }
 
-pub fn isFullscreen(self: *View) bool {
-    if (self.output == null) { return false; }
+pub fn setFullscreen(self: *View, fullscreen: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    for (self.output.?.fullscreens.items) |view| {
-        if (view == self) return true;
-    }
-
-    return false;
-}
-
-pub fn toggleFullscreen(self: *View) void {
     if (self.output == null) {
         std.log.debug("View {d} has no output to fullscreen on", .{self.id});
         return;
     }
 
+    // ViewSetFullscreenPre
+    // Before making a view fullscreen within it's output
+    // passed view_id and true `true` if being fullscreened `false` otherwise
+    server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen });
+
+    // std.log.debug("Setting fullscreen to {}", .{fullscreen});
+
     const fullscreens = &self.output.?.fullscreens;
-    if (self.output.?.getEnabledFullscreen() == self) {
-        // ViewSetFullscreenPre
-        // Before making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPre", .{ self.id, false });
+    if(fullscreen and !self.current.fullscreen) {
+        if(self.output.?.getEnabledFullscreen()) |ef| {
+            ef.setFullscreen(false);
+        }
 
-        self.scene_tree.node.reparent(self.output.?.layers.content);
+        self.previous_geometry = (self.sending orelse self.current).geometry;
 
-        // ViewSetFullscreenPost
-        // After making a view fullscreen within it's output
-        // passed view_id and true `true` if being fullscreened `false` otherwise
-        server.events.exec("ViewSetFullscreenPost", .{ self.id, false });
+        self.setParent(self.output.?.layers.top);
+        self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
+        self.pending.?.fullscreen = true;
+
+        fullscreens.append(gpa, self) catch Utils.oomPanic();
+    } else if (!fullscreen and self.current.fullscreen) {
+        self.setParent(self.output.?.layers.content);
+        self.pending.?.fullscreen = false;
+
+        // self.setGeometry(
+        //     self.previous_geometry.x,
+        //     self.previous_geometry.y,
+        //     self.previous_geometry.width,
+        //     self.previous_geometry.height,
+        // );
 
         if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
             _ = self.output.?.fullscreens.swapRemove(i);
         }
-
-        // This needs to be acknowledged with configures
-        _ = self.xdg_toplevel.setFullscreen(false);
-        return;
     }
 
-    // Check to see if another enabled fullscreen view exists, if so replace it
-    if (self.output.?.getEnabledFullscreen()) |v| {
-        _ = v.toggleFullscreen();
-    }
-
-    server.events.exec("ViewSetFullscreenPre", .{ self.id, true });
-
-    self.setParent(self.output.?.layers.top);
-    self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
-
-    fullscreens.append(gpa, self) catch Utils.oomPanic();
-    _ = self.xdg_toplevel.setFullscreen(true);
-    server.events.exec("ViewSetFullscreenPost", .{ self.id, true });
+    // TODO: This should be after we get the configure
+    // ViewSetFullscreenPost
+    // After making a view fullscreen within it's output
+    // passed view_id and true `true` if being fullscreened `false` otherwise
+    server.events.exec("ViewSetFullscreenPost", .{ self.id, fullscreen });
 }
 
 pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
-    // TODO: How does this PROPERLY interact with fullscreen
-    if (self.isFullscreen()) return;
-
     if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.parent = parent;
 }
 
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    // if (!self.xdg_toplevel.base.surface.mapped) return;
-
-    if (self.isFullscreen()) return;
-
+    // const eventual = self.pending orelse self.sending orelse self.current;
+    // if (eventual.fullscreen) return;
+    //
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
+    self.previous_geometry = self.current.geometry;
     const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
     self.pending.?.geometry = .{
         .x = x orelse geo_base.geometry.x,
@@ -300,6 +298,7 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
         .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
         .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
     };
+    std.log.debug("set geometry {}", .{self.pending.?.geometry});
 
     self.resizeBorders();
 }
@@ -331,6 +330,11 @@ pub fn setActivated(self: *View, activated: bool) void {
 pub fn setEnabled(self: *View, enabled: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.enabled = enabled;
+}
+
+pub fn setClosing(self: *View, closing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.closing = closing;
 }
 
 /// this function handles all things related to sizing and positioning and
@@ -391,6 +395,11 @@ pub fn applyPending(self: *View) void {
         serial = @max(serial, self.xdg_toplevel.setTiled(pending.tilded_edges));
     }
 
+    // Fullscreen
+    if(pending.fullscreen != current.fullscreen) {
+        serial = @max(serial, self.xdg_toplevel.setFullscreen(pending.fullscreen));
+    }
+
     // Decoration mode
     if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
         _ = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
@@ -401,6 +410,12 @@ pub fn applyPending(self: *View) void {
         serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
 
         server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
+    }
+
+    // Closing
+    if (pending.closing and !current.closing) {
+        self.scene_tree.node.setEnabled(false);
+        self.xdg_toplevel.sendClose();
     }
 
     self.configure_serial = serial;
@@ -501,6 +516,8 @@ fn handleMap(_: *wl.Listener(void)) void {
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
 
+    view.scene_tree.node.setEnabled(false);
+
     server.events.exec("ViewUnmapPre", .{view.id});
 
     if (server.getDefaultSeat().focused_surface) |fs| {
@@ -509,7 +526,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
-    // If this view was part of an inflight transaction, clean up so the
+    // If this view was part of an sending transaction, clean up so the
     // root counter doesn't get stuck and other views can be revealed.
     if (view.awaiting_buffer) {
         view.view_timer.timerUpdate(0) catch {};

@@ -93,6 +93,23 @@ pub fn close(L: *zlua.Lua) i32 {
     return 0;
 }
 
+/// ---Set a view as closing (part of the state cycle)
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param closing boolean
+pub fn set_closing(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    if (!L.isBoolean(2)) {
+        L.raiseErrorStr("argument 2 must be a boolean", .{});
+    }
+    const closing = L.toBoolean(2);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        v.setClosing(closing);
+    }
+
+    return 0;
+}
+
 /// --- Apply all pending state changes
 pub fn apply(_: *zlua.Lua) i32 {
     server.root.applyPending();
@@ -216,14 +233,17 @@ pub fn set_focused(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Toggle the view to enter fullscreen. Will enter the fullscreen layer
+/// ---Set the view's fullscreen status. Will enter the fullscreen layer
+/// ---if true and will enter content layer if false.
 /// ---and remove any preexisting fullscreened view for it's output.
 /// ---@param view_id integer 0 maps to focused view
-pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
+/// ---@param fullscreen bool status of fullscreen
+pub fn set_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const fullscreen = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        v.toggleFullscreen();
+        v.setFullscreen(fullscreen);
     }
 
     return 0;
@@ -236,7 +256,7 @@ pub fn get_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const view = LuaUtils.viewById(view_id);
 
-    L.pushBoolean(if (view == null) false else view.?.isFullscreen());
+    L.pushBoolean(if (view == null) false else view.?.current.fullscreen);
     return 1;
 }
 

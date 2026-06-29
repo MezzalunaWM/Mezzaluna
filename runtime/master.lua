@@ -378,14 +378,16 @@ M.make_tile = function (view_id)
 	M.tile_tag(tag_idx)
 end
 
-M.set_fullscreen = function (view_id)
+M.toggle_fullscreen = function (view_id)
 	local _, tag_idx, _ = utils.find_view(view_id)
-  mez.view.toggle_fullscreen(view_id)
 
-	if not mez.view.get_fullscreen(view_id) then
+  local fullscreen = mez.view.get_fullscreen(view_id)
+  mez.view.set_fullscreen(view_id, not fullscreen)
+
+  if fullscreen then
     mez.view.set_geometry(view_id, mez.view.get_previous_geometry(view_id))
-		M.tile_tag(tag_idx)
-	end
+  end
+  mez.view.apply()
 end
 
 ---@param view_id integer
@@ -444,7 +446,7 @@ M.setup = function(config)
 	mez.input.add_keymap(M.config.mod_key, "Return", { press = function () M.zoom(0) end })
 	mez.input.add_keymap(M.config.mod_key, "h", { press = function () M.change_ratio(-0.03) end })
 	mez.input.add_keymap(M.config.mod_key, "l", { press = function () M.change_ratio(0.03) end })
-	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.set_fullscreen(0) end })
+	mez.input.add_keymap(M.config.mod_key.."|shift", "F", { press = function () M.toggle_fullscreen(0) end })
 
 	for i = 1, M.config.tag_count do
 		mez.input.add_keymap(M.config.mod_key, tostring(i), {
@@ -505,7 +507,7 @@ M.setup = function(config)
 
 	mez.hook.add("ViewRequestFullscreen", {
     callback = function (view_id)
-      M.set_fullscreen(view_id)
+      M.toggle_fullscreen(view_id)
     end
   })
 end

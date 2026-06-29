@@ -162,8 +162,7 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
     var sx: f64 = undefined;
     var sy: f64 = undefined;
 
-    // const layers = [_]*wlr.SceneTree{ self.layers.overlay, self.layers.top, self.layers.content, self.layers.bottom, self.layers.background };
-    const layers = [_]*wlr.SceneTree{ self.layers.content };
+    const layers = [_]*wlr.SceneTree{ self.layers.overlay, self.layers.top, self.layers.content, self.layers.bottom, self.layers.background };
 
     for (layers) |layer| {
         const node = layer.node.at(lx, ly, &sx, &sy);
