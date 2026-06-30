@@ -20,7 +20,6 @@ const State = struct {
 
     geometry: wlr.Box,
     fullscreen: bool,
-    resizing: bool,
 
     activated: bool,
     enabled: bool,
@@ -36,7 +35,6 @@ const State = struct {
 
             .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
             .fullscreen = false,
-            .resizing = false,
 
             .activated = false,
             .enabled = true,
@@ -149,7 +147,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
                 .height = self.xdg_toplevel.current.height
             },
             .fullscreen = self.xdg_toplevel.current.fullscreen,
-            .resizing = self.xdg_toplevel.current.resizing,
 
             .activated = self.xdg_toplevel.current.activated,
             .enabled = true,
@@ -306,11 +303,6 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
     self.resizeBorders();
 }
 
-pub fn setResizing(self: *View, resizing: bool) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.resizing = resizing;
-}
-
 pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.tilded_edges = edges;
@@ -332,6 +324,9 @@ pub fn setActivated(self: *View, activated: bool) void {
 
 pub fn setEnabled(self: *View, enabled: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    server.events.exec("ViewSetEnabledPre", .{ self.id, enabled });
+
     self.pending.?.enabled = enabled;
 }
 
@@ -365,6 +360,7 @@ pub fn applyPending(self: *View) void {
 
     var serial: u32 = 0;
 
+    // Resizing
     if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
         self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
@@ -381,11 +377,6 @@ pub fn applyPending(self: *View) void {
             pending.geometry.width - 2 * self.border_width,
             pending.geometry.height - 2 * self.border_width,
         );
-    }
-
-    // Resizing
-    if(pending.resizing != current.resizing) {
-        serial = @max(serial, self.xdg_toplevel.setResizing(pending.resizing));
     }
 
     // Tiled edges
@@ -406,12 +397,6 @@ pub fn applyPending(self: *View) void {
     // Activated
     if (pending.activated != current.activated) {
         serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
-    }
-
-    // Closing
-    if (pending.closing and !current.closing) {
-
-        self.xdg_toplevel.sendClose();
     }
 
     self.configure_serial = serial;
@@ -465,6 +450,12 @@ pub fn applySending(self: *View) void {
                 break :blk output_snd.output;
             };
         }
+    }
+
+    if(self.current.closing) {
+        self.scene_tree.node.setEnabled(false);
+        self.xdg_toplevel.sendClose();
+        return;
     }
 
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
