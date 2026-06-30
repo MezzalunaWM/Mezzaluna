@@ -432,6 +432,22 @@ fn dropSavedSurfaceTree(self: *View) void {
 
 pub fn applySending(self: *View) void {
     if(self.sending == null) return;
+
+    if (self.sending.?.geometry.x != self.current.geometry.x or
+        self.sending.?.geometry.y != self.current.geometry.y or
+        self.sending.?.geometry.width != self.current.geometry.width or
+        self.sending.?.geometry.height != self.current.geometry.height) 
+        server.events.exec("ViewSetGeometryPost", .{ self.id });
+
+    if (self.sending.?.activated != self.current.activated)
+        server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated });
+
+    if (self.sending.?.enabled != self.current.enabled)
+        server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled });
+
+    if (self.sending.?.closing)
+        server.events.exec("ViewSetClosingPre", .{ self.id });
+    
     self.current = self.sending.?;
     self.sending = null;
 

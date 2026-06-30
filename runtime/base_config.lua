@@ -50,9 +50,11 @@ mez.hook.add("ViewSetFocusPost", {
 	end
 })
 
-mez.hook.add("ViewMapPre", {
-  callback = function(view_id)
-    mez.view.set_border(view_id, { color = "#52493E", width = border_width })
+mez.hook.add("ViewCommitPost", {
+  callback = function(view_id, initial)
+    if initial then
+      mez.view.set_border(view_id, { color = "#52493E", width = border_width })
+    end
   end
 })
 
