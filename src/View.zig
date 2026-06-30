@@ -183,8 +183,8 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
     // Create border scene_rects
     for (self.borders, 0..) |_, i| {
-        self.borders[i] = try wlr.SceneTree.createSceneRect(self.scene_tree, 0, 0, &self.border_color);
-        self.borders[i].node.data = self;
+        self.borders[i] = try self.scene_tree.createSceneRect(0, 0, &self.border_color);
+        self.borders[i].node.data = &self.borders_snd;
     }
 
     // Set a bunch of scene node data to point here
@@ -213,14 +213,16 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     return self;
 }
 
-// Tell the client to close
-// It better behave!
-pub fn close(self: *View) void {
-    if (self.current.fullscreen) {
+pub fn setClosing(self: *View, closing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    server.events.exec("ViewSetClosingPre", .{ self.id, closing });
+
+    if (closing and self.current.fullscreen) {
         self.setFullscreen(false);
     }
 
-    self.xdg_toplevel.sendClose();
+    self.pending.?.closing = closing;
 }
 
 pub fn setBorderColor(self: *View, color: *const [4]f32) void {
@@ -287,8 +289,10 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     // const eventual = self.pending orelse self.sending orelse self.current;
     // if (eventual.fullscreen) return;
-    //
+
     if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry });
 
     self.previous_geometry = self.current.geometry;
     const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
@@ -298,7 +302,6 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
         .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
         .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
     };
-    std.log.debug("set geometry {}", .{self.pending.?.geometry});
 
     self.resizeBorders();
 }
@@ -330,11 +333,6 @@ pub fn setActivated(self: *View, activated: bool) void {
 pub fn setEnabled(self: *View, enabled: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.enabled = enabled;
-}
-
-pub fn setClosing(self: *View, closing: bool) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.closing = closing;
 }
 
 /// this function handles all things related to sizing and positioning and
@@ -408,13 +406,11 @@ pub fn applyPending(self: *View) void {
     // Activated
     if (pending.activated != current.activated) {
         serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
-
-        server.events.exec("ViewSetFocusPost", .{ self.id, pending.activated });
     }
 
     // Closing
     if (pending.closing and !current.closing) {
-        self.scene_tree.node.setEnabled(false);
+
         self.xdg_toplevel.sendClose();
     }
 
@@ -454,21 +450,21 @@ pub fn applySending(self: *View) void {
     self.current = self.sending.?;
     self.sending = null;
 
-    if(self.scene_tree.node.parent.? != self.current.parent) 
+    if(self.scene_tree.node.parent.? != self.current.parent) {
         self.scene_tree.node.reparent(self.current.parent);
 
-    // Get the output from the new parent
-    if (self.scene_tree.node.parent) |st| {
-        std.debug.assert(st.node.data != null);
-        const parent_snd: *SceneNodeData = @ptrCast(@alignCast(st.node.data.?));
-        std.debug.assert(parent_snd.* == .hidden_tree or parent_snd.* == .output_layer);
+        if (self.scene_tree.node.parent) |st| {
+            std.debug.assert(st.node.data != null);
+            const parent_snd: *SceneNodeData = @ptrCast(@alignCast(st.node.data.?));
+            std.debug.assert(parent_snd.* == .hidden_tree or parent_snd.* == .output_layer);
 
-        self.output = if (parent_snd.* == .hidden_tree) null else blk: {
-            std.debug.assert(parent_snd.*.output_layer.node.parent != null);
-            const output_snd: *SceneNodeData = @ptrCast(@alignCast(parent_snd.*.output_layer.node.parent.?.node.data));
-            std.debug.assert(output_snd.* == .output);
-            break :blk output_snd.output;
-        };
+            self.output = if (parent_snd.* == .hidden_tree) null else blk: {
+                std.debug.assert(parent_snd.*.output_layer.node.parent != null);
+                const output_snd: *SceneNodeData = @ptrCast(@alignCast(parent_snd.*.output_layer.node.parent.?.node.data));
+                std.debug.assert(output_snd.* == .output);
+                break :blk output_snd.output;
+            };
+        }
     }
 
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);

@@ -81,26 +81,11 @@ pub fn get_focused_id(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Close the view with view_id
-/// ---@param view_id integer 0 maps to focused view
-pub fn close(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        v.close();
-    }
-
-    return 0;
-}
-
 /// ---Set a view as closing (part of the state cycle)
 /// ---@param view_id integer 0 maps to focused view
 /// ---@param closing boolean
-pub fn set_closing(L: *zlua.Lua) i32 {
+pub fn set_close(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if (!L.isBoolean(2)) {
-        L.raiseErrorStr("argument 2 must be a boolean", .{});
-    }
     const closing = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {

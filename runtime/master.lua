@@ -123,8 +123,6 @@ M.tile_tag = function(tag_id)
       })
 		end
 	end
-
-  mez.view.apply()
 end
 
 ---Add the id of a new view
@@ -141,6 +139,7 @@ M.add_view = function(view_id)
 	if M.config.focus_on_spawn then mez.view.set_focused(view_id) end
 
 	M.tile_tag(M.state.tag_id)
+  mez.view.apply()
 end
 
 ---Move the focus in a tag to the next view
@@ -179,6 +178,7 @@ M.focus_next = function()
 			mez.view.set_focused(tag.stack[view_idx + 1])
 		end
 	end
+
   mez.view.apply()
 end
 
@@ -216,6 +216,7 @@ M.focus_prev = function()
 			mez.view.set_focused(tag.stack[view_idx - 1])
 		end
 	end
+
   mez.view.apply()
 end
 
@@ -251,7 +252,7 @@ M.remove_view = function(view_id)
 		end
 	end
 
-	M.tile_tag(tag_idx)
+  M.tile_tag(tag_idx)
 end
 
 ---Switch to a tag by enabling all views for 1 tag,
@@ -320,6 +321,7 @@ M.zoom = function (view_id)
 	table.insert(tag.stack, 1, m)
 
 	M.tile_tag(tag_idx)
+  mez.view.apply()
 end
 
 ---Modify the master stack ratio
@@ -330,6 +332,7 @@ M.change_ratio = function (delta)
 	M.state.master_ratio = M.state.master_ratio > 0.9 and 0.9 or M.state.master_ratio
 
 	M.tile_tag(M.state.tag_id)
+  mez.view.apply()
 end
 
 ---Move a view from tiling to floating
@@ -358,6 +361,7 @@ M.make_float = function (view_id)
 	mez.view.raise_to_top(tag.floating[#tag.floating])
 	mez.view.set_focused(tag.floating[#tag.floating])
 	M.tile_tag(tag_idx)
+  mez.view.apply()
 end
 
 ---Move a view from floating to tiling
@@ -376,6 +380,7 @@ M.make_tile = function (view_id)
 	end
 
 	M.tile_tag(tag_idx)
+  mez.view.apply()
 end
 
 M.toggle_fullscreen = function (view_id)
@@ -387,6 +392,7 @@ M.toggle_fullscreen = function (view_id)
   if fullscreen then
     mez.view.set_geometry(view_id, mez.view.get_previous_geometry(view_id))
   end
+
   mez.view.apply()
 end
 
@@ -415,6 +421,7 @@ M.send_view = function (view_id, tag_id)
   mez.view.set_enabled(view_id, false)
   M.tile_tag(M.state.tag_id)
   M.tile_tag(tag_id)
+  mez.view.apply()
 end
 
 ---@param config MasterConfig
@@ -439,7 +446,7 @@ M.setup = function(config)
 	end
 
 	mez.hook.add("ViewCommitPost", { callback = function(view_id, initial) if initial then M.add_view(view_id) end end })
-	mez.hook.add("ViewUnmapPost", { callback = function(view_id) M.remove_view(view_id) end })
+  mez.hook.add("ViewSetClosingPre", { callback = function(view_id, closing) if closing then M.remove_view(view_id) end end })
 
 	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
 	mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })
@@ -502,6 +509,7 @@ M.setup = function(config)
 	mez.hook.add("OutputStateChange", { callback = function ()
 		for i = 1, M.config.tag_count do
 			M.tile_tag(i)
+      mez.view.apply()
 		end
 	end})
 
