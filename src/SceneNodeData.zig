@@ -11,6 +11,7 @@ const SceneNodeDataType = enum {
     view_saved_tree,
     view_border,
     view_surface,
+    view_xdg_surface,
     hidden_tree,
     output,
     output_layer,
@@ -24,6 +25,7 @@ pub const SceneNodeData = union(SceneNodeDataType) {
     view_saved_tree: *View,
     view_border: *View,
     view_surface: *View,
+    view_xdg_surface: *View,
 
     hidden_tree: *wlr.SceneTree,
 

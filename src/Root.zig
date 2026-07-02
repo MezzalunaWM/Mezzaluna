@@ -151,17 +151,16 @@ pub fn applyPending(self: *Root) void {
 
     self.pending_views = 0;
 
-    var hidden_it = self.hidden_tree.children.iterator(.forward);
+    var hidden_it = self.hidden_tree.children.safeIterator(.forward);
     while(hidden_it.next()) |scene_node| {
         std.debug.assert(scene_node.data != null);
 
         const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-        std.debug.assert(view_snd.* == .view);
 
         view_snd.view.applyPending();
     }
 
-    var output_it = self.output_layout.outputs.iterator(.forward);
+    var output_it = self.output_layout.outputs.safeIterator(.forward);
     while(output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
 
@@ -169,7 +168,7 @@ pub fn applyPending(self: *Root) void {
         const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
 
         for(layers) |layer| {
-            var view_it = layer.children.iterator(.forward);
+            var view_it = layer.children.safeIterator(.forward);
 
             while(view_it.next()) |scene_node| {
                 std.debug.assert(scene_node.data != null);

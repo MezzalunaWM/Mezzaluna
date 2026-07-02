@@ -27,28 +27,6 @@ const State = struct {
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
     tilded_edges: wlr.Edges,
     closing: bool,
-
-    // Give the default state views start with, not what we want them to start with
-    pub fn init() State {
-        return .{
-            .parent = server.root.hidden_tree,
-
-            .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
-            .fullscreen = false,
-
-            .activated = false,
-            .enabled = true,
-
-            .decoration_mode = .none,
-            .tilded_edges = .{
-                .top = true,
-                .right = true,
-                .left = true,
-                .bottom = true
-            },
-            .closing = false,
-        };
-    }
 };
 
 id: u64,
@@ -65,6 +43,7 @@ saved_surface_tree: *wlr.SceneTree,
 scene_tree_snd: SceneNodeData,
 surface_tree_snd: SceneNodeData,
 saved_tree_snd: SceneNodeData,
+xdg_surface_snd: SceneNodeData,
 surface_snd: SceneNodeData,
 
 previous_geometry: wlr.Box,
@@ -120,23 +99,42 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .xdg_toplevel = xdg_toplevel,
         .xdg_toplevel_decoration = null,
 
-        // .scene_tree = try server.root.hidden_tree.createSceneTree(),
-        .scene_tree = try server.root.hidden_tree.createSceneTree(),
-        .surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base),
-        .saved_surface_tree = try self.scene_tree.createSceneTree(),
-
         .scene_tree_snd = .{ .view = self },
         .surface_tree_snd = .{ .view_surface_tree = self },
         .saved_tree_snd = .{ .view_saved_tree = self },
         .surface_snd = .{ .view_surface = self },
+        .xdg_surface_snd = .{ .view_xdg_surface = self },
         .borders_snd = .{ .view_border = self },
+
+        .scene_tree = try server.root.hidden_tree.createSceneTree(),
+        .surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base),
+        .saved_surface_tree = try self.scene_tree.createSceneTree(),
 
         .border_width = 0,
         .border_color = .{ 0, 0, 0, 1 },
         .borders = undefined,
 
-        .pending = State.init(),
+        // State the view SHOULD start with
+        .pending = .{
+            .parent = server.root.hidden_tree,
+
+            .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
+            .fullscreen = false,
+
+            .activated = false,
+            .enabled = true,
+
+            .decoration_mode = .server_side,
+            .tilded_edges = .{
+                .top = true,
+                .right = true,
+                .left = true,
+                .bottom = true
+            },
+            .closing = false,
+        },
         .sending = null,
+        // State the view DOES start with
         .current = .{
             .parent = server.root.hidden_tree,
 
@@ -149,9 +147,9 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
             .fullscreen = self.xdg_toplevel.current.fullscreen,
 
             .activated = self.xdg_toplevel.current.activated,
-            .enabled = true,
+            .enabled = self.scene_tree.node.enabled,
 
-            .decoration_mode = .none,
+            .decoration_mode = .server_side,
             .tilded_edges = self.xdg_toplevel.current.tiled,
             .closing = false,
         },
@@ -162,8 +160,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch Utils.oomPanic()
     };
 
-    self.scene_tree.node.setEnabled(true);
-    self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
     // Create border scene_rects
@@ -177,7 +173,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.surface_tree.node.data = &self.surface_tree_snd;
     self.saved_surface_tree.node.data = &self.saved_tree_snd;
 
-    self.xdg_toplevel.base.data = &self.scene_tree_snd;
+    self.xdg_toplevel.base.data = &self.xdg_surface_snd;
     self.xdg_toplevel.base.surface.data = &self.surface_snd;
 
     // Add events too xdg_toplevel
@@ -186,14 +182,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
     self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
     self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
-    self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
-
-    self.xdg_toplevel.events.request_fullscreen.add(&self.request_fullscreen);
-    self.xdg_toplevel.events.request_move.add(&self.request_move);
-    self.xdg_toplevel.events.request_resize.add(&self.request_resize);
-    self.xdg_toplevel.events.set_app_id.add(&self.set_app_id);
-    self.xdg_toplevel.events.set_title.add(&self.set_title);
-    // self.xdg_toplevel.events.set_parent.add(&self.set_parent);
 
     return self;
 }
@@ -201,11 +189,11 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 pub fn setClosing(self: *View, closing: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    server.events.exec("ViewSetClosingPre", .{ self.id, closing });
-
     if (closing and self.current.fullscreen) {
         self.setFullscreen(false);
     }
+
+    server.events.exec("ViewSetClosingPre", .{ self.id, closing });
 
     self.pending.?.closing = closing;
 }
@@ -421,6 +409,18 @@ fn dropSavedSurfaceTree(self: *View) void {
 pub fn applySending(self: *View) void {
     if(self.sending == null) return;
 
+    if (self.sending.?.closing) {
+        self.scene_tree.node.setEnabled(false);
+
+        server.events.exec("ViewSetClosingPost", .{ self.id });
+        
+        self.xdg_toplevel.sendClose();
+
+        self.current = self.sending.?;
+        self.sending = null;
+        return;
+    }
+
     if (self.sending.?.geometry.x != self.current.geometry.x or
         self.sending.?.geometry.y != self.current.geometry.y or
         self.sending.?.geometry.width != self.current.geometry.width or
@@ -430,11 +430,8 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.activated != self.current.activated)
         server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated });
 
-    if (self.sending.?.enabled != self.current.enabled)
+    if (self.sending.?.enabled != self.current.enabled) 
         server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled });
-
-    if (self.sending.?.closing)
-        server.events.exec("ViewSetClosingPre", .{ self.id });
     
     self.current = self.sending.?;
     self.sending = null;
@@ -454,12 +451,6 @@ pub fn applySending(self: *View) void {
                 break :blk output_snd.output;
             };
         }
-    }
-
-    if(self.current.closing) {
-        self.scene_tree.node.setEnabled(false);
-        self.xdg_toplevel.sendClose();
-        return;
     }
 
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
@@ -511,13 +502,21 @@ fn handleMap(listener: *wl.Listener(void)) void {
     } else {
         view.setParent(server.root.hidden_tree);
     }
+
+    view.xdg_toplevel.base.events.ack_configure.add(&view.ack_configure);
+    view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
+    view.xdg_toplevel.events.request_move.add(&view.request_move);
+    view.xdg_toplevel.events.request_resize.add(&view.request_resize);
+    view.xdg_toplevel.events.set_app_id.add(&view.set_app_id);
+    view.xdg_toplevel.events.set_title.add(&view.set_title);
+
     server.root.applyPending();
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
 
-    view.scene_tree.node.setEnabled(false);
+    // view.scene_tree.node.setEnabled(false);
 
     server.events.exec("ViewUnmapPre", .{view.id});
 
@@ -540,6 +539,14 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
+    view.ack_configure.link.remove();
+    view.request_fullscreen.link.remove();
+    view.request_move.link.remove();
+    view.request_resize.link.remove();
+    view.set_title.link.remove();
+    view.set_app_id.link.remove();
+
+
     server.events.exec("ViewUnmapPost", .{view.id});
 }
 
@@ -553,16 +560,10 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
     // remove listeners
     view.destroy.link.remove();
-    view.ack_configure.link.remove();
     view.map.link.remove();
     view.unmap.link.remove();
     view.commit.link.remove();
     view.new_popup.link.remove();
-    view.request_fullscreen.link.remove();
-    view.request_move.link.remove();
-    view.request_resize.link.remove();
-    view.set_title.link.remove();
-    view.set_app_id.link.remove();
 
     view.view_timer.remove();
 
@@ -579,11 +580,9 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
 
     server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit});
     if (view.xdg_toplevel.base.initial_commit) {
-
-        if(view.xdg_toplevel_decoration) |deco| {
+        if (view.xdg_toplevel_decoration) |deco| {
             _ = deco.setMode(.server_side);
         }
-
         return;
     }
 
@@ -602,12 +601,12 @@ fn handleAckConfigure(listener: *wl.Listener(*wlr.XdgSurface.Configure), configu
 
     if (view.configure_serial == 0 or configure.serial < view.configure_serial) return;
     view.configure_acked = true;
-    if (!view.awaiting_buffer) return;
-    view.awaiting_buffer = false;
     view.configure_serial = 0;
-    view.view_timer.timerUpdate(0) catch {};
-    if (server.root.pending_views > 0) server.root.pending_views -= 1;
-    if (server.root.pending_views == 0) server.root.applySending();
+    // Client has acked — wait for the actual buffer commit. Set a shorter
+    // timeout so we don't block other views if the client stalls after acking.
+    if (view.awaiting_buffer) {
+        view.view_timer.timerUpdate(50) catch {};
+    }
 }
 
 fn handleViewTimer(data: *View) c_int {

@@ -95,13 +95,6 @@ pub fn set_close(L: *zlua.Lua) i32 {
     return 0;
 }
 
-/// --- Apply all pending state changes
-pub fn apply(_: *zlua.Lua) i32 {
-    server.root.applyPending();
-
-    return 0;
-}
-
 /// ---@class Box
 /// ---@field x number?
 /// ---@field y number?
@@ -351,6 +344,54 @@ pub fn get_resizing(L: *zlua.Lua) i32 {
 
     L.pushNil();
     return 1;
+}
+
+/// ---Set the window decoration style for a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param mode "server_side", "client_side" or "none"
+pub fn set_decoration_mode(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    if(!L.isString(2)) { 
+        L.raiseErrorStr("argument 2 must be a string", .{});
+    }
+
+    const mode_str = L.checkString(2);
+    const mode: wlr.XdgToplevelDecorationV1.Mode = if (std.mem.eql(u8, mode_str, "server_side")) .server_side
+    else if (std.mem.eql(u8, mode_str, "client_side")) .client_side
+    else if (std.mem.eql(u8, mode_str, "none")) .none
+    else L.raiseErrorStr("argument two must be one of { \"server_side\", \"client_side\", \"none\" }", .{});
+
+    if(LuaUtils.viewById(view_id)) |v| {
+        v.setDecorationMode(mode);
+    }
+
+    return 0;
+}
+
+/// ---Set the window decoration style for a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return string? current view decoration state or nil if not found
+pub fn get_decoration_mode(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if(LuaUtils.viewById(view_id)) |v| {
+        _ = L.pushString(switch(v.current.decoration_mode) {
+            .client_side => "client_side",
+            .server_side => "server_side",
+            .none => "none"
+        });
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// --- Apply all pending state changes
+pub fn apply(_: *zlua.Lua) i32 {
+    server.root.applyPending();
+
+    return 0;
 }
 
 // ---Set the borders of a view
