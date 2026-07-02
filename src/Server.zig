@@ -296,6 +296,7 @@ fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.Xd
 
 fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
     const self: *Server = @fieldParentPtr("new_xdg_toplevel_decoration", listener);
+
     if (self.root.viewById(@intFromPtr(decoration.toplevel))) |view| {
         view.xdg_toplevel_decoration = decoration;
     }

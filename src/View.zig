@@ -166,18 +166,6 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     self.surface_tree.node.setEnabled(true);
     self.saved_surface_tree.node.setEnabled(false);
 
-    // Make sensible starting configurations
-    {
-        const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
-        if(new_view_hidden != null and !new_view_hidden.?) {
-            if(server.getDefaultSeat().focused_output) |output| {
-                self.setParent(output.layers.content);
-            }
-        } else {
-            self.setParent(server.root.hidden_tree);
-        }
-    }
-
     // Create border scene_rects
     for (self.borders, 0..) |_, i| {
         self.borders[i] = try self.scene_tree.createSceneRect(0, 0, &self.border_color);
@@ -391,7 +379,7 @@ pub fn applyPending(self: *View) void {
 
     // Decoration mode
     if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
-        _ = self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode);
+        serial = @max(serial, self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode));
     }
 
     // Activated
@@ -402,7 +390,7 @@ pub fn applyPending(self: *View) void {
     self.configure_serial = serial;
     self.configure_acked = false;
     if (self.awaiting_buffer) {
-        self.view_timer.timerUpdate(10) catch {};
+        self.view_timer.timerUpdate(140) catch {};
     }
 
     self.sending = self.pending;
@@ -484,6 +472,7 @@ pub fn applySending(self: *View) void {
     self.dropSavedSurfaceTree();
 }
 
+// TODO: Is this necessary if only used once in Cursor.zig
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
     var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
     while (xdg_surface) |xs| {
@@ -511,9 +500,18 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 }
 
 // --------- XdgTopLevel event handlers ---------
-fn handleMap(_: *wl.Listener(void)) void {
-    // const view: *View = @fieldParentPtr("map", listener);
-    // std.log.debug("Mapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
+fn handleMap(listener: *wl.Listener(void)) void {
+    const view: *View = @fieldParentPtr("map", listener);
+
+    const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
+    if(new_view_hidden != null and !new_view_hidden.?) {
+        if(server.getDefaultSeat().focused_output) |output| {
+            view.setParent(output.layers.content);
+        }
+    } else {
+        view.setParent(server.root.hidden_tree);
+    }
+    server.root.applyPending();
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
@@ -580,9 +578,12 @@ fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
     server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit});
-
     if (view.xdg_toplevel.base.initial_commit) {
-        view.dropSavedSurfaceTree();
+
+        if(view.xdg_toplevel_decoration) |deco| {
+            _ = deco.setMode(.server_side);
+        }
+
         return;
     }
 
