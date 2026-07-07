@@ -237,7 +237,7 @@ M.remove_view = function(view_id)
 
 		if M.config.refocus_on_kill then
 			mez.view.set_focused(tag.master)
-		end
+    end
 	elseif type == "stacking" then
 		local is_last = #tag.stack == view_idx
 

@@ -224,12 +224,15 @@ pub fn get_fullscreen(L: *zlua.Lua) i32 {
 /// ---Remove focus from current view, and set to given id
 /// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
+    if(L.isNil(1)) {
+        server.getDefaultSeat().focusSurface(null);
+        return 0;
+    }
+
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if(LuaUtils.viewById(view_id)) |v| {
         server.getDefaultSeat().focusSurface(.{ .view = v });
-    } else {
-        server.getDefaultSeat().focusSurface(null);
     }
 
     return 0;
@@ -346,7 +349,8 @@ pub fn get_decoration_mode(L: *zlua.Lua) i32 {
 pub fn set_tiled_edges(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if(!L.isTable(2)) {
-        L.raiseErrorStr("Expected table for argument 2, found {s}", .{L.typeName(L.typeOf(2))});
+        const type_name = L.typeName(L.typeOf(2));
+        L.raiseErrorStr("Expected table for argument 2, found {s}", .{ type_name.ptr });
     }
 
     const view = LuaUtils.viewById(view_id);
