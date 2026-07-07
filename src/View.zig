@@ -365,19 +365,9 @@ pub fn applyPending(self: *View) void {
         );
     }
 
-    // Tiled edges
-    if(pending.tiled_edges != current.tiled_edges) {
-        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tiled_edges));
-    }
-
     // Fullscreen
     if(pending.fullscreen != current.fullscreen) {
         serial = @max(serial, self.xdg_toplevel.setFullscreen(pending.fullscreen));
-    }
-
-    // Decoration mode
-    if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
-        serial = @max(serial, self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode));
     }
 
     // Activated
@@ -385,8 +375,19 @@ pub fn applyPending(self: *View) void {
         serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
     }
 
+    // Decoration mode
+    if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
+        serial = @max(serial, self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode));
+    }
+
+    // Resizing
     if(pending.resizing != current.resizing) {
         serial = @max(serial, self.xdg_toplevel.setResizing(pending.resizing));
+    }
+
+    // Tiled edges
+    if(pending.tiled_edges != current.tiled_edges) {
+        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tiled_edges));
     }
 
     self.configure_serial = serial;
@@ -444,8 +445,11 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.activated != self.current.activated)
         server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated });
 
-    if (self.sending.?.enabled != self.current.enabled) 
+    if (self.sending.?.enabled != self.current.enabled) {
+        self.scene_tree.node.setEnabled(self.sending.?.enabled);
+
         server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled });
+    }
     
     self.current = self.sending.?;
     self.sending = null;

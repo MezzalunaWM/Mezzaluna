@@ -302,6 +302,7 @@ M.tag_enable = function (tag_idx)
 
 	set_tag_enable(M.state.tag_id, false)
 	set_tag_enable(tag_idx, true)
+  mez.view.apply()
 
 	M.state.tag_id = tag_idx
 end
