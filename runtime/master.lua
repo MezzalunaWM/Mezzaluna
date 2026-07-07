@@ -446,7 +446,7 @@ M.setup = function(config)
 	end
 
 	mez.hook.add("ViewCommitPost", { callback = function(view_id, initial) if initial then M.add_view(view_id) end end })
-  mez.hook.add("ViewSetClosingPre", { callback = function(view_id, closing) if closing then M.remove_view(view_id) end end })
+  mez.hook.add("ViewSetClosePre", { callback = function(view_id, close) if close then M.remove_view(view_id) end end })
 
 	mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
 	mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })

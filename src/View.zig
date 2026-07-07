@@ -26,8 +26,8 @@ const State = struct {
     resizing: bool,
 
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
-    tilded_edges: wlr.Edges,
-    closing: bool,
+    tiled_edges: wlr.Edges,
+    close: bool,
 };
 
 id: u64,
@@ -125,15 +125,15 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
             .activated = false,
             .enabled = true,
             .resizing = false,
+            .close = false,
 
             .decoration_mode = .server_side,
-            .tilded_edges = .{
+            .tiled_edges = .{
                 .top = true,
                 .right = true,
                 .left = true,
                 .bottom = true
             },
-            .closing = false,
         },
         .sending = null,
         // State the view DOES start with
@@ -153,8 +153,8 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
             .resizing = self.xdg_toplevel.current.resizing,
 
             .decoration_mode = .server_side,
-            .tilded_edges = self.xdg_toplevel.current.tiled,
-            .closing = false,
+            .tiled_edges = self.xdg_toplevel.current.tiled,
+            .close = false,
         },
 
         .awaiting_buffer = false,
@@ -189,20 +189,30 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     return self;
 }
 
-pub fn setClosing(self: *View, closing: bool) void {
+pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
-
-    if (closing and self.current.fullscreen) {
-        self.setFullscreen(false);
-    }
-
-    server.events.exec("ViewSetClosingPre", .{ self.id, closing });
-
-    self.pending.?.closing = closing;
+    self.pending.?.parent = parent;
 }
 
-pub fn setBorderColor(self: *View, color: *const [4]f32) void {
-    for (self.borders) |border| border.setColor(color);
+// Null values are set to their corresponding current geometry values
+pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
+    // const eventual = self.pending orelse self.sending orelse self.current;
+    // if (eventual.fullscreen) return;
+
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry });
+
+    self.previous_geometry = self.current.geometry;
+    const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
+    self.pending.?.geometry = .{
+        .x = x orelse geo_base.geometry.x,
+        .y = y orelse geo_base.geometry.y,
+        .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
+        .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
+    };
+
+    self.resizeBorders();
 }
 
 pub fn setFullscreen(self: *View, fullscreen: bool) void {
@@ -256,47 +266,6 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     server.events.exec("ViewSetFullscreenPost", .{ self.id, fullscreen });
 }
 
-pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.parent = parent;
-}
-
-// Null values are set to their corresponding current geometry values
-pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    // const eventual = self.pending orelse self.sending orelse self.current;
-    // if (eventual.fullscreen) return;
-
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-
-    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry });
-
-    self.previous_geometry = self.current.geometry;
-    const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
-    self.pending.?.geometry = .{
-        .x = x orelse geo_base.geometry.x,
-        .y = y orelse geo_base.geometry.y,
-        .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
-        .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
-    };
-
-    self.resizeBorders();
-}
-
-pub fn setResizing(self: *View, resizing: bool) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.resizing = resizing;
-}
-
-pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.tilded_edges = edges;
-}
-
-pub fn setDecorationMode(self: *View, mode: wlr.XdgToplevelDecorationV1.Mode) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-    self.pending.?.decoration_mode = mode;
-}
-
 pub fn setActivated(self: *View, activated: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
@@ -312,6 +281,37 @@ pub fn setEnabled(self: *View, enabled: bool) void {
     server.events.exec("ViewSetEnabledPre", .{ self.id, enabled });
 
     self.pending.?.enabled = enabled;
+}
+
+pub fn setResizing(self: *View, resizing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.resizing = resizing;
+}
+
+pub fn setClose(self: *View, close: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    if (close and self.current.fullscreen) {
+        self.setFullscreen(false);
+    }
+
+    server.events.exec("ViewSetClosePre", .{ self.id, close });
+
+    self.pending.?.close = close;
+}
+
+pub fn setDecorationMode(self: *View, mode: wlr.XdgToplevelDecorationV1.Mode) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.decoration_mode = mode;
+}
+
+pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.tiled_edges = edges;
+}
+
+pub fn setBorderColor(self: *View, color: *const [4]f32) void {
+    for (self.borders) |border| border.setColor(color);
 }
 
 /// this function handles all things related to sizing and positioning and
@@ -366,8 +366,8 @@ pub fn applyPending(self: *View) void {
     }
 
     // Tiled edges
-    if(pending.tilded_edges != current.tilded_edges) {
-        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tilded_edges));
+    if(pending.tiled_edges != current.tiled_edges) {
+        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tiled_edges));
     }
 
     // Fullscreen
@@ -423,10 +423,10 @@ fn dropSavedSurfaceTree(self: *View) void {
 pub fn applySending(self: *View) void {
     if(self.sending == null) return;
 
-    if (self.sending.?.closing) {
+    if (self.sending.?.close) {
         self.scene_tree.node.setEnabled(false);
 
-        server.events.exec("ViewSetClosingPost", .{ self.id });
+        server.events.exec("ViewSetClosePost", .{ self.id });
         
         self.xdg_toplevel.sendClose();
 
