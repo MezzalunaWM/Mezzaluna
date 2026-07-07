@@ -489,7 +489,11 @@ M.setup = function(config)
   })
 
 	mez.input.add_mousemap(M.config.mod_key, "BTN_RIGHT", {
-    press = function(view_id) M.make_float(view_id) end,
+    press = function(view_id)
+      M.make_float(view_id)
+      mez.view.set_resizing(view_id, true)
+      mez.view.apply()
+    end,
 		drag = function(view_id, pos, drag_start, offset)
 			if view_id ~= nil then
 				local width = (pos.x - drag_start.x) + offset.x
@@ -503,7 +507,11 @@ M.setup = function(config)
         })
         mez.view.apply()
 			end
-		end
+		end,
+    release = function (view_id)
+      mez.view.set_resizing(view_id, false)
+      mez.view.apply()
+    end
 	})
 
 	mez.hook.add("OutputStateChange", { callback = function ()

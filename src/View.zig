@@ -23,6 +23,7 @@ const State = struct {
 
     activated: bool,
     enabled: bool,
+    resizing: bool,
 
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
     tilded_edges: wlr.Edges,
@@ -123,6 +124,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
             .activated = false,
             .enabled = true,
+            .resizing = false,
 
             .decoration_mode = .server_side,
             .tilded_edges = .{
@@ -148,6 +150,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
             .activated = self.xdg_toplevel.current.activated,
             .enabled = self.scene_tree.node.enabled,
+            .resizing = self.xdg_toplevel.current.resizing,
 
             .decoration_mode = .server_side,
             .tilded_edges = self.xdg_toplevel.current.tiled,
@@ -279,6 +282,11 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
     self.resizeBorders();
 }
 
+pub fn setResizing(self: *View, resizing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.resizing = resizing;
+}
+
 pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
     self.pending.?.tilded_edges = edges;
@@ -338,14 +346,16 @@ pub fn applyPending(self: *View) void {
 
     // Resizing
     if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
-        self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
+        if(!current.resizing) {
+            self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
-        // Hiding
-        self.surface_tree.node.setEnabled(false);
-        self.saved_surface_tree.node.setEnabled(true);
-        
-        self.awaiting_buffer = true;
-        server.root.pending_views += 1;
+            // Hiding
+            self.surface_tree.node.setEnabled(false);
+            self.saved_surface_tree.node.setEnabled(true);
+
+            self.awaiting_buffer = true;
+            server.root.pending_views += 1;
+        }
 
         // Position is not something the client needs to consider so it happens instantly
         // We wait till the client commits its new buffer to position
@@ -373,6 +383,10 @@ pub fn applyPending(self: *View) void {
     // Activated
     if (pending.activated != current.activated) {
         serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
+    }
+
+    if(pending.resizing != current.resizing) {
+        serial = @max(serial, self.xdg_toplevel.setResizing(pending.resizing));
     }
 
     self.configure_serial = serial;
