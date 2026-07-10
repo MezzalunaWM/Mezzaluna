@@ -73,42 +73,24 @@ pub fn Iterator(comptime config: IteratorConfig) type {
 
     return struct {
         node_iter: ?IteratorImpl,
-        trees: []*wlr.SceneTree = undefined,
-        tree_idx: usize = 0,
 
         pub fn fromSceneTree(tree: *wlr.SceneTree) @This() {
             return .{
-                .node_iter = if (config.safe) .{ .safe_iterator = tree.children.safeIterator(config.direction) } 
-                    else .{ .iterator = tree.children.iterator(config.direction), }
-            };
-        }
-
-        pub fn fromSceneTrees(trees: []*wlr.SceneTree) @This() {
-            return .{
-                .node_iter = null,
-                .tree_idx = 0,
-                .trees = trees
+                .node_iter = switch (config.safe) {
+                    true => .{ .safe_iterator = tree.children.safeIterator(config.direction) },
+                    false => .{ .iterator = tree.children.iterator(config.direction) }
+                }
             };
         }
         
         pub fn next(self: *@This()) ?*Data {
             if (self.node_iter) |*it_impl| {
-                const node: ?*wlr.SceneNode = if (config.safe) 
-                    it_impl.safe_iterator.next() 
-                else 
-                    it_impl.iterator.next();
+                const node: ?*wlr.SceneNode = switch (config.safe) {
+                    true => it_impl.safe_iterator.next(),
+                    false => it_impl.iterator.next()
+                };
+
                 return if (node) |n| Data.fromSceneNode(n) else null;
-           }
-
-            if (self.tree_idx < self.trees.len) {
-                if (self.node_iter != null)  {
-                    self.tree_idx += 1;
-                }
-
-                self.node_iter = if (config.safe)
-                    .{ .safe_iterator = self.trees[self.tree_idx].children.iterator(config.direction) }
-                else
-                    .{ .iterator = self.trees[self.tree_idx].children.safeIterator(config.direction) };
             }
 
             return null;

@@ -31,18 +31,18 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
         if (!output.wlr_output.enabled) continue;
 
         // Only search the content and fullscreen layers for views
-        var layers = [_]*wlr.SceneTree{
-            output.layers.content,
-            output.layers.top,
-        };
-        var iter: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
-        while (iter.next()) |node_data| {
-            if (node_data.* != .view) continue;
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top, };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
 
-            L.pushInteger(@intCast(index));
-            L.pushInteger(@intCast(node_data.view.id));
-            L.setTable(-3);
-            index += 1;
+            while (view_it.next()) |node_data| {
+                if (node_data.* != .view) continue;
+
+                L.pushInteger(@intCast(index));
+                L.pushInteger(@intCast(node_data.view.id));
+                L.setTable(-3);
+                index += 1;
+            }
         }
     }
 
@@ -85,12 +85,14 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if (!L.isTable(2)) return 0;
 
+    std.log.debug("------------", .{});
     std.log.debug("Getting view", .{});
 
     const view = LuaUtils.viewById(view_id);
     if (view == null) return 0;
 
     std.log.debug("Got view", .{});
+    std.log.debug("------------", .{});
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 

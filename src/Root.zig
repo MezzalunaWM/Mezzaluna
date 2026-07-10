@@ -110,33 +110,38 @@ pub fn configureOutputs(self: *const Root) void {
 // Search output_layout's outputs, and each outputs views
 pub fn viewById(self: *Root, id: u64) ?*View {
     // Check all hidden children
+    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        if(data.view.id == id) {
+            std.log.debug("Found {d} in hidden", .{id});
+            return data.view;
+        }
+    }
+
     var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-        var layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
-        var view_it: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
-        while(view_it.next()) |data| {
-            std.debug.assert(data.* == .view);
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
 
-            if(data.view.id == id) {
-                std.log.debug("Found in output layers", .{});
-                return data.view;
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
+
+                std.log.debug("Iterating over views", .{});
+
+                if(data.view.id == id) {
+                    std.log.debug("Found {d} in layer", .{id});
+                    return data.view;
+                }
             }
         }
     }
 
-    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
-    while(hidden_it.next()) |data| {
-        std.debug.assert(data.* == .view);
-        if(data.view.id == id) {
-            std.log.debug("Found in hidden", .{});
-            return data.view;
-        }
-    }
-
-    std.log.debug("Could not find view {d}", .{id});
+    std.log.debug("Did not find {d}", .{id});
     return null;
 }
 
@@ -173,12 +178,14 @@ pub fn applyPending(self: *Root) void {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
-        var layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
-        var view_it: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
-        while(view_it.next()) |data| {
-            std.debug.assert(data.* == .view);
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
 
-            data.view.applyPending();
+                data.view.applyPending();
+            }
         }
     }
 
@@ -202,12 +209,14 @@ pub fn applySending(self: *Root) void {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
-        var layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
-        var view_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTrees(&layers);
+        const layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(layer);
 
-        while(view_it.next()) |data| {
-            std.debug.assert(data.* == .view);
-            data.view.applySending();
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
+                data.view.applySending();
+            }
         }
     }
 
