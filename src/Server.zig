@@ -15,11 +15,12 @@ const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
+const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
 const Utils = @import("Utils.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 
 const gpa = std.heap.c_allocator;
@@ -200,7 +201,7 @@ pub fn init(self: *Server) void {
 
     self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
-    self.events.exec("ServerStartPost", .{});
+    self.events.exec("ServerStartPost", .{}, "Just after Mezzaluna has successfully started.");
 }
 
 /// libwayland uses a bool which the event loop checks to see if the server
@@ -277,17 +278,49 @@ pub fn deinit(self: *Server) noreturn {
 // --------- Backend event handlers ---------
 fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     const self: *Server = @fieldParentPtr("new_input", listener);
-    self.getDefaultSeat().addInputDevice(device);
 
-    // We should really only set true capabilities
-    self.getDefaultSeat().wlr_seat.setCapabilities(.{
-        .pointer = true,
-        .keyboard = true,
-    });
+    // create the device
+    input_device.init(device);
+
+    self.events.exec("DeviceAddPre", .{ device }, "Called before a new device is added to the compositor.");
+    const dev = input_device.get(device) orelse return;
+
+    // has the user already given the device to a seat?
+    const seated = switch (dev) {
+        .keyboard => |keyboard| if (keyboard.group != null) true else false,
+        .pointer => |pointer| if (pointer.base.data != null) true else false,
+        else => false,
+    };
+
+    if (!seated) self.getDefaultSeat().addInputDevice(device);
+
+    self.events.exec("DeviceAddPost", .{ device }, "Called after a new device is added to the compositor.");
 }
 
-fn handleNewOutput(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    _ = Output.init(wlr_output);
+fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
+    const self: *Server = @fieldParentPtr("new_output", listener);
+    const output = Output.init(wlr_output) orelse {
+        std.log.err("Failed to create new output", .{});
+        return;
+    };
+
+    // TODO: Allow user to define output positions
+    const layout_output = self.root.output_layout.addAuto(output.wlr_output) catch {
+        std.log.err("failed to add output to the output layout", .{});
+        return;
+    };
+
+    output.scene_output.setPosition(layout_output.x, layout_output.y);
+
+    // FIXME: without this the lua api can crash mez very easily. Thankfully we
+    // don't have a case for not having any output selected, but it'd still be
+    // better if we didn't crash.
+    if (self.getDefaultSeat().focused_output == null) {
+        self.getDefaultSeat().focusOutput(output);
+    }
+
+    Root.configureOutputs(&self.root);
+    output.arrangeLayers();
 }
 
 fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.XdgToplevel) void {
@@ -327,9 +360,9 @@ fn handleRequestActivate(
     event: *wlr.XdgActivationV1.event.RequestActivate,
 ) void {
     const self: *Server = @fieldParentPtr("request_activate", listener);
-    if (event.surface.data == null) return;
 
-    const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
+    if (event.surface.data == null) return;
+    const scene_node_data: *SceneNode.Data = @ptrCast(@alignCast(event.surface.data.?));
 
     if (scene_node_data.* == .view) {
         if (self.getDefaultSeat().focused_output) |output| {
@@ -340,7 +373,7 @@ fn handleRequestActivate(
                 return;
             }
         }
-        self.getDefaultSeat().focusSurface(Seat.FocusData{ .view = scene_node_data.view });
+        self.getDefaultSeat().focusSurface(.{ .view = scene_node_data.view });
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }
@@ -351,10 +384,7 @@ fn handleNewVirtualPointer(
     event: *wlr.VirtualPointerManagerV1.event.NewPointer,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_pointer", listener);
-    const device = &event.new_pointer.pointer.base;
-
-    self.getDefaultSeat().cursor.wlr_cursor.attachInputDevice(device);
-    self.getDefaultSeat().cursor.wlr_cursor.mapInputToOutput(device, event.suggested_output);
+    handleNewInput(&self.new_input, &event.new_pointer.pointer.base);
 }
 
 fn handleNewVirtualKeyboard(
@@ -362,10 +392,7 @@ fn handleNewVirtualKeyboard(
     event: *wlr.VirtualKeyboardV1,
 ) void {
     const self: *Server = @fieldParentPtr("new_virtual_keyboard", listener);
-    const device = &event.keyboard.base;
-
-    const keyboard = Keyboard.init(device);
-    _ = self.getDefaultSeat().keyboard_group.wlr_group.addKeyboard(keyboard.wlr_keyboard);
+    handleNewInput(&self.new_input, &event.keyboard.base);
 }
 
 fn handleNewIdleInhibitor(

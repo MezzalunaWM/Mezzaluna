@@ -27,12 +27,10 @@ pub fn deinit(self: *IdleNotifer) void {
 
 pub fn notifyActivity(self: *IdleNotifer, seat: *wlr.Seat) void {
     self.idle_notifier.notifyActivity(seat);
-    // After the server is notified of activity on a seat.
-    server.events.exec("NotifyActivity", .{});
+    server.events.exec("NotifyActivity", .{}, "After the server is notified of activity on a seat.");
 }
 
 pub fn setInhibited(self: *IdleNotifer, inhibited: bool) void {
     self.idle_notifier.setInhibited(inhibited);
-    // After the server has been asked to change idle inhibiting from a client.
-    server.events.exec("SetIdleInhibit", .{ inhibited });
+    server.events.exec("SetIdleInhibit", .{ inhibited }, "After the server has been asked to change idle inhibiting from a client.");
 }

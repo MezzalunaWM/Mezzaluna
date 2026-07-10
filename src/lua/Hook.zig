@@ -3,6 +3,7 @@ const Hook = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
+const config = @import("config");
 
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
@@ -55,7 +56,35 @@ pub const Events = struct {
         }
     }
 
-    pub fn exec(self: *Events, event: []const u8, args: anytype) void {
+    pub fn exec(self: *Events, comptime event: []const u8, args: anytype, comptime desc: []const u8) void {
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+
+        comptime if (config.event_gen) {
+            // combine all the name and types of passed in args
+            var fields: []const u8 = &[_]u8{};
+            const args_fields = args_type_info.@"struct".fields;
+            if (args_fields.len > 0) fields = std.fmt.comptimePrint("| args:", .{});
+            for (args_fields) |field| {
+                fields = std.fmt.comptimePrint("{s} {s}:{s}", .{
+                    fields,
+                    field.name,
+                    @typeName(field.type),
+                });
+            }
+            if (args_fields.len > 0) fields = fields ++ " ";
+
+            // print out the event information in luadoc @alias format
+            @compileLog(std.fmt.comptimePrint("---| '{s}' [# {s} {s}]", .{
+                event,
+                desc,
+                fields,
+            }));
+        };
+
         if (self.events.get(event)) |e| {
             var node = e.first;
             while (node) |n| : (node = n.next) {
@@ -89,12 +118,6 @@ pub const HookData = struct {
     }
 
     pub fn callback(self: *const HookData, args: anytype) void {
-        const ArgsType = @TypeOf(args);
-        const args_type_info = @typeInfo(ArgsType);
-        if (args_type_info != .@"struct") {
-            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
-        }
-
         const t = Lua.state.rawGetIndex(zlua.registry_index, self.options.lua_cb_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");

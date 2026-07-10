@@ -8,24 +8,22 @@ const std = @import("std");
 const Utils = @import("Utils.zig");
 
 const Server = @import("Server.zig");
+const Root = @import("Root.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("SceneNode.zig");
 
 const posix = std.posix;
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
-focused: bool,
 id: u64,
 fullscreens: std.ArrayList(*View),
 
 wlr_output: *wlr.Output,
-state: wlr.Output.State,
-tree: *wlr.SceneTree,
-scene_node_data: SceneNodeData,
 scene_output: *wlr.SceneOutput,
+output_snd: SceneNode.Data,
 non_exclusive_area: wlr.Box,
 
 layers: struct {
@@ -36,12 +34,12 @@ layers: struct {
     overlay: *wlr.SceneTree,
 },
 
-layer_scene_node_data: struct {
-    background: SceneNodeData,
-    bottom: SceneNodeData,
-    content: SceneNodeData,
-    top: SceneNodeData,
-    overlay: SceneNodeData,
+layers_snd: struct {
+    background: SceneNode.Data,
+    bottom: SceneNode.Data,
+    content: SceneNode.Data,
+    top: SceneNode.Data,
+    overlay: SceneNode.Data,
 },
 
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
@@ -52,107 +50,88 @@ destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
 pub fn init(wlr_output: *wlr.Output) ?*Output {
     errdefer Utils.oomPanic();
 
+    if (!wlr_output.initRender(server.allocator, server.renderer)) {
+        std.log.err("Unable to start output {s}", .{wlr_output.name});
+        return null;
+    }
+
     const self = try gpa.create(Output);
+    errdefer self.deinit();
 
     self.* = .{
-        .focused = false,
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
-        .tree = try server.root.scene.tree.createSceneTree(),
         .fullscreens = std.ArrayList(*View).initCapacity(gpa, 8) catch Utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
+        .scene_output = try server.root.scene.createSceneOutput(wlr_output),
+        .output_snd = .{ .output = self },
+
         .layers = .{
-            .background = try self.tree.createSceneTree(),
-            .bottom = try self.tree.createSceneTree(),
-            .content = try self.tree.createSceneTree(),
-            .top = try self.tree.createSceneTree(),
-            .overlay = try self.tree.createSceneTree(),
+            .background = try self.scene_output.scene.tree.createSceneTree(),
+            .bottom = try self.scene_output.scene.tree.createSceneTree(),
+            .content = try self.scene_output.scene.tree.createSceneTree(),
+            .top = try self.scene_output.scene.tree.createSceneTree(),
+            .overlay = try self.scene_output.scene.tree.createSceneTree(),
         },
 
-        .layer_scene_node_data = .{
+        .layers_snd = .{
             .background = .{ .output_layer = self.layers.background },
             .bottom = .{ .output_layer = self.layers.bottom },
             .content = .{ .output_layer = self.layers.content },
             .top = .{ .output_layer = self.layers.top },
             .overlay = .{ .output_layer = self.layers.overlay },
         },
-
-        .scene_output = try server.root.scene.createSceneOutput(wlr_output),
-        .scene_node_data = .{ .output = self },
-        .state = wlr.Output.State.init()
     };
 
-    wlr_output.events.frame.add(&self.frame);
-    wlr_output.events.request_state.add(&self.request_state);
-    wlr_output.events.destroy.add(&self.destroy);
-
-    errdefer deinit(self);
-
-    if (!wlr_output.initRender(server.allocator, server.renderer)) {
-        std.log.err("Unable to start output {s}", .{wlr_output.name});
-        return null;
-    }
-
-    self.state.setEnabled(true);
-
-    if (wlr_output.preferredMode()) |mode| {
-        self.state.setMode(mode);
-    }
-
-    if (!wlr_output.commitState(&self.state)) {
-        std.log.err("Unable to commit state to output {s}", .{wlr_output.name});
-        return null;
-    }
-
-    // TODO: Allow user to define output positions
-    const layout_output = try server.root.output_layout.addAuto(self.wlr_output);
-    server.root.scene_output_layout.addOutput(layout_output, self.scene_output);
-    self.arrangeLayers();
-
-    self.setFocused();
-
     self.wlr_output.data = self;
-    self.tree.node.data = &self.scene_node_data;
 
-    self.layers.background.node.data = &self.layer_scene_node_data.background;
-    self.layers.bottom.node.data = &self.layer_scene_node_data.bottom;
-    self.layers.content.node.data = &self.layer_scene_node_data.content;
-    self.layers.top.node.data = &self.layer_scene_node_data.top;
-    self.layers.overlay.node.data = &self.layer_scene_node_data.overlay;
+    wlr_output.events.frame.add(&self.frame);
+    wlr_output.events.destroy.add(&self.destroy);
+    wlr_output.events.request_state.add(&self.request_state);
 
-    server.events.exec("OutputInitPost", .{self.id});
+    self.layers.background.node.data = &self.layers_snd.background;
+    self.layers.bottom.node.data = &self.layers_snd.bottom;
+    self.layers.content.node.data = &self.layers_snd.content;
+    self.layers.top.node.data = &self.layers_snd.top;
+    self.layers.overlay.node.data = &self.layers_snd.overlay;
+
+    var state = wlr.Output.State.init();
+    defer state.finish();
+
+    if (wlr_output.preferredMode()) |mode| 
+        state.setMode(mode);
+
+    state.setEnabled(true);
+
+    if (!wlr_output.commitState(&state)) {
+        std.log.err("Unable to commit state to output {s}", .{ wlr_output.name });
+    }
+
+    server.events.exec("OutputInitPost", .{self.id}, "After a new output is initialized. You're probably looking for OutputStateChange.");
 
     return self;
 }
 
 pub fn deinit(self: *Output) void {
-    server.events.exec("OutputDeinitPre", .{self.id});
+    server.events.exec("OutputDeinitPre", .{self.id}, "Before an output is de-initialized.");
 
     self.frame.link.remove();
     self.request_state.link.remove();
     self.destroy.link.remove();
-
-    self.state.finish();
-
     self.wlr_output.destroy();
 
-    server.events.exec("OutputDeinitPost", .{});
-
     gpa.destroy(self);
+
+    server.events.exec("OutputDeinitPost", .{}, "After an output is de-initialized.");
 }
 
 pub fn setFocused(self: *Output) void {
-    if (server.getDefaultSeat().focused_output) |prev_output| {
-        prev_output.focused = false;
-    }
-
     server.getDefaultSeat().focused_output = self;
-    self.focused = true;
 }
 
 const SurfaceAtResult = struct {
-    scene_node_data: *SceneNodeData,
+    surface_snd: *SceneNode.Data,
     surface: *wlr.Surface,
     sx: f64,
     sy: f64,
@@ -178,25 +157,31 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
             continue;
         };
 
-        var n = node.?;
-        while(n != &self.tree.node) {
-            n = if (n.parent) |p| &p.node else continue;
+        const snd: *SceneNode.Data = .fromSurface(surface);
+        return SurfaceAtResult{
+            .surface = surface,
+            .surface_snd = snd,
+            .sx = sx,
+            .sy = sy
+        };
 
-            if(n.data == null) continue;
-
-            const snd: *SceneNodeData = @ptrCast(@alignCast(n.data.?));
-            switch (snd.*) {
-                .layer_surface, .view => {
-                    return .{
-                        .scene_node_data = snd,
-                        .surface = surface,
-                        .sx = sx,
-                        .sy = sy,
-                    };
-                },
-                else => continue
-            }
-        }
+        // NOTE: I dont think we need to crawl up, but leaving this here just in case
+        // while(node.? != &self.scene_output.scene.tree) {
+        //     node = if (node.?.parent) |p| &p.node else continue;
+        //
+        //     const snd: *SceneNode.Data = .fromSceneNode(node);
+        //     switch (snd.*) {
+        //         .layer_surface, .view => {
+        //             return .{
+        //                 .scene_node_data = snd,
+        //                 .surface = surface,
+        //                 .sx = sx,
+        //                 .sy = sy,
+        //             };
+        //         },
+        //         else => continue
+        //     }
+        // }
     }
 
     return null;
@@ -218,47 +203,35 @@ fn handleRequestState(
     listener: *wl.Listener(*wlr.Output.event.RequestState),
     event: *wlr.Output.event.RequestState,
 ) void {
-    const output: *Output = @fieldParentPtr("request_state", listener);
+    const self: *Output = @fieldParentPtr("request_state", listener);
 
-    if (!output.wlr_output.commitState(event.state)) {
+    if (!self.wlr_output.commitState(event.state)) {
         std.log.warn("failed to set output state {}", .{event.state});
         // nothing should've changed, so we don't do anything
         return;
     }
 
-    // update the config with all monitors and send it to the output_manager
-    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
-    var iter = server.root.scene.outputs.iterator(.forward);
-    while (iter.next()) |out| {
-        _ = wlr.OutputConfigurationV1.Head.create(config, out.output) catch Utils.oomPanic();
-    }
-    server.root.output_manager.setConfiguration(config);
+    Root.configureOutputs(&server.root);
+    self.arrangeLayers();
 
-    // make sure the layers are behaving
-    arrangeLayers(output);
-
-    server.events.exec("OutputStateChange", .{});
+    server.events.exec("OutputStateChange", .{self.id}, "After an outputs state has been changed.");
 }
 
-fn handleFrame(_: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
-    const scene_output = server.root.scene.getSceneOutput(wlr_output);
+fn handleFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
+    const self: *Output = @fieldParentPtr("frame", listener);
 
-    if (scene_output == null) {
-        std.log.err("Unable to get scene output to render", .{});
-        return;
+    if (!self.scene_output.commit(null)) {
+        std.log.warn("setting output state failed for output: {}", .{ self.id });
     }
 
-    // std.log.info("Rendering commited scene output\n", .{});
-    _ = scene_output.?.commit(null);
-
-    var now = posix.clock_gettime(posix.CLOCK.MONOTONIC) catch @panic("CLOCK_MONOTONIC not supported");
-    scene_output.?.sendFrameDone(&now);
+    var now = posix.clock_gettime(posix.CLOCK.MONOTONIC) catch {
+        std.debug.panic("CLOCK_MONOTONIC not supported", .{});
+    };
+    self.scene_output.sendFrameDone(&now);
 }
 
 fn handleDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const output: *Output = @fieldParentPtr("destroy", listener);
-
-    std.log.debug("removing output: {s}", .{output.wlr_output.name});
 
     output.frame.link.remove();
     output.request_state.link.remove();
@@ -281,18 +254,15 @@ pub fn arrangeLayers(self: *Output) void {
 
     inline for (@typeInfo(zwlr.LayerShellV1.Layer).@"enum".fields) |comptime_layer| {
         const layer: *wlr.SceneTree = @field(self.layers, comptime_layer.name);
-        var it = layer.children.safeIterator(.forward);
+        var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(layer);
 
-        while (it.next()) |node| {
-            if (node.data == null) continue;
+        while (it.next()) |data| {
+            if(data.* != .layer_surface) continue;
 
-            // if (@as(?*SceneNodeData, @alignCast(@ptrCast(node.data)))) |node_data| {
-            const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
+            const layer_surface: *LayerSurface = data.layer_surface;
 
-            const layer_surface: *LayerSurface = switch (scene_node_data.*) {
-                .layer_surface => @fieldParentPtr("scene_node_data", scene_node_data),
-                else => continue,
-            };
+            // TEST: should we set the layersurface to the correct output?
+            if (layer_surface.getOutput().wlr_output != self.wlr_output) continue;
 
             if (!layer_surface.wlr_layer_surface.initialized) continue;
 
@@ -303,13 +273,20 @@ pub fn arrangeLayers(self: *Output) void {
 
             layer_surface.scene_layer_surface.configure(
                 &full_box,
-                &self.non_exclusive_area,
+                &self.non_exclusive_area
             );
 
-            // TEST: are these calls useless?
-            // const x = layer_surface.scene_layer_surface.tree.node.x;
-            // const y = layer_surface.scene_layer_surface.tree.node.y;
-            // layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
+            // set the position of the new layersurface relative to the output
+            // it belongs to
+            const x = layer_surface.getOutput().scene_output.x;
+            const y = layer_surface.getOutput().scene_output.y;
+            layer_surface.scene_layer_surface.tree.node.setPosition(x, y);
+            layer_surface.scene_layer_surface.tree.node.subsurfaceTreeSetClip(&.{
+                .x = 0,
+                .y = 0,
+                .width = layer_surface.getOutput().wlr_output.width,
+                .height = layer_surface.getOutput().wlr_output.height,
+            });
         }
     }
 }

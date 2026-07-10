@@ -7,7 +7,7 @@ const wl = @import("wayland").server.wl;
 const Output = @import("../Output.zig");
 const Lua = @import("Lua.zig");
 const View = @import("../View.zig");
-const SceneNodeData = @import("../SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("../SceneNode.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
 
@@ -17,8 +17,8 @@ fn view_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
 }
 
-// ---Get the ids for all available views
-// ---@return integer[]?
+/// ---Get the ids for all available views
+/// ---@return integer[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var output_it = server.root.output_layout.outputs.iterator(.forward);
 
@@ -28,30 +28,21 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     while (output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        if (!output.state.enabled) continue;
+        if (!output.wlr_output.enabled) continue;
 
         // Only search the content and fullscreen layers for views
-        const layers = [_]*wlr.SceneTree{
+        var layers = [_]*wlr.SceneTree{
             output.layers.content,
             output.layers.top,
         };
+        var iter: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
+        while (iter.next()) |node_data| {
+            if (node_data.* != .view) continue;
 
-        for (layers) |layer| {
-            if (layer.children.length() == 0) continue; // No children
-
-            var view_it = layer.children.iterator(.forward);
-            while (view_it.next()) |v| {
-                std.debug.assert(v.data != null);
-                const snd: *SceneNodeData = @ptrCast(@alignCast(v.data.?));
-
-                if (snd.* == .view) {
-                    L.pushInteger(@intCast(index));
-                    L.pushInteger(@intCast(snd.view.id));
-                    L.setTable(-3);
-
-                    index += 1;
-                }
-            }
+            L.pushInteger(@intCast(index));
+            L.pushInteger(@intCast(node_data.view.id));
+            L.setTable(-3);
+            index += 1;
         }
     }
 
@@ -94,8 +85,12 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if (!L.isTable(2)) return 0;
 
+    std.log.debug("Getting view", .{});
+
     const view = LuaUtils.viewById(view_id);
     if (view == null) return 0;
+
+    std.log.debug("Got view", .{});
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 
@@ -224,6 +219,7 @@ pub fn get_fullscreen(L: *zlua.Lua) i32 {
 /// ---Remove focus from current view, and set to given id
 /// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
 pub fn set_focused(L: *zlua.Lua) i32 {
+
     if(L.isNil(1)) {
         server.getDefaultSeat().focusSurface(null);
         return 0;
@@ -573,4 +569,40 @@ pub fn raise_to_top(L: *zlua.Lua) i32 {
 pub fn setWmCapabilities(L: *zlua.Lua) i32 {
     _ = L;
     return 0;
+}
+
+/// ---Get the id of the view at a xy coordinate. Coordinates passed in should
+/// ---be relative to 0,0 on monitor coordinate space.
+/// ---@param x integer
+/// ---@param y integer
+/// ---@return view_id?
+pub fn at_xy(L: *zlua.Lua) i32 {
+    const x = L.checkInteger(1);
+    const y = L.checkInteger(2);
+
+    const wlr_output = server.root.output_layout.outputAt(@floatFromInt(x), @floatFromInt(y)) orelse {
+        L.pushNil();
+        return 1;
+    };
+
+    const output: *Output = @ptrCast(@alignCast(wlr_output.data.?));
+
+    var output_x: c_int = 0;
+    var output_y: c_int = 0;
+    if (server.root.output_layout.get(output.wlr_output)) |o| {
+        output_x = o.x;
+        output_y = o.y;
+    }
+
+    // convert to output relative coordinates
+    const surface = output.surfaceAt(
+        @floatFromInt(x - output_x),
+        @floatFromInt(y - output_y)
+    ) orelse {
+        L.pushNil();
+        return 1;
+    };
+
+    L.pushInteger(@intCast(surface.surface_snd.view.id));
+    return 1;
 }

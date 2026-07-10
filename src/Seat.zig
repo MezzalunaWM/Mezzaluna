@@ -11,11 +11,12 @@ const KeyboardGroup = @import("KeyboardGroup.zig");
 const Keyboard = @import("Keyboard.zig");
 const Cursor = @import("Cursor.zig");
 const Utils = @import("Utils.zig");
+const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNodeData = @import("SceneNode.zig").Data;
 const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 
@@ -119,6 +120,16 @@ pub fn deinit(self: *Seat) void {
     self.wlr_seat.destroy();
 }
 
+pub fn id(self: *Seat) u32 {
+    var iter_seat = server.seats.iterator(.forward);
+    var i: u32 = 0;
+    while (iter_seat.next()) |v| : (i += 1) {
+        if (v == self) return i;
+    }
+
+    std.debug.panic("Trying to get id of seat not in the server's list of seats!", .{});
+}
+
 pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
     if (to_focus == null) {
         self.focused_surface = to_focus;
@@ -169,21 +180,37 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
 }
 
 pub fn focusOutput(self: *Seat, output: *Output) void {
-    if (self.focused_output) |prev_output| {
-        prev_output.focused = false;
-    }
-
     self.focused_output = output;
 }
 
 pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = Keyboard.init(device);
+            const keyboard = (input_device.get(device) orelse return).keyboard;
             self.keyboard_group.addKeyboard(keyboard);
         },
         .pointer => {
             self.cursor.wlr_cursor.attachInputDevice(device);
+            device.data = &self.cursor;
+        },
+        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+    }
+
+    self.wlr_seat.setCapabilities(.{
+        .keyboard = true,
+        .pointer = true,
+    });
+}
+
+pub fn removeInputDevice(self: *Seat, device: *wlr.InputDevice) void {
+    switch (device.type) {
+        .keyboard => {
+            const keyboard = (input_device.get(device) orelse return).keyboard;
+            self.keyboard_group.removeKeyboard(keyboard);
+        },
+        .pointer => {
+            self.cursor.wlr_cursor.detachInputDevice(device);
+            device.data = null;
         },
         else => |t| std.log.err("unsupported input method: {}", .{ t }),
     }

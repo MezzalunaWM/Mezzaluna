@@ -10,12 +10,12 @@ const server = &@import("main.zig").server;
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("SceneNode.zig");
 
 const Utils = @import("Utils.zig");
 const Debug = @import("Debug.zig");
 
-scene_node_data: SceneNodeData,
+scene_node_data: SceneNode.Data,
 
 pending_views: u32,
 pending_state_dirty: bool,
@@ -24,7 +24,7 @@ scene: *wlr.Scene,
 scene_output_layout: *wlr.SceneOutputLayout,
 
 hidden_tree: *wlr.SceneTree,
-hidden_tree_snd: SceneNodeData,
+hidden_tree_scene_node_data: SceneNode.Data,
 
 // All visible views should be accessed through these
 output_layout: *wlr.OutputLayout,
@@ -53,7 +53,7 @@ pub fn init(self: *Root) void {
         .scene_output_layout = try scene.attachOutputLayout(output_layout),
 
         .hidden_tree = try scene.tree.createSceneTree(),
-        .hidden_tree_snd = .{ .hidden_tree = self.hidden_tree },
+        .hidden_tree_scene_node_data = .{ .hidden_tree = self.hidden_tree },
 
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
@@ -63,7 +63,7 @@ pub fn init(self: *Root) void {
         .pending_state_dirty = false,
     };
 
-    self.hidden_tree.node.data = &self.hidden_tree_snd;
+    self.hidden_tree.node.data = &self.hidden_tree_scene_node_data;
 
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
 
@@ -75,13 +75,11 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var output_it = self.output_layout.outputs.iterator(.forward);
+    var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(&self.scene.tree);
 
-    while(output_it.next()) |o| {
-        if(o.output.data == null) continue;
-
-        const output: *Output = @ptrCast(@alignCast(o.output.data));
-        output.deinit();
+    while (it.next()) |scene_node_data| {
+        std.debug.assert(scene_node_data.* == .output);
+        scene_node_data.output.deinit();
     }
 
     self.output_layout.destroy();
@@ -89,54 +87,67 @@ pub fn deinit(self: *Root) void {
     self.scene.tree.node.destroy();
 }
 
-// This function is ugly as hell because I am stobbournly
-// trying to avoid data duplication. Therefore we need to
-// search everywhere there can be a view.
+pub fn configureOutputs(self: *const Root) void {
+    // update the config with all monitors and send it to the output_manager
+    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+
+    // TODO: do we ommit disabled monitors here?
+    var iter = self.scene.outputs.iterator(.forward);
+    while (iter.next()) |scene_output| {
+        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
+
+        if (self.output_layout.get(scene_output.output)) |o| {
+            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch Utils.oomPanic();
+
+            config_head.state.x = o.x;
+            config_head.state.y = o.y;
+        }
+    }
+
+    self.output_manager.setConfiguration(config);
+}
+
+// Search output_layout's outputs, and each outputs views
 pub fn viewById(self: *Root, id: u64) ?*View {
     // Check all hidden children
-    var hidden_view_it = self.hidden_tree.children.iterator(.forward);
-    while(hidden_view_it.next()) |scene_node| {
-        if(scene_node.data == null) continue;
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-
-        if(scene_node_data.* == .view and scene_node_data.view.id == id) {
-            return scene_node_data.view;
-        }
-    }
-
     var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
-        if (o.output.data == null) continue;
+        std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-        var view_it = output.layers.content.children.iterator(.forward);
-        while(view_it.next()) |scene_node| {
-            if(scene_node.data == null) continue;
+        var layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        var view_it: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
+        while(view_it.next()) |data| {
+            std.debug.assert(data.* == .view);
 
-            const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-
-            if(scene_node_data.* == .view and scene_node_data.view.id == id) {
-                return scene_node_data.view;
+            if(data.view.id == id) {
+                std.log.debug("Found in output layers", .{});
+                return data.view;
             }
-        }
-
-        for(output.fullscreens.items) |view| {
-            if(view.id == id) return view;
         }
     }
 
+    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        if(data.view.id == id) {
+            std.log.debug("Found in hidden", .{});
+            return data.view;
+        }
+    }
+
+    std.log.debug("Could not find view {d}", .{id});
     return null;
 }
 
 pub fn outputById(self: *Root, id: u64) ?*Output {
     var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
-        if (o.output.data == null) continue;
+        std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-        if(output.id == id) {
+        if(output.id == id) 
             return output;
-        }
     }
 
     return null;
@@ -151,33 +162,23 @@ pub fn applyPending(self: *Root) void {
 
     self.pending_views = 0;
 
-    var hidden_it = self.hidden_tree.children.safeIterator(.forward);
-    while(hidden_it.next()) |scene_node| {
-        std.debug.assert(scene_node.data != null);
-
-        const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-
-        view_snd.view.applyPending();
+    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        data.view.applyPending();
     }
 
     var output_it = self.output_layout.outputs.safeIterator(.forward);
     while(output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
-
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
 
-        for(layers) |layer| {
-            var view_it = layer.children.safeIterator(.forward);
+        var layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        var view_it: SceneNode.Iterator(.{}) = .fromSceneTrees(&layers);
+        while(view_it.next()) |data| {
+            std.debug.assert(data.* == .view);
 
-            while(view_it.next()) |scene_node| {
-                std.debug.assert(scene_node.data != null);
-
-                const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-                std.debug.assert(view_snd.* == .view);
-
-                view_snd.view.applyPending();
-            }
+            data.view.applyPending();
         }
     }
 
@@ -190,34 +191,23 @@ pub fn applyPending(self: *Root) void {
 // If a view is moved from one scene tree to a "later" scene tree
 // it will applyPending twice. The second call should do nothing
 pub fn applySending(self: *Root) void {
-    var hidden_it = self.hidden_tree.children.safeIterator(.forward);
-    while(hidden_it.next()) |scene_node| {
-        std.debug.assert(scene_node.data != null);
-        const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-        std.debug.assert(view_snd.* == .view);
-
-        view_snd.view.applySending();
+    var hidden_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        data.view.applySending();
     }
 
     var output_it = self.output_layout.outputs.iterator(.forward);
     while(output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
-
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        const layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
 
-        for(layers) |layer| {
-            var view_it = layer.children.safeIterator(.forward);
+        var layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
+        var view_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTrees(&layers);
 
-            var i: i32 = 0;
-            while(view_it.next()) |scene_node| : (i += 1) {
-                std.debug.assert(scene_node.data != null);
-
-                const view_snd: *SceneNodeData = @ptrCast(@alignCast(scene_node.data.?));
-                std.debug.assert(view_snd.* == .view);
-
-                view_snd.view.applySending();
-            }
+        while(view_it.next()) |data| {
+            std.debug.assert(data.* == .view);
+            data.view.applySending();
         }
     }
 

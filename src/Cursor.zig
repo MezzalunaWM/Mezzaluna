@@ -181,12 +181,13 @@ pub fn processCursorMotion(
 
     const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
     if (surfaceAtResult) |surface| {
-        if (surface.scene_node_data.* == .view) {
+        if (surface.surface_snd.* == .view) {
             server.events.exec("ViewPointerMotion", .{
-                surface.scene_node_data.view.id,
+                surface.surface_snd.view.id,
                 @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                 @as(c_int, @intFromFloat(self.wlr_cursor.y)),
-            });
+                self.seat.id(),
+            }, "After the cursor moves, but before anyone is told about it.");
         }
 
         self.seat.wlr_seat.pointerNotifyEnter(surface.surface, surface.sx, surface.sy);

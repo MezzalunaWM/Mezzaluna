@@ -5,7 +5,7 @@ const wlr = @import("wlroots");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("SceneNode.zig");
 
 const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
@@ -31,6 +31,7 @@ const State = struct {
 };
 
 id: u64,
+focus_count: u32,
 
 output: ?*Output,
 
@@ -41,18 +42,18 @@ scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
 saved_surface_tree: *wlr.SceneTree,
 
-scene_tree_snd: SceneNodeData,
-surface_tree_snd: SceneNodeData,
-saved_tree_snd: SceneNodeData,
-xdg_surface_snd: SceneNodeData,
-surface_snd: SceneNodeData,
+scene_tree_snd: SceneNode.Data,
+surface_tree_snd: SceneNode.Data,
+saved_tree_snd: SceneNode.Data,
+xdg_surface_snd: SceneNode.Data,
+surface_snd: SceneNode.Data,
 
 previous_geometry: wlr.Box,
 border_width: i32,
 border_color: [4]f32,
 borders: [4]*wlr.SceneRect,
 
-borders_snd: SceneNodeData,
+borders_snd: SceneNode.Data,
 
 // These three states are what (hopefully) make perfect frames possible
 // The *pending* state is state that has been queued and is waiting to be applied
@@ -93,6 +94,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
     self.* = .{
         .id = @intFromPtr(xdg_toplevel),
+        .focus_count = 0,
         .output = null,
 
         .previous_geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
@@ -201,7 +203,7 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
 
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry });
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry }, "A view has had it's pending geometry status set.");
 
     self.previous_geometry = self.current.geometry;
     const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
@@ -226,7 +228,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     // ViewSetFullscreenPre
     // Before making a view fullscreen within it's output
     // passed view_id and true `true` if being fullscreened `false` otherwise
-    server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen });
+    server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen }, "A view has had it's pending fullscreen status set.");
 
     // std.log.debug("Setting fullscreen to {}", .{fullscreen});
 
@@ -258,19 +260,13 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
             _ = self.output.?.fullscreens.swapRemove(i);
         }
     }
-
-    // TODO: This should be after we get the configure
-    // ViewSetFullscreenPost
-    // After making a view fullscreen within it's output
-    // passed view_id and true `true` if being fullscreened `false` otherwise
-    server.events.exec("ViewSetFullscreenPost", .{ self.id, fullscreen });
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
     // Before a view's focus is set
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated });
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "A view has had it's pending focus status set.");
 
     self.pending.?.activated = activated;
 }
@@ -278,7 +274,7 @@ pub fn setActivated(self: *View, activated: bool) void {
 pub fn setEnabled(self: *View, enabled: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    server.events.exec("ViewSetEnabledPre", .{ self.id, enabled });
+    server.events.exec("ViewSetEnabledPre", .{ self.id, enabled }, "A view has had it's pending enabled status set.");
 
     self.pending.?.enabled = enabled;
 }
@@ -295,7 +291,7 @@ pub fn setClose(self: *View, close: bool) void {
         self.setFullscreen(false);
     }
 
-    server.events.exec("ViewSetClosePre", .{ self.id, close });
+    server.events.exec("ViewSetClosePre", .{ self.id, close }, "A view has had it's pending closing status set.");
 
     self.pending.?.close = close;
 }
@@ -427,7 +423,7 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.close) {
         self.scene_tree.node.setEnabled(false);
 
-        server.events.exec("ViewSetClosePost", .{ self.id });
+        server.events.exec("ViewSetClosePost", .{ self.id }, "A view is being closed.");
         
         self.xdg_toplevel.sendClose();
 
@@ -440,36 +436,40 @@ pub fn applySending(self: *View) void {
         self.sending.?.geometry.y != self.current.geometry.y or
         self.sending.?.geometry.width != self.current.geometry.width or
         self.sending.?.geometry.height != self.current.geometry.height) 
-        server.events.exec("ViewSetGeometryPost", .{ self.id });
+        server.events.exec("ViewSetGeometryPost", .{ self.id }, "A view has had it's pending geometry applied.");
 
-    if (self.sending.?.activated != self.current.activated)
-        server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated });
+    if (self.sending.?.fullscreen != self.current.fullscreen)
+        server.events.exec("ViewSetFullscreenPost", .{ self.id, self.sending.?.fullscreen }, "A view has had it's pending fullscreen status applied.");
+
+    if (self.sending.?.activated != self.current.activated) {
+        server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated, self.focus_count }, "A view has had it's pending focus status applied.");
+    }
 
     if (self.sending.?.enabled != self.current.enabled) {
         self.scene_tree.node.setEnabled(self.sending.?.enabled);
 
-        server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled });
+        server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled }, "A view has had it's pending enabled status applied.");
     }
-    
+
+    if(self.sending.?.parent != self.current.parent) {
+        self.scene_tree.node.reparent(self.sending.?.parent);
+
+        var scene_node = &self.scene_tree.node;
+        self.output = while (true) {
+            const parent_scene_node = if (scene_node.parent) |p| &p.node else break null;
+            const parent_snd: *SceneNode.Data = .fromSceneNode(parent_scene_node);
+
+            switch (parent_snd.*) {
+                .hidden_tree, .root => break null,
+                .output => |*output| break output.*,
+                else => { scene_node = parent_scene_node; }
+            }
+        };
+    }
+
+
     self.current = self.sending.?;
     self.sending = null;
-
-    if(self.scene_tree.node.parent.? != self.current.parent) {
-        self.scene_tree.node.reparent(self.current.parent);
-
-        if (self.scene_tree.node.parent) |st| {
-            std.debug.assert(st.node.data != null);
-            const parent_snd: *SceneNodeData = @ptrCast(@alignCast(st.node.data.?));
-            std.debug.assert(parent_snd.* == .hidden_tree or parent_snd.* == .output_layer);
-
-            self.output = if (parent_snd.* == .hidden_tree) null else blk: {
-                std.debug.assert(parent_snd.*.output_layer.node.parent != null);
-                const output_snd: *SceneNodeData = @ptrCast(@alignCast(parent_snd.*.output_layer.node.parent.?.node.data));
-                std.debug.assert(output_snd.* == .output);
-                break :blk output_snd.output;
-            };
-        }
-    }
 
     self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
     self.resizeBorders();
@@ -484,11 +484,11 @@ pub fn applySending(self: *View) void {
 // TODO: Is this necessary if only used once in Cursor.zig
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
     var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
-    while (xdg_surface) |xs| {
+    if (xdg_surface) |xs| {
         switch (xs.role) {
             .toplevel => {
-                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xs.data));
-                return if (scene_node_data.* == .view) scene_node_data.view else null;
+                const snd: *SceneNode.Data = @ptrCast(@alignCast(xs.data));
+                return if (snd.* == .view) snd.view else null;
             },
             .popup => {
                 if (xs.popups.first() == null or xs.popups.first().?.parent == null) {
@@ -512,6 +512,8 @@ pub fn fromSurface(surface: *wlr.Surface) ?*View {
 fn handleMap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("map", listener);
 
+    server.events.exec("ViewMapPre", .{view.id}, "Before a view is mapped to the screen. This means the view is not yet displayed to the user.");
+
     const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
     if(new_view_hidden != null and !new_view_hidden.?) {
         if(server.getDefaultSeat().focused_output) |output| {
@@ -521,6 +523,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
         view.setParent(server.root.hidden_tree);
     }
 
+
     view.xdg_toplevel.base.events.ack_configure.add(&view.ack_configure);
     view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
     view.xdg_toplevel.events.request_move.add(&view.request_move);
@@ -529,18 +532,19 @@ fn handleMap(listener: *wl.Listener(void)) void {
     view.xdg_toplevel.events.set_title.add(&view.set_title);
 
     server.root.applyPending();
+
+    server.events.exec("ViewMapPost", .{view.id}, "After a view is mapped to the screen. This view is now being displayed to the user.");
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
 
-    // view.scene_tree.node.setEnabled(false);
+    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
 
-    server.events.exec("ViewUnmapPre", .{view.id});
-
-    if (server.getDefaultSeat().focused_surface) |fs| {
-        if (fs == .view and fs.view == view) {
-            server.getDefaultSeat().focusSurface(null);
+    var iter = server.seats.iterator(.forward);
+    while (iter.next()) |seat| {
+        if (seat.focused_surface) |fs| {
+            if (fs == .view and fs.view == view) seat.focusSurface(null);
         }
     }
 
@@ -565,7 +569,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     view.set_app_id.link.remove();
 
 
-    server.events.exec("ViewUnmapPost", .{view.id});
+    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visibile to the user.");
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -596,7 +600,7 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
-    server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit});
+    server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit}, "After a view receives a commit. The commit may be the initial commit.");
     if (view.xdg_toplevel.base.initial_commit) {
         if (view.xdg_toplevel_decoration) |deco| {
             _ = deco.setMode(.server_side);
@@ -644,31 +648,33 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopu
 
 fn handleRequestMove(listener: *wl.Listener(*wlr.XdgToplevel.event.Move), _: *wlr.XdgToplevel.event.Move) void {
     const view: *View = @fieldParentPtr("request_move", listener);
-    server.events.exec("ViewRequestMove", .{view.id});
+    server.events.exec("ViewRequestMove", .{view.id}, "Before the view requests to move.");
 }
 
 fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _: *wlr.XdgToplevel.event.Resize) void {
     const view: *View = @fieldParentPtr("request_resize", listener);
-    server.events.exec("ViewRequestResize", .{view.id});
+    server.events.exec("ViewRequestResize", .{view.id}, "Before the view requests to resize.");
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_fullscreen", listener);
-    server.events.exec("ViewRequestFullscreen", .{view.id});
+    server.events.exec("ViewRequestFullscreen", .{view.id}, "Before the view requests to be fullscreened.");
 }
 
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_minimize", listener);
-    server.events.exec("ViewRequestMinimize", .{view.id});
+    server.events.exec("ViewRequestMinimize", .{view.id}, "Before the view requests to be minimized.");
     std.log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_app_id", listener);
-    server.events.exec("ViewAppIdUpdate", .{view.id});
+    server.events.exec("ViewAppIdUpdate", .{view.id}, "Before the view requests to update its appid.");
+    std.log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_title", listener);
-    server.events.exec("ViewTitleUpdate", .{view.id});
+    server.events.exec("ViewTitleUpdate", .{view.id}, "Before the view requests to update its title.");
+    std.log.debug("request_set_title unimplemented", .{});
 }

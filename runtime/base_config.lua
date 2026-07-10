@@ -41,8 +41,8 @@ mez.input.add_keymap(mod .. "|shift", "Q", {
 })
 
 mez.hook.add("ViewSetFocusPost", {
-	callback = function (view_id, focus)
-    if focus then
+	callback = function(view_id, _, focus_count)
+    if focus_count > 0 then
       mez.view.set_border(view_id, { color = "#FFDD33", width = border_width })
     else
       mez.view.set_border(view_id, { color = "#52493E", width = border_width })
@@ -59,8 +59,8 @@ mez.hook.add("ViewCommitPost", {
 })
 
 mez.hook.add("ViewPointerMotion", {
-	callback = function (view_id, _, _)
-		mez.view.set_focused(view_id)
+	callback = function (view_id, _, _, seat_id)
+    mez.seat.set_focused_view(seat_id, view_id)
 	end
 })
 

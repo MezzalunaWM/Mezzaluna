@@ -16,9 +16,11 @@ pub fn build(b: *std.Build) void {
     scanner.addSystemProtocol("staging/cursor-shape/cursor-shape-v1.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
     scanner.addSystemProtocol("unstable/pointer-constraints/pointer-constraints-unstable-v1.xml");
+    scanner.addSystemProtocol("staging/color-management/color-management-v1.xml");
     scanner.addCustomProtocol(b.path("protocols/wlr-layer-shell-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocols/mez-remote-lua-unstable-v1.xml"));
     scanner.addCustomProtocol(b.path("protocols/wlr-output-power-management-unstable-v1.xml"));
+    scanner.addCustomProtocol(b.path("protocols/virtual-keyboard-unstable-v1.xml"));
 
     // Generate protocol code
     scanner.generate("zmez_remote_lua_manager_v1", 1);
@@ -35,6 +37,8 @@ pub fn build(b: *std.Build) void {
     scanner.generate("wp_cursor_shape_manager_v1", 1);
     scanner.generate("zwlr_output_power_manager_v1", 1);
     scanner.generate("zwp_pointer_constraints_v1", 1);
+    scanner.generate("zwp_virtual_keyboard_manager_v1", 1);
+    scanner.generate("wp_color_manager_v1", 1);
 
     const wayland = b.createModule(.{ .root_source_file = scanner.result });
     const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
@@ -49,7 +53,7 @@ pub fn build(b: *std.Build) void {
     wlroots.addImport("pixman", pixman);
 
     wlroots.resolved_target = target;
-    wlroots.linkSystemLibrary("wlroots-0.19", .{});
+    wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
     const mez = b.addExecutable(.{
         .name = "mez",
@@ -61,6 +65,15 @@ pub fn build(b: *std.Build) void {
     });
 
     mez.root_module.link_libc = true;
+
+    const docgen = b.addExecutable(.{
+        .name = "docgen",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("docgen/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
 
     mez.root_module.addImport("wayland", wayland);
     mez.root_module.addImport("xkbcommon", xkbcommon);
@@ -83,9 +96,11 @@ pub fn build(b: *std.Build) void {
 
     const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir")
         orelse b.pathJoin(&.{b.install_prefix, "share"});
-    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
 
+    const event_gen = b.option(bool, "event_gen", "Should mez generate event docs? WARNING: This will prevent codegen!") orelse false;
+    options.addOption([]const u8, "runtime_path_prefix", runtime_path_prefix);
     options.addOption([]const u8, "version", version);
+    options.addOption(bool, "event_gen", event_gen);
     mez.root_module.addOptions("config", options);
 
     // Installs a bin to prefix/bin/mez
@@ -124,5 +139,8 @@ pub fn build(b: *std.Build) void {
     remove_step.dependOn(&uninstall_runtime.step);
     remove_step.dependOn(&uninstall_bin.step);
 
-    // const doc_gen_step = b.step("doc-gen", "Generate documentation for the lua api");
+    const docgen_step = b.step("docgen", "Generate documentation for the lua api");
+    const docgen_cmd = b.addRunArtifact(docgen);
+    docgen_step.dependOn(&docgen_cmd.step);
+    docgen_cmd.step.dependOn(b.getInstallStep());
 }

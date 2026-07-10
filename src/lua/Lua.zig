@@ -37,8 +37,8 @@ pub fn init(self: *Lua, cfg: Config) !void {
         else => log.err("{}", .{ err })
     };
 
-    loadBaseConfig(self.state);
     if (cfg.enabled) loadConfigDir(self.state);
+    loadBaseConfig(self.state);
 
     log.debug("Loaded lua", .{});
 }
@@ -142,6 +142,7 @@ pub fn openMezLibs(self: *zlua.Lua) void {
     inline for (.{
         .{ "api", @import("Api.zig") },
         .{ "async", @import("Async.zig") },
+        .{ "device", @import("Device.zig") },
         .{ "fs", @import("Fs.zig") },
         .{ "hook", @import("Hook.zig") },
         .{ "input", @import("Input.zig") },
