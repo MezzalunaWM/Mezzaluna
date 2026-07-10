@@ -66,7 +66,6 @@ pub fn viewById(view_id: u64) ?*View {
             if (fs == .view) return fs.view;
         }
     } else {
-        std.log.debug("looking for view_id {d}", .{view_id});
         return server.root.viewById(view_id);
     }
     return null;

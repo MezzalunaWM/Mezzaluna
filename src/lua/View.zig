@@ -85,14 +85,8 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if (!L.isTable(2)) return 0;
 
-    std.log.debug("------------", .{});
-    std.log.debug("Getting view", .{});
-
     const view = LuaUtils.viewById(view_id);
     if (view == null) return 0;
-
-    std.log.debug("Got view", .{});
-    std.log.debug("------------", .{});
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 

@@ -85,6 +85,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     };
 
     self.wlr_output.data = self;
+    self.scene_output.scene.tree.node.data = &self.output_snd;
 
     wlr_output.events.frame.add(&self.frame);
     wlr_output.events.destroy.add(&self.destroy);

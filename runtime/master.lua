@@ -95,8 +95,6 @@ M.tile_tag = function(tag_id)
 
   if tag.master == nil then return end
 
-  print(mez.inspect(tag))
-
   if #tag.stack == 0 then
     mez.view.set_geometry(tag.master, {
       x = M.config.screen_gap + area.x,

@@ -113,10 +113,8 @@ pub fn viewById(self: *Root, id: u64) ?*View {
     var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
     while(hidden_it.next()) |data| {
         std.debug.assert(data.* == .view);
-        if(data.view.id == id) {
-            std.log.debug("Found {d} in hidden", .{id});
+        if(data.view.id == id)
             return data.view;
-        }
     }
 
     var output_it = self.output_layout.outputs.iterator(.forward);
@@ -131,17 +129,12 @@ pub fn viewById(self: *Root, id: u64) ?*View {
             while(view_it.next()) |data| {
                 std.debug.assert(data.* == .view);
 
-                std.log.debug("Iterating over views", .{});
-
-                if(data.view.id == id) {
-                    std.log.debug("Found {d} in layer", .{id});
+                if(data.view.id == id)
                     return data.view;
-                }
             }
         }
     }
 
-    std.log.debug("Did not find {d}", .{id});
     return null;
 }
 
