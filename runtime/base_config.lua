@@ -26,7 +26,11 @@ mez.input.add_keymap(mod .. "|shift", "Return", {
 
 mez.input.add_keymap(mod .. "|shift", "C", {
 	press = function ()
-		mez.view.close(0)
+		local view_id = mez.view.get_focused_id(0)
+		if view_id then
+			mez.view.set_closing(view_id, true)
+			mez.view.apply()
+		end
 	end
 })
 
@@ -46,9 +50,11 @@ mez.hook.add("ViewSetFocusPost", {
 	end
 })
 
-mez.hook.add("ViewMapPre", {
-  callback = function(view_id)
-    mez.view.set_border(view_id, { color = "#52493E", width = border_width })
+mez.hook.add("ViewCommitPost", {
+  callback = function(view_id, initial)
+    if initial then
+      mez.view.set_border(view_id, { color = "#52493E", width = border_width })
+    end
   end
 })
 

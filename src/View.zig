@@ -1,17 +1,34 @@
 const View = @This();
-
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
+const SceneNode = @import("SceneNode.zig");
 
 const Utils = @import("Utils.zig");
+const Options = @import("lua/Options.zig");
+const Debug = @import("Debug.zig");
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
+
+const State = struct {
+    // The total geometry including borders
+    parent: *wlr.SceneTree,
+
+    geometry: wlr.Box,
+    fullscreen: bool,
+
+    activated: bool,
+    enabled: bool,
+    resizing: bool,
+
+    decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
+    tiled_edges: wlr.Edges,
+    closing: bool,
+};
 
 id: u64,
 focus_count: u32,
@@ -23,13 +40,33 @@ xdg_toplevel_decoration: ?*wlr.XdgToplevelDecorationV1,
 
 scene_tree: *wlr.SceneTree,
 surface_tree: *wlr.SceneTree,
-scene_node_data: SceneNodeData,
+saved_surface_tree: *wlr.SceneTree,
 
-borders: [4]*wlr.SceneRect,
-border_width: i32,
-geometry: wlr.Box, // The total geometry including borders
+scene_tree_snd: SceneNode.Data,
+surface_tree_snd: SceneNode.Data,
+saved_tree_snd: SceneNode.Data,
+xdg_surface_snd: SceneNode.Data,
+surface_snd: SceneNode.Data,
 
 previous_geometry: wlr.Box,
+border_width: i32,
+border_color: [4]f32,
+borders: [4]*wlr.SceneRect,
+
+borders_snd: SceneNode.Data,
+
+// These three states are what (hopefully) make perfect frames possible
+// The *pending* state is state that has been queued and is waiting to be applied
+// The *sending* state is state that has been sent to clients, and is waiting for acks
+// The *current* state is state currently visible to the user
+pending: ?State,
+sending: ?State,
+current: State,
+
+awaiting_buffer: bool,
+configure_serial: u32,
+configure_acked: bool,
+view_timer: *wl.EventSource,
 
 // Surface Listeners
 map: wl.Listener(void) = .init(handleMap),
@@ -46,16 +83,8 @@ request_resize: wl.Listener(*wlr.XdgToplevel.event.Resize) = .init(handleRequest
 request_move: wl.Listener(*wlr.XdgToplevel.event.Move) = .init(handleRequestMove),
 request_fullscreen: wl.Listener(void) = .init(handleRequestFullscreen),
 
-// Do we need to add these
-// request_show_window_menu: wl.Listener(comptime T: type) = .init(handleRequestShowWindowMenu),
-// request_minimize: wl.Listener(comptime T: type) = .init(handleRequestMinimize),
-// request_maximize: wl.Listener(comptime T: type) = .init(handleRequestMaximize),
-
 set_app_id: wl.Listener(void) = .init(handleSetAppId),
 set_title: wl.Listener(void) = .init(handleSetTitle),
-
-// Do we need to add this
-// set_parent: wl.Listener(void) = .init(handleSetParent),
 
 pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
     errdefer Utils.oomPanic();
@@ -67,135 +96,218 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .id = @intFromPtr(xdg_toplevel),
         .focus_count = 0,
         .output = null,
-        .geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
+
         .previous_geometry = .{ .width = 0, .height = 0, .x = 0, .y = 0 },
+
         .xdg_toplevel = xdg_toplevel,
-        .scene_tree = undefined,
-        .surface_tree = undefined,
         .xdg_toplevel_decoration = null,
-        .borders = undefined,
+
+        .scene_tree_snd = .{ .view = self },
+        .surface_tree_snd = .{ .view_surface_tree = self },
+        .saved_tree_snd = .{ .view_saved_tree = self },
+        .surface_snd = .{ .view_surface = self },
+        .xdg_surface_snd = .{ .view_xdg_surface = self },
+        .borders_snd = .{ .view_border = self },
+
+        .scene_tree = try server.root.hidden_tree.createSceneTree(),
+        .surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base),
+        .saved_surface_tree = try self.scene_tree.createSceneTree(),
+
         .border_width = 0,
-        .scene_node_data = .{ .view = self },
+        .border_color = .{ 0, 0, 0, 1 },
+        .borders = undefined,
+
+        // State the view SHOULD start with
+        .pending = .{
+            .parent = server.root.hidden_tree,
+
+            .geometry = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
+            .fullscreen = false,
+
+            .activated = false,
+            .enabled = true,
+            .resizing = false,
+            .closing = false,
+
+            .decoration_mode = .server_side,
+            .tiled_edges = .{
+                .top = true,
+                .right = true,
+                .left = true,
+                .bottom = true
+            },
+        },
+        .sending = null,
+        // State the view DOES start with
+        .current = .{
+            .parent = server.root.hidden_tree,
+
+            .geometry = .{
+                .x = self.scene_tree.node.x,
+                .y = self.scene_tree.node.y,
+                .width = self.xdg_toplevel.current.width,
+                .height = self.xdg_toplevel.current.height
+            },
+            .fullscreen = self.xdg_toplevel.current.fullscreen,
+
+            .activated = self.xdg_toplevel.current.activated,
+            .enabled = self.scene_tree.node.enabled,
+            .resizing = self.xdg_toplevel.current.resizing,
+
+            .decoration_mode = .server_side,
+            .tiled_edges = self.xdg_toplevel.current.tiled,
+            .closing = false,
+        },
+
+        .awaiting_buffer = false,
+        .configure_serial = 0,
+        .configure_acked = false,
+        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch Utils.oomPanic()
     };
 
-    // Add new Toplevel to root of the tree
-    if (server.getDefaultSeat().focused_output) |output| {
-        self.scene_tree = try output.layers.content.createSceneTree();
-        self.surface_tree = try self.scene_tree.createSceneXdgSurface(xdg_toplevel.base);
-        self.output = output;
+    self.saved_surface_tree.node.setEnabled(false);
+
+    // Create border scene_rects
+    for (self.borders, 0..) |_, i| {
+        self.borders[i] = try self.scene_tree.createSceneRect(0, 0, &self.border_color);
+        self.borders[i].node.data = &self.borders_snd;
     }
 
-    self.scene_tree.node.data = &self.scene_node_data;
-    self.xdg_toplevel.base.data = &self.scene_node_data;
+    // Set a bunch of scene node data to point here
+    self.scene_tree.node.data = &self.scene_tree_snd;
+    self.surface_tree.node.data = &self.surface_tree_snd;
+    self.saved_surface_tree.node.data = &self.saved_tree_snd;
 
+    self.xdg_toplevel.base.data = &self.xdg_surface_snd;
+    self.xdg_toplevel.base.surface.data = &self.surface_snd;
+
+    // Add events too xdg_toplevel
     self.xdg_toplevel.events.destroy.add(&self.destroy);
     self.xdg_toplevel.base.surface.events.map.add(&self.map);
     self.xdg_toplevel.base.surface.events.unmap.add(&self.unmap);
     self.xdg_toplevel.base.surface.events.commit.add(&self.commit);
     self.xdg_toplevel.base.events.new_popup.add(&self.new_popup);
-    self.xdg_toplevel.base.events.ack_configure.add(&self.ack_configure);
-
-    self.xdg_toplevel.events.request_fullscreen.add(&self.request_fullscreen);
-    self.xdg_toplevel.events.request_move.add(&self.request_move);
-    self.xdg_toplevel.events.request_resize.add(&self.request_resize);
-    self.xdg_toplevel.events.set_app_id.add(&self.set_app_id);
-    self.xdg_toplevel.events.set_title.add(&self.set_title);
-    // self.xdg_toplevel.events.set_parent.add(&self.set_parent);
-
-    for (self.borders, 0..) |_, i| {
-        const color: [4]f32 = .{ 0, 0, 0, 1 };
-        self.borders[i] = try wlr.SceneTree.createSceneRect(self.scene_tree, 0, 0, &color);
-        self.borders[i].node.data = self;
-    }
 
     return self;
 }
 
-// Tell the client to close
-// It better behave!
-pub fn close(self: *View) void {
-    if(self.isFullscreen()) {
-        self.toggleFullscreen();
-    }
-
-    self.xdg_toplevel.sendClose();
-}
-
-pub fn setBorderColor(self: *View, color: *const [4]f32) void {
-    for (self.borders) |border| border.setColor(color);
-}
-
-pub fn isFullscreen(self: *View) bool {
-    if(self.output == null) {
-        std.log.debug("View does not have an assigned output", .{});
-        unreachable;
-    }
-
-    for(self.output.?.fullscreens.items) |view| {
-        if(view == self) return true;
-    }
-
-    return false;
-}
-
-pub fn toggleFullscreen(self: *View) void {
-    if(self.output == null) {
-        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
-        return;
-    }
-
-    const fullscreens = &self.output.?.fullscreens;
-    if(self.output.?.getEnabledFullscreen() == self) {
-        server.events.exec("ViewSetFullscreenPre", .{self.id, false}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
-
-        self.scene_tree.node.reparent(self.output.?.layers.content);
-
-        server.events.exec("ViewSetFullscreenPost", .{self.id, false}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
-
-        if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
-            _ = self.output.?.fullscreens.swapRemove(i);
-        }
-        _ = self.xdg_toplevel.setFullscreen(false);
-        return;
-    }
-
-    // Check to see if another enabled fullscreen view exists, if so replace it
-    if (self.output.?.getEnabledFullscreen()) |v| {
-        _ = v.toggleFullscreen();
-    }
-
-    server.events.exec("ViewSetFullscreenPre", .{self.id, true}, "Before making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
-    self.scene_tree.node.reparent(self.output.?.layers.top);
-
-    self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
-
-    fullscreens.append(gpa, self) catch Utils.oomPanic();
-    _ = self.xdg_toplevel.setFullscreen(true);
-    server.events.exec("ViewSetFullscreenPost", .{self.id, true}, "After making a view fullscreen within it's output passed view_id and true `true` if being fullscreened `false` otherwise");
+pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.parent = parent;
 }
 
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    if (self.output == null or !self.xdg_toplevel.base.surface.mapped) return;
+    // const eventual = self.pending orelse self.sending orelse self.current;
+    // if (eventual.fullscreen) return;
 
-    if(self.isFullscreen()) return;
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    self.previous_geometry = self.geometry;
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry }, "A view has had it's pending geometry status set.");
 
-    self.geometry = .{
-        .x = x orelse self.geometry.x,
-        .y = y orelse self.geometry.y,
-        .width = @max(1 + 2 * self.border_width, width orelse self.geometry.width),
-        .height = @max(1 + 2 * self.border_width, height orelse self.geometry.height)
+    self.previous_geometry = self.current.geometry;
+    const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
+    self.pending.?.geometry = .{
+        .x = x orelse geo_base.geometry.x,
+        .y = y orelse geo_base.geometry.y,
+        .width = @max(1 + 2 * self.border_width, width orelse geo_base.geometry.width),
+        .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
     };
 
-    self.scene_tree.node.setPosition(self.geometry.x, self.geometry.y);
-    _ = self.xdg_toplevel.setSize(
-        self.geometry.width - 2 * self.border_width,
-        self.geometry.height - 2 * self.border_width,
-    );
-
     self.resizeBorders();
+}
+
+pub fn setFullscreen(self: *View, fullscreen: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    if (self.output == null) {
+        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
+        return;
+    }
+
+    // ViewSetFullscreenPre
+    // Before making a view fullscreen within it's output
+    // passed view_id and true `true` if being fullscreened `false` otherwise
+    server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen }, "A view has had it's pending fullscreen status set.");
+
+    // std.log.debug("Setting fullscreen to {}", .{fullscreen});
+
+    const fullscreens = &self.output.?.fullscreens;
+    if(fullscreen and !self.current.fullscreen) {
+        if(self.output.?.getEnabledFullscreen()) |ef| {
+            ef.setFullscreen(false);
+        }
+
+        self.previous_geometry = (self.sending orelse self.current).geometry;
+
+        self.setParent(self.output.?.layers.top);
+        self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
+        self.pending.?.fullscreen = true;
+
+        fullscreens.append(gpa, self) catch Utils.oomPanic();
+    } else if (!fullscreen and self.current.fullscreen) {
+        self.setParent(self.output.?.layers.content);
+        self.pending.?.fullscreen = false;
+
+        // self.setGeometry(
+        //     self.previous_geometry.x,
+        //     self.previous_geometry.y,
+        //     self.previous_geometry.width,
+        //     self.previous_geometry.height,
+        // );
+
+        if (std.mem.indexOfScalar(*View, fullscreens.items, self)) |i| {
+            _ = self.output.?.fullscreens.swapRemove(i);
+        }
+    }
+}
+
+pub fn setActivated(self: *View, activated: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    // Before a view's focus is set
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "A view has had it's pending focus status set.");
+
+    self.pending.?.activated = activated;
+}
+
+pub fn setEnabled(self: *View, enabled: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    server.events.exec("ViewSetEnabledPre", .{ self.id, enabled }, "A view has had it's pending enabled status set.");
+
+    self.pending.?.enabled = enabled;
+}
+
+pub fn setResizing(self: *View, resizing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.resizing = resizing;
+}
+
+pub fn setClosing(self: *View, closing: bool) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    if (closing and self.current.fullscreen) {
+        self.setFullscreen(false);
+    }
+
+    server.events.exec("ViewSetClosingPre", .{ self.id, closing }, "A view has had it's pending closing status set.");
+
+    self.pending.?.closing = closing;
+}
+
+pub fn setDecorationMode(self: *View, mode: wlr.XdgToplevelDecorationV1.Mode) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.decoration_mode = mode;
+}
+
+pub fn setTiledEdges(self: *View, edges: wlr.Edges) void {
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+    self.pending.?.tiled_edges = edges;
+}
+
+pub fn setBorderColor(self: *View, color: *const [4]f32) void {
+    for (self.borders) |border| border.setColor(color);
 }
 
 /// this function handles all things related to sizing and positioning and
@@ -209,35 +321,174 @@ pub fn resizeBorders(self: *View) void {
         // use the offset relative to the surface geometry, not the output geometry
         .x = self.xdg_toplevel.base.geometry.x,
         .y = self.xdg_toplevel.base.geometry.y,
-        .width = self.geometry.width - 2 * self.border_width,
-        .height = self.geometry.height - 2 * self.border_width,
+        .width = self.current.geometry.width - 2 * self.border_width,
+        .height = self.current.geometry.height - 2 * self.border_width,
     });
 
-    self.borders[0].setSize(self.geometry.width, self.border_width);
-    self.borders[1].setSize(self.geometry.width, self.border_width);
-    self.borders[2].setSize(self.border_width, self.geometry.height);
-    self.borders[3].setSize(self.border_width, self.geometry.height);
-    self.borders[1].node.setPosition(0, self.geometry.height - self.border_width);
-    self.borders[2].node.setPosition(self.geometry.width - self.border_width, 0);
+    self.borders[0].setSize(self.current.geometry.width, self.border_width);
+    self.borders[1].setSize(self.current.geometry.width, self.border_width);
+    self.borders[2].setSize(self.border_width, self.current.geometry.height);
+    self.borders[3].setSize(self.border_width, self.current.geometry.height);
+    self.borders[1].node.setPosition(0, self.current.geometry.height - self.border_width);
+    self.borders[2].node.setPosition(self.current.geometry.width - self.border_width, 0);
 }
 
-pub fn setActivated(self: *View, activated: bool) void {
-    if (activated) self.focus_count += 1 else self.focus_count -= 1;
+pub fn applyPending(self: *View) void {
+    if (self.pending == null) return;
+    const pending = &self.pending.?;
+    const current = &self.current;
 
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "Before a view's focus is set");
+    var serial: u32 = 0;
 
-    _ = self.xdg_toplevel.setActivated(self.focus_count != 0);
+    // Resizing
+    if (pending.geometry.height != current.geometry.height or pending.geometry.width != current.geometry.width) {
+        if(!current.resizing) {
+            self.surface_tree.node.forEachBuffer(*wlr.SceneTree, saveSurfaceTreeIter, self.saved_surface_tree);
 
-    server.events.exec("ViewSetFocusPost", .{ self.id, activated, self.focus_count }, "After a view's focus is set");
+            // Hiding
+            self.surface_tree.node.setEnabled(false);
+            self.saved_surface_tree.node.setEnabled(true);
+
+            self.awaiting_buffer = true;
+            server.root.pending_views += 1;
+        }
+
+        // Position is not something the client needs to consider so it happens instantly
+        // We wait till the client commits its new buffer to position
+        serial = self.xdg_toplevel.setSize(
+            pending.geometry.width - 2 * self.border_width,
+            pending.geometry.height - 2 * self.border_width,
+        );
+    }
+
+    // Fullscreen
+    if(pending.fullscreen != current.fullscreen) {
+        serial = @max(serial, self.xdg_toplevel.setFullscreen(pending.fullscreen));
+    }
+
+    // Activated
+    if (pending.activated != current.activated) {
+        serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
+    }
+
+    // Decoration mode
+    if (pending.decoration_mode != current.decoration_mode and self.xdg_toplevel_decoration != null) {
+        serial = @max(serial, self.xdg_toplevel_decoration.?.setMode(pending.decoration_mode));
+    }
+
+    // Resizing
+    if(pending.resizing != current.resizing) {
+        serial = @max(serial, self.xdg_toplevel.setResizing(pending.resizing));
+    }
+
+    // Tiled edges
+    if(pending.tiled_edges != current.tiled_edges) {
+        serial = @max(serial, self.xdg_toplevel.setTiled(pending.tiled_edges));
+    }
+
+    self.configure_serial = serial;
+    self.configure_acked = false;
+    if (self.awaiting_buffer) {
+        self.view_timer.timerUpdate(140) catch {};
+    }
+
+    self.sending = self.pending;
+    self.pending = null;
 }
 
+fn saveSurfaceTreeIter(scene_buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, saved_surface_tree: *wlr.SceneTree) void {
+    const buffer = scene_buffer.buffer orelse return;
+
+    // Create saved scene buffer
+    const saved = saved_surface_tree.createSceneBuffer(buffer) catch Utils.oomPanic();
+
+    // Copy all properties
+    saved.node.setPosition(sx, sy);
+    saved.setDestSize(scene_buffer.dst_width, scene_buffer.dst_height);
+    saved.setSourceBox(&scene_buffer.src_box);
+    saved.setTransform(scene_buffer.transform);
+}
+
+fn dropSavedSurfaceTree(self: *View) void {
+    var buffer_it = self.saved_surface_tree.children.safeIterator(.forward);
+
+    while (buffer_it.next()) |buffer| {
+        buffer.destroy();
+    }
+}
+
+pub fn applySending(self: *View) void {
+    if(self.sending == null) return;
+
+    if (self.sending.?.closing) {
+        self.scene_tree.node.setEnabled(false);
+
+        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view is being closed.");
+        
+        self.xdg_toplevel.sendClose();
+
+        self.current = self.sending.?;
+        self.sending = null;
+        return;
+    }
+
+    if (self.sending.?.geometry.x != self.current.geometry.x or
+        self.sending.?.geometry.y != self.current.geometry.y or
+        self.sending.?.geometry.width != self.current.geometry.width or
+        self.sending.?.geometry.height != self.current.geometry.height) 
+        server.events.exec("ViewSetGeometryPost", .{ self.id }, "A view has had it's pending geometry applied.");
+
+    if (self.sending.?.fullscreen != self.current.fullscreen)
+        server.events.exec("ViewSetFullscreenPost", .{ self.id, self.sending.?.fullscreen }, "A view has had it's pending fullscreen status applied.");
+
+    if (self.sending.?.activated != self.current.activated) {
+        server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated, self.focus_count }, "A view has had it's pending focus status applied.");
+    }
+
+    if (self.sending.?.enabled != self.current.enabled) {
+        self.scene_tree.node.setEnabled(self.sending.?.enabled);
+
+        server.events.exec("ViewSetEnabledPost", .{ self.id, self.sending.?.enabled }, "A view has had it's pending enabled status applied.");
+    }
+
+    if(self.sending.?.parent != self.current.parent) {
+        self.scene_tree.node.reparent(self.sending.?.parent);
+
+        var scene_node = &self.scene_tree.node;
+        self.output = while (true) {
+            const parent_scene_node = if (scene_node.parent) |p| &p.node else break null;
+            const parent_snd: *SceneNode.Data = .fromSceneNode(parent_scene_node);
+
+            switch (parent_snd.*) {
+                .hidden_tree, .root => break null,
+                .output => |*output| break output.*,
+                else => { scene_node = parent_scene_node; }
+            }
+        };
+    }
+
+
+    self.current = self.sending.?;
+    self.sending = null;
+
+    self.scene_tree.node.setPosition(self.current.geometry.x, self.current.geometry.y);
+    self.resizeBorders();
+
+    // Revealing
+    self.surface_tree.node.setEnabled(true);
+    self.saved_surface_tree.node.setEnabled(false);
+
+    self.dropSavedSurfaceTree();
+}
+
+// TODO: Is this necessary if only used once in Cursor.zig
 pub fn fromSurface(surface: *wlr.Surface) ?*View {
     var xdg_surface = wlr.XdgSurface.tryFromWlrSurface(surface);
-    while (xdg_surface) |xs| {
+    if (xdg_surface) |xs| {
         switch (xs.role) {
             .toplevel => {
-                const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(xs.data));
-                return if (scene_node_data.* == .view) scene_node_data.view else null;
+                const snd: *SceneNode.Data = @ptrCast(@alignCast(xs.data));
+                return if (snd.* == .view) snd.view else null;
             },
             .popup => {
                 if (xs.popups.first() == null or xs.popups.first().?.parent == null) {
@@ -263,21 +514,30 @@ fn handleMap(listener: *wl.Listener(void)) void {
 
     server.events.exec("ViewMapPre", .{view.id}, "Before a view is mapped to the screen. This means the view is not yet displayed to the user.");
 
-    // we're gonna tell the client that it's tiled so it doesn't try anything
-    // stupid
-    _ = view.xdg_toplevel.setTiled(.{
-        .top = true,
-        .bottom = true,
-        .left = true,
-        .right = true,
-    });
+    const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
+    if(new_view_hidden != null and !new_view_hidden.?) {
+        if(server.getDefaultSeat().focused_output) |output| {
+            view.setParent(output.layers.content);
+        }
+    } else {
+        view.setParent(server.root.hidden_tree);
+    }
+
+
+    view.xdg_toplevel.base.events.ack_configure.add(&view.ack_configure);
+    view.xdg_toplevel.events.request_fullscreen.add(&view.request_fullscreen);
+    view.xdg_toplevel.events.request_move.add(&view.request_move);
+    view.xdg_toplevel.events.request_resize.add(&view.request_resize);
+    view.xdg_toplevel.events.set_app_id.add(&view.set_app_id);
+    view.xdg_toplevel.events.set_title.add(&view.set_title);
+
+    server.root.applyPending();
 
     server.events.exec("ViewMapPost", .{view.id}, "After a view is mapped to the screen. This view is now being displayed to the user.");
 }
 
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
-    std.log.debug("Unmapping view '{s}'", .{view.xdg_toplevel.title orelse "(unnamed)"});
 
     server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
 
@@ -287,6 +547,27 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
             if (fs == .view and fs.view == view) seat.focusSurface(null);
         }
     }
+
+    // If this view was part of an sending transaction, clean up so the
+    // root counter doesn't get stuck and other views can be revealed.
+    if (view.awaiting_buffer) {
+        view.view_timer.timerUpdate(0) catch {};
+        server.root.pending_views -|= 1;
+        view.awaiting_buffer = false;
+        view.configure_serial = 0;
+        view.configure_acked = false;
+        if (server.root.pending_views == 0) {
+            server.root.applySending();
+        }
+    }
+
+    view.ack_configure.link.remove();
+    view.request_fullscreen.link.remove();
+    view.request_move.link.remove();
+    view.request_resize.link.remove();
+    view.set_title.link.remove();
+    view.set_app_id.link.remove();
+
 
     server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visibile to the user.");
 }
@@ -301,16 +582,12 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 
     // remove listeners
     view.destroy.link.remove();
-    view.ack_configure.link.remove();
     view.map.link.remove();
     view.unmap.link.remove();
     view.commit.link.remove();
     view.new_popup.link.remove();
-    view.request_fullscreen.link.remove();
-    view.request_move.link.remove();
-    view.request_resize.link.remove();
-    view.set_title.link.remove();
-    view.set_app_id.link.remove();
+
+    view.view_timer.remove();
 
     view.xdg_toplevel.base.surface.data = null;
 
@@ -323,31 +600,50 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
-    // On the first commit, send a configure to tell the client it can proceed
+    server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit}, "After a view receives a commit. The commit may be the initial commit.");
     if (view.xdg_toplevel.base.initial_commit) {
-
-        // 5 is the XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION, I'm just not sure where it is in the bindings
-        if (view.xdg_toplevel.base.client.shell.version >= 5) {
-            // the client should know that it can only fullscreen, nothing else
-            _ = view.xdg_toplevel.setWmCapabilities(.{
-                .fullscreen = true,
-            });
+        if (view.xdg_toplevel_decoration) |deco| {
+            _ = deco.setMode(.server_side);
         }
-
-        // before committing we tell the client that we'll handle the decorations
-        if (view.xdg_toplevel_decoration) |deco| _ = deco.setMode(.server_side);
-
-        // this tells the client that it can start doing things we don't use our
-        // wrapper here cause we don't want to enforce any of our rules
-        _ = view.xdg_toplevel.setSize(0, 0);
         return;
     }
 
-    // resize on every commit
-    view.resizeBorders();
+    if (view.awaiting_buffer and view.configure_acked) {
+        view.awaiting_buffer = false;
+        view.configure_serial = 0;
+        view.view_timer.timerUpdate(0) catch {};
+        if (server.root.pending_views > 0) server.root.pending_views -= 1;
+        if (server.root.pending_views == 0) server.root.applySending();
+    }
 }
 
 // --------- XdgToplevel Event Handlers ---------
+fn handleAckConfigure(listener: *wl.Listener(*wlr.XdgSurface.Configure), configure: *wlr.XdgSurface.Configure) void {
+    const view: *View = @fieldParentPtr("ack_configure", listener);
+
+    if (view.configure_serial == 0 or configure.serial < view.configure_serial) return;
+    view.configure_acked = true;
+    view.configure_serial = 0;
+
+    // Client has acked — wait for the actual buffer commit. Set a shorter
+    // timeout so we don't block other views if the client stalls after acking.
+    //  -- BigPickle with love
+
+    if (view.awaiting_buffer) {
+        view.view_timer.timerUpdate(50) catch {};
+    }
+}
+
+fn handleViewTimer(data: *View) c_int {
+    if (!data.awaiting_buffer) return 0;
+    data.awaiting_buffer = false;
+    data.configure_serial = 0;
+    data.configure_acked = false;
+    if (server.root.pending_views > 0) server.root.pending_views -= 1;
+    if (server.root.pending_views == 0) server.root.applySending();
+    return 0;
+}
+
 fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopup) void {
     const view: *View = @fieldParentPtr("new_popup", listener);
     _ = Popup.init(xdg_popup, view.scene_tree);
@@ -361,14 +657,6 @@ fn handleRequestMove(listener: *wl.Listener(*wlr.XdgToplevel.event.Move), _: *wl
 fn handleRequestResize(listener: *wl.Listener(*wlr.XdgToplevel.event.Resize), _: *wlr.XdgToplevel.event.Resize) void {
     const view: *View = @fieldParentPtr("request_resize", listener);
     server.events.exec("ViewRequestResize", .{view.id}, "Before the view requests to resize.");
-}
-
-fn handleAckConfigure(
-    listener: *wl.Listener(*wlr.XdgSurface.Configure),
-    _: *wlr.XdgSurface.Configure,
-) void {
-    const view: *View = @fieldParentPtr("ack_configure", listener);
-    _ = view;
 }
 
 fn handleRequestFullscreen(listener: *wl.Listener(void)) void {

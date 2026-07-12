@@ -152,7 +152,7 @@ pub fn focusSurface(self: *Seat, to_focus: ?FocusData) void {
             .view => |*current_view| {
                 // the current surface is fullscreen and the layer surface to
                 // focus is not on or above the top layer
-                if (current_view.*.isFullscreen() and current_view.*.scene_tree.node.enabled) {
+                if (current_view.*.current.fullscreen and current_view.*.scene_tree.node.enabled) {
                     switch (to_focus.?) {
                         .layer_surface => |*layer_surface| {
                             const layer = @intFromEnum(layer_surface.*.wlr_layer_surface.current.layer);

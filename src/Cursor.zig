@@ -107,8 +107,8 @@ pub fn processCursorMotion(
         // get the view from the constrained surface
         const view = View.fromSurface(active_constraint.constraint.surface);
         if (view) |v| if (self.seat.focused_surface) |fs| if (fs == .view and v == fs.view) {
-            const sx = self.wlr_cursor.x - @as(f64, @floatFromInt(v.geometry.x)) - @as(f64, @floatFromInt(v.border_width));
-            const sy = self.wlr_cursor.y - @as(f64, @floatFromInt(v.geometry.y)) - @as(f64, @floatFromInt(v.border_width));
+            const sx = self.wlr_cursor.x - @as(f64, @floatFromInt(v.current.geometry.x)) - @as(f64, @floatFromInt(v.border_width));
+            const sy = self.wlr_cursor.y - @as(f64, @floatFromInt(v.current.geometry.y)) - @as(f64, @floatFromInt(v.border_width));
             var x_out: f64 = 0;
             var y_out: f64 = 0;
 
@@ -126,7 +126,6 @@ pub fn processCursorMotion(
             }
         };
     }
-
 
     // send relative motion
     server.relative_pointer_manager.sendRelativeMotion(
@@ -182,9 +181,9 @@ pub fn processCursorMotion(
 
     const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
     if (surfaceAtResult) |surface| {
-        if (surface.scene_node_data.* == .view) {
+        if (surface.surface_snd.* == .view) {
             server.events.exec("ViewPointerMotion", .{
-                surface.scene_node_data.view.id,
+                surface.surface_snd.view.id,
                 @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                 @as(c_int, @intFromFloat(self.wlr_cursor.y)),
                 self.seat.id(),

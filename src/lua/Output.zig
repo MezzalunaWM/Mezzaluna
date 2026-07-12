@@ -60,17 +60,17 @@ pub fn get_views(L: *zlua.Lua) i32 {
     var index: i32 = 1;
     L.newTable();
 
-    var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
-        output.?.layers.content,
-        output.?.layers.top,
-    }), .forward);
-    while (iter.next()) |node_data| {
-        if (node_data.* != .view) continue;
+    const layers = [_]*wlr.SceneTree{ output.?.layers.content, output.?.layers.top, };
+    for(layers) |layer| {
+        var iter: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
+        while (iter.next()) |node_data| {
+            if (node_data.* != .view) continue;
 
-        L.pushInteger(@intCast(index));
-        L.pushInteger(@intCast(node_data.view.id));
-        L.setTable(-3);
-        index += 1;
+            L.pushInteger(@intCast(index));
+            L.pushInteger(@intCast(node_data.view.id));
+            L.setTable(-3);
+            index += 1;
+        }
     }
 
     return 1;

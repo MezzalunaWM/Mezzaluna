@@ -7,11 +7,11 @@ const server = &@import("main.zig").server;
 const gpa = std.heap.c_allocator;
 
 const Utils = @import("Utils.zig");
-const SceneNodeData = @import("SceneNodeData.zig").SceneNodeData;
+const SceneNode = @import("SceneNode.zig");
 
-pub fn debugPrintSceneTree() void {
+pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
     std.log.debug("=== SCENE TREE DEBUG ===", .{});
-    printNode(&server.root.scene.tree.node, 0);
+    printNode(root, 0);
     std.log.debug("=== END SCENE TREE ===", .{});
 }
 
@@ -36,51 +36,66 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
 
     writer.print("{s} @ ({d}, {d}) enabled={}", .{ type_name, node.x, node.y, node.enabled }) catch unreachable;
 
+    var stop_recurse: bool = false;
+
     // Add associated data if present
-    if (node.data) |data| {
-        const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(data));
-        switch (scene_node_data.*) {
-            .root => {
-                writer.print(" → Root Scene Tree", .{}) catch unreachable;
-            },
-            .output => |output| {
-                writer.print(" → Output: {s} (focused={}, id={})", .{
-                    output.wlr_output.name,
-                    output.focused,
-                    output.id,
-                }) catch unreachable;
-            },
-            .output_layer => {
-                writer.print(" → Output Layer", .{}) catch unreachable;
-            },
-            .view => |view| {
-                writer.print(" → View: id={} mapped={} focused={}", .{
-                    view.id,
-                    view.xdg_toplevel.base.surface.mapped,
-                    view.focused,
-                }) catch unreachable;
-                if (view.xdg_toplevel.title) |title| {
-                    writer.print(" title=\"{s}\"", .{title}) catch unreachable;
-                }
-            },
-            .layer_surface => |layer| {
-                const layer_name = switch (layer.wlr_layer_surface.current.layer) {
-                    .background => "background",
-                    .bottom => "bottom",
-                    .top => "top",
-                    .overlay => "overlay",
-                    else => "unknown",
-                };
-                writer.print(" → LayerSurface: layer={s} mapped={}", .{
-                    layer_name,
-                    layer.wlr_layer_surface.surface.mapped,
-                }) catch unreachable;
-                const namespace = std.mem.span(layer.wlr_layer_surface.namespace);
-                if (namespace.len > 0) {
-                    writer.print(" namespace=\"{s}\"", .{namespace}) catch unreachable;
-                }
-            },
-        }
+    const snd: *SceneNode.Data = .fromSceneNode(node);
+    switch (snd.*) {
+        .root => {
+            writer.print(" → Root Scene Tree", .{}) catch unreachable;
+        },
+        .hidden_tree => {
+            writer.print(" → Hidden tree", .{}) catch unreachable;
+        },
+        .output => |output| {
+            writer.print(" → Output: {s} (focused={}, id={})", .{
+                output.wlr_output.name,
+                output.focused,
+                output.id,
+            }) catch unreachable;
+        },
+        .output_layer => {
+            writer.print(" → Output Layer", .{}) catch unreachable;
+        },
+        .view => |view| {
+            writer.print(" → View: id={} mapped={}", .{
+                view.id,
+                view.xdg_toplevel.base.surface.mapped
+            }) catch unreachable;
+            if (view.xdg_toplevel.title) |title| {
+                writer.print(" title=\"{s}\"", .{title}) catch unreachable;
+            }
+            stop_recurse = true;
+        },
+        .view_border => {
+            writer.print(" → View border" , .{}) catch unreachable;
+        },
+        .view_surface_tree => {
+            writer.print(" → View surface tree", .{}) catch unreachable;
+        },
+        .view_saved_tree => {
+            writer.print(" → View saved tree", .{}) catch unreachable;
+        },
+        .view_surface => {
+            writer.print(" → View surface", .{}) catch unreachable;
+        },
+        .layer_surface => |layer| {
+            const layer_name = switch (layer.wlr_layer_surface.current.layer) {
+                .background => "background",
+                .bottom => "bottom",
+                .top => "top",
+                .overlay => "overlay",
+                else => "unknown",
+            };
+            writer.print(" → LayerSurface: layer={s} mapped={}", .{
+                layer_name,
+                layer.wlr_layer_surface.surface.mapped,
+            }) catch unreachable;
+            const namespace = std.mem.span(layer.wlr_layer_surface.namespace);
+            if (namespace.len > 0) {
+                writer.print(" namespace=\"{s}\"", .{namespace}) catch unreachable;
+            }
+        },
     }
 
     // Add buffer-specific info
@@ -99,6 +114,11 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
 
     // Print the complete line
     std.log.debug("{s}", .{buffer.items});
+
+    if(stop_recurse) {
+        writer.print("Recurse stopped prematurely\n", .{}) catch unreachable;
+        return;
+    }
 
     // Recursively print children if this is a tree
     if (node.type == .tree) {

@@ -12,29 +12,35 @@ const Root = @import("Root.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 
-const SceneNodeData = @import("SceneNode.zig").Data;
+const SceneNode = @import("SceneNode.zig");
 
 const posix = std.posix;
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
-
-const Layers = struct {
-    background: *wlr.SceneTree,
-    bottom: *wlr.SceneTree,
-    content: *wlr.SceneTree,
-    top: *wlr.SceneTree,
-    overlay: *wlr.SceneTree,
-};
 
 id: u64,
 fullscreens: std.ArrayList(*View),
 
 wlr_output: *wlr.Output,
 scene_output: *wlr.SceneOutput,
-scene_node_data: SceneNodeData,
+output_snd: SceneNode.Data,
 non_exclusive_area: wlr.Box,
 
-layers: Layers,
+layers: struct {
+    background: *wlr.SceneTree,
+    bottom: *wlr.SceneTree,
+    content: *wlr.SceneTree,
+    top: *wlr.SceneTree,
+    overlay: *wlr.SceneTree,
+},
+
+layers_snd: struct {
+    background: SceneNode.Data,
+    bottom: SceneNode.Data,
+    content: SceneNode.Data,
+    top: SceneNode.Data,
+    overlay: SceneNode.Data,
+},
 
 frame: wl.Listener(*wlr.Output) = .init(handleFrame),
 request_state: wl.Listener(*wlr.Output.event.RequestState) = .init(handleRequestState),
@@ -57,8 +63,9 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
         .wlr_output = wlr_output,
         .fullscreens = std.ArrayList(*View).initCapacity(gpa, 8) catch Utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
+
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),
-        .scene_node_data = SceneNodeData{ .output = self },
+        .output_snd = .{ .output = self },
 
         .layers = .{
             .background = try self.scene_output.scene.tree.createSceneTree(),
@@ -67,18 +74,34 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
             .top = try self.scene_output.scene.tree.createSceneTree(),
             .overlay = try self.scene_output.scene.tree.createSceneTree(),
         },
+
+        .layers_snd = .{
+            .background = .{ .output_layer = self.layers.background },
+            .bottom = .{ .output_layer = self.layers.bottom },
+            .content = .{ .output_layer = self.layers.content },
+            .top = .{ .output_layer = self.layers.top },
+            .overlay = .{ .output_layer = self.layers.overlay },
+        },
     };
 
     self.wlr_output.data = self;
+    self.scene_output.scene.tree.node.data = &self.output_snd;
 
     wlr_output.events.frame.add(&self.frame);
     wlr_output.events.destroy.add(&self.destroy);
     wlr_output.events.request_state.add(&self.request_state);
 
+    self.layers.background.node.data = &self.layers_snd.background;
+    self.layers.bottom.node.data = &self.layers_snd.bottom;
+    self.layers.content.node.data = &self.layers_snd.content;
+    self.layers.top.node.data = &self.layers_snd.top;
+    self.layers.overlay.node.data = &self.layers_snd.overlay;
+
     var state = wlr.Output.State.init();
     defer state.finish();
 
-    if (wlr_output.preferredMode()) |mode| state.setMode(mode);
+    if (wlr_output.preferredMode()) |mode| 
+        state.setMode(mode);
 
     state.setEnabled(true);
 
@@ -109,7 +132,7 @@ pub fn setFocused(self: *Output) void {
 }
 
 const SurfaceAtResult = struct {
-    scene_node_data: *SceneNodeData,
+    surface_snd: *SceneNode.Data,
     surface: *wlr.Surface,
     sx: f64,
     sy: f64,
@@ -125,42 +148,41 @@ pub fn surfaceAt(self: *Output, lx: f64, ly: f64) ?SurfaceAtResult {
         const node = layer.node.at(lx, ly, &sx, &sy);
         if (node == null) continue;
 
-        const surface: ?*wlr.Surface = blk: {
+        const surface: *wlr.Surface = blk: {
             if (node.?.type == .buffer) {
                 const scene_buffer = wlr.SceneBuffer.fromNode(node.?);
                 if (wlr.SceneSurface.tryFromBuffer(scene_buffer)) |scene_surface| {
                     break :blk scene_surface.surface;
                 }
             }
-            break :blk null;
-        };
-        if (surface == null) continue;
-
-        const scene_node_data: *SceneNodeData = blk: {
-            var n = node.?;
-            while (true) {
-                if (@as(?*SceneNodeData, @ptrCast(@alignCast(n.data)))) |snd| {
-                    break :blk snd;
-                }
-                if (n.parent) |parent_tree| {
-                    n = &parent_tree.node;
-                } else {
-                    continue;
-                }
-            }
+            continue;
         };
 
-        switch (scene_node_data.*) {
-            .layer_surface, .view => {
-                return SurfaceAtResult{
-                    .scene_node_data = scene_node_data,
-                    .surface = surface.?,
-                    .sx = sx,
-                    .sy = sy,
-                };
-            },
-            else => continue,
-        }
+        const snd: *SceneNode.Data = .fromSurface(surface);
+        return SurfaceAtResult{
+            .surface = surface,
+            .surface_snd = snd,
+            .sx = sx,
+            .sy = sy
+        };
+
+        // NOTE: I dont think we need to crawl up, but leaving this here just in case
+        // while(node.? != &self.scene_output.scene.tree) {
+        //     node = if (node.?.parent) |p| &p.node else continue;
+        //
+        //     const snd: *SceneNode.Data = .fromSceneNode(node);
+        //     switch (snd.*) {
+        //         .layer_surface, .view => {
+        //             return .{
+        //                 .scene_node_data = snd,
+        //                 .surface = surface,
+        //                 .sx = sx,
+        //                 .sy = sy,
+        //             };
+        //         },
+        //         else => continue
+        //     }
+        // }
     }
 
     return null;
@@ -233,16 +255,12 @@ pub fn arrangeLayers(self: *Output) void {
 
     inline for (@typeInfo(zwlr.LayerShellV1.Layer).@"enum".fields) |comptime_layer| {
         const layer: *wlr.SceneTree = @field(self.layers, comptime_layer.name);
-        var it = layer.children.iterator(.forward);
+        var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(layer);
 
-        while (it.next()) |node| {
-            if (node.data == null) continue;
-            const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(node.data.?));
+        while (it.next()) |data| {
+            if(data.* != .layer_surface) continue;
 
-            const layer_surface: *LayerSurface = switch (scene_node_data.*) {
-                .layer_surface => @fieldParentPtr("scene_node_data", scene_node_data),
-                else => continue,
-            };
+            const layer_surface: *LayerSurface = data.layer_surface;
 
             // TEST: should we set the layersurface to the correct output?
             if (layer_surface.getOutput().wlr_output != self.wlr_output) continue;

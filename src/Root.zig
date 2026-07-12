@@ -6,7 +6,6 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
 
 const Output = @import("Output.zig");
 const View = @import("View.zig");
@@ -17,7 +16,16 @@ const Utils = @import("Utils.zig");
 
 scene_node_data: SceneNode.Data,
 
+pending_views: u32,
+pending_state_dirty: bool,
+
 scene: *wlr.Scene,
+scene_output_layout: *wlr.SceneOutputLayout,
+
+hidden_tree: *wlr.SceneTree,
+hidden_tree_scene_node_data: SceneNode.Data,
+
+// All visible views should be accessed through these
 output_layout: *wlr.OutputLayout,
 output_manager: *wlr.OutputManagerV1,
 output_power_manager: *wlr.OutputPowerManagerV1,
@@ -41,10 +49,20 @@ pub fn init(self: *Root) void {
     self.* = .{
         .scene = scene,
         .scene_node_data = .{ .root = self },
+        .scene_output_layout = try scene.attachOutputLayout(output_layout),
+
+        .hidden_tree = try scene.tree.createSceneTree(),
+        .hidden_tree_scene_node_data = .{ .hidden_tree = self.hidden_tree },
+
         .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
         .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
+
+        .pending_views = 0,
+        .pending_state_dirty = false,
     };
+
+    self.hidden_tree.node.data = &self.hidden_tree_scene_node_data;
 
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
 
@@ -56,20 +74,15 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var iter = SceneNode.iterator(
-        @constCast(&[_]*wlr.SceneTree{ &self.scene.tree }),
-        .forward
-    );
-    while (iter.next()) |node_data| {
-        switch (node_data.*) {
-            .output => |output| output.deinit(),
-            else => {
-                std.debug.panic("The root has a child that is not an output", .{});
-            },
-        }
+    var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(&self.scene.tree);
+
+    while (it.next()) |scene_node_data| {
+        std.debug.assert(scene_node_data.* == .output);
+        scene_node_data.output.deinit();
     }
 
     self.output_layout.destroy();
+    self.hidden_tree.node.destroy();
     self.scene.tree.node.destroy();
 }
 
@@ -95,21 +108,27 @@ pub fn configureOutputs(self: *const Root) void {
 
 // Search output_layout's outputs, and each outputs views
 pub fn viewById(self: *Root, id: u64) ?*View {
+    // Check all hidden children
+    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+
+        if(data.view.id == id) return data.view;
+    }
+
     var output_it = self.output_layout.outputs.iterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-    while (output_it.next()) |o| {
-        if (o.output.data == null) {
-            std.debug.panic("Wlr_output arbitrary data not assigned", .{});
-        }
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
 
-        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
-        var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
-            output.layers.content,
-            output.layers.top,
-        }), .forward);
-        while (iter.next()) |node_data| {
-            if (node_data.* == .view and node_data.view.id == id) {
-                return node_data.view;
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
+
+                if(data.view.id == id) return data.view;
             }
         }
     }
@@ -118,18 +137,87 @@ pub fn viewById(self: *Root, id: u64) ?*View {
 }
 
 pub fn outputById(self: *Root, id: u64) ?*Output {
-    var it = self.scene.outputs.iterator(.forward);
+    var output_it = self.output_layout.outputs.iterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-    while (it.next()) |scene_output| {
-        if (scene_output.output.data == null) continue;
-
-        const output: *Output = @as(*Output, @ptrCast(@alignCast(scene_output.output.data.?)));
-        if (output.id == id) return output;
+        if(output.id == id) return output;
     }
 
     return null;
 }
 
+pub fn applyPending(self: *Root) void {
+    // Check if state is already sending and come back to new pending later
+    if (self.pending_views > 0) {
+        self.pending_state_dirty = true;
+        return;
+    }
+
+    self.pending_views = 0;
+
+    var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        data.view.applyPending();
+    }
+
+    var output_it = self.output_layout.outputs.safeIterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
+
+                data.view.applyPending();
+            }
+        }
+    }
+
+    // Apply sending if no configures were sent
+    if (self.pending_views == 0) {
+        self.applySending();
+    }
+}
+
+// If a view is moved from one scene tree to a "later" scene tree
+// it will applyPending twice. The second call should do nothing
+pub fn applySending(self: *Root) void {
+    var hidden_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(self.hidden_tree);
+    while(hidden_it.next()) |data| {
+        std.debug.assert(data.* == .view);
+        data.view.applySending();
+    }
+
+    var output_it = self.output_layout.outputs.iterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        const layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(layer);
+
+            while(view_it.next()) |data| {
+                std.debug.assert(data.* == .view);
+                data.view.applySending();
+            }
+        }
+    }
+
+    // Take care of state that was made pending while handling other sending state
+    if (self.pending_state_dirty) {
+        self.pending_state_dirty = false;
+        self.applyPending();
+    }
+}
+
+// --------- OutputManagerV1 event handlers ---------
 fn handleOutputManagerApply(
     _: *wl.Listener(*wlr.OutputConfigurationV1),
     config: *wlr.OutputConfigurationV1

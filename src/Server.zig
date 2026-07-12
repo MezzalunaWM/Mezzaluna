@@ -20,7 +20,7 @@ const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
 const Utils = @import("Utils.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
+const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 
 const gpa = std.heap.c_allocator;
@@ -329,6 +329,7 @@ fn handleNewXdgToplevel(_: *wl.Listener(*wlr.XdgToplevel), xdg_toplevel: *wlr.Xd
 
 fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), decoration: *wlr.XdgToplevelDecorationV1) void {
     const self: *Server = @fieldParentPtr("new_xdg_toplevel_decoration", listener);
+
     if (self.root.viewById(@intFromPtr(decoration.toplevel))) |view| {
         view.xdg_toplevel_decoration = decoration;
     }
@@ -359,9 +360,9 @@ fn handleRequestActivate(
     event: *wlr.XdgActivationV1.event.RequestActivate,
 ) void {
     const self: *Server = @fieldParentPtr("request_activate", listener);
-    if (event.surface.data == null) return;
 
-    const scene_node_data: *SceneNodeData = @ptrCast(@alignCast(event.surface.data.?));
+    if (event.surface.data == null) return;
+    const scene_node_data: *SceneNode.Data = @ptrCast(@alignCast(event.surface.data.?));
 
     if (scene_node_data.* == .view) {
         if (self.getDefaultSeat().focused_output) |output| {
@@ -372,7 +373,7 @@ fn handleRequestActivate(
                 return;
             }
         }
-        self.getDefaultSeat().focusSurface(Seat.FocusData{ .view = scene_node_data.view });
+        self.getDefaultSeat().focusSurface(.{ .view = scene_node_data.view });
     } else {
         std.log.warn("Ignoring request to activate non-view", .{});
     }

@@ -26,42 +26,26 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     L.newTable();
 
     while (output_it.next()) |o| {
-        if (o.output.data == null) {
-            Lua.log.err("Output arbitrary data not assigned", .{});
-            unreachable;
-        }
-
+        std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
         if (!output.wlr_output.enabled) continue;
 
         // Only search the content and fullscreen layers for views
-        var iter = SceneNode.iterator(@constCast(&[_]*wlr.SceneTree{
-            output.layers.content,
-            output.layers.top,
-        }), .forward);
-        while (iter.next()) |node_data| {
-            if (node_data.* != .view) continue;
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top, };
+        for(layers) |layer| {
+            var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
 
-            L.pushInteger(@intCast(index));
-            L.pushInteger(@intCast(node_data.view.id));
-            L.setTable(-3);
-            index += 1;
+            while (view_it.next()) |node_data| {
+                if (node_data.* != .view) continue;
+
+                L.pushInteger(@intCast(index));
+                L.pushInteger(@intCast(node_data.view.id));
+                L.setTable(-3);
+                index += 1;
+            }
         }
     }
 
-    return 1;
-}
-
-/// ---Close the view with view_id
-/// ---@param view_id integer 0 maps to focused view
-pub fn close(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        v.close();
-    }
-
-    L.pushNil();
     return 1;
 }
 
@@ -76,42 +60,43 @@ pub fn close(L: *zlua.Lua) i32 {
 /// ---@param geometry Box Missing dimensions map to current dimensions
 pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if(!L.isTable(2)) return 0;
+    if (!L.isTable(2)) return 0;
 
     const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
+    if (view == null) return 0;
 
     errdefer L.raiseErrorStr("Expected numbers for all fields of geometry", .{});
 
     _ = L.getField(2, "x");
     const x: i32 = if (L.isNil(-1))
-        view.?.geometry.x
+        view.?.current.geometry.x
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.getField(2, "y");
     const y: i32 = if (L.isNil(-1))
-        view.?.geometry.y
+        view.?.current.geometry.y
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.getField(2, "width");
     const width: i32 = if (L.isNil(-1))
-        view.?.geometry.width
+        view.?.current.geometry.width
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     _ = L.getField(2, "height");
     const height: i32 = if (L.isNil(-1))
-        view.?.geometry.height
+        view.?.current.geometry.height
     else
         try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
     L.pop(1);
 
     view.?.setGeometry(x, y, width, height);
+    view.?.setEnabled(true);
 
     return 0;
 }
@@ -121,23 +106,26 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
 /// ---@return Box?
 pub fn get_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
 
-    L.newTable();
+    if (LuaUtils.viewById(view_id)) |v| {
+        L.newTable();
 
-    L.pushInteger(@intCast(view.?.geometry.x));
-    L.setField(-2, "x");
+        L.pushInteger(@intCast(v.current.geometry.x));
+        L.setField(-2, "x");
 
-    L.pushInteger(@intCast(view.?.geometry.y));
-    L.setField(-2, "y");
+        L.pushInteger(@intCast(v.current.geometry.y));
+        L.setField(-2, "y");
 
-    L.pushInteger(@intCast(view.?.geometry.width));
-    L.setField(-2, "width");
+        L.pushInteger(@intCast(v.current.geometry.width));
+        L.setField(-2, "width");
 
-    L.pushInteger(@intCast(view.?.geometry.height));
-    L.setField(-2, "height");
+        L.pushInteger(@intCast(v.current.geometry.height));
+        L.setField(-2, "height");
 
+        return 1;
+    }
+
+    L.pushNil();
     return 1;
 }
 
@@ -146,48 +134,254 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
 /// ---@return Box?
 pub fn get_previous_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const view = LuaUtils.viewById(view_id);
-    if(view == null) return 0;
 
-    L.newTable();
+    if (LuaUtils.viewById(view_id)) |v| {
+        L.newTable();
 
-    L.pushInteger(@intCast(view.?.previous_geometry.x));
-    L.setField(-2, "x");
+        L.pushInteger(@intCast(v.previous_geometry.x));
+        L.setField(-2, "x");
 
-    L.pushInteger(@intCast(view.?.previous_geometry.y));
-    L.setField(-2, "y");
+        L.pushInteger(@intCast(v.previous_geometry.y));
+        L.setField(-2, "y");
 
-    L.pushInteger(@intCast(view.?.previous_geometry.width));
-    L.setField(-2, "width");
+        L.pushInteger(@intCast(v.previous_geometry.width));
+        L.setField(-2, "width");
 
-    L.pushInteger(@intCast(view.?.previous_geometry.height));
-    L.setField(-2, "height");
+        L.pushInteger(@intCast(v.previous_geometry.height));
+        L.setField(-2, "height");
 
+        return 1;
+    }
+
+    L.pushNil();
     return 1;
 }
 
-/// ---Toggle the view to enter fullscreen. Will enter the fullscreen layer
+/// ---Set the view's fullscreen status. Will enter the fullscreen layer
+/// ---if true and will enter content layer if false.
 /// ---and remove any preexisting fullscreened view for it's output.
 /// ---@param view_id integer 0 maps to focused view
-pub fn toggle_fullscreen(L: *zlua.Lua) i32 {
+/// ---@param fullscreen bool status of fullscreen
+pub fn set_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const fullscreen = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        v.toggleFullscreen();
+        v.setFullscreen(fullscreen);
     }
 
     return 0;
 }
 
-/// ---True if view is fullscreened
+/// ---True if view is fullscreened, false otherwise
 /// ---@param view_id integer 0 maps to focused view
-/// ---@return bool
+/// ---@return bool?
 pub fn get_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const view = LuaUtils.viewById(view_id);
 
-    L.pushBoolean(if (view == null) false else view.?.isFullscreen());
+    if (LuaUtils.viewById(view_id)) |v| {
+        _ = L.pushBoolean(v.current.fullscreen);
+        return 1;
+    }
+
+    L.pushNil();
     return 1;
+}
+
+/// ---Enable or disable a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param enabled boolean
+pub fn set_enabled(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const enabled = L.toBoolean(2);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        v.setEnabled(enabled);
+    }
+
+    return 0;
+}
+
+/// ---Check if a view is enabled
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return boolean?
+pub fn get_enabled(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        _ = L.pushBoolean(v.current.enabled);
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Set the view's resizing status.
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param resizing bool status of resizing
+pub fn set_resizing(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const resizing = L.toBoolean(2);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        v.setResizing(resizing);
+    }
+
+    return 0;
+}
+
+/// ---True if view is resizing, false otherwise
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return bool
+pub fn get_resizing(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        _ = L.pushBoolean(v.current.resizing);
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Set the window decoration style for a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param mode "server_side", "client_side" or "none"
+pub fn set_decoration_mode(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    if(!L.isString(2)) { 
+        L.raiseErrorStr("argument 2 must be a string", .{});
+    }
+
+    const mode_str = L.checkString(2);
+    const mode = std.meta.stringToEnum(wlr.XdgToplevelDecorationV1.Mode, mode_str) orelse
+        L.raiseErrorStr("argument two must be one of { \"server_side\", \"client_side\", \"none\" }", .{});
+
+    if(LuaUtils.viewById(view_id)) |v| {
+        v.setDecorationMode(mode);
+    }
+
+    return 0;
+}
+
+/// ---Set the window decoration style for a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return string? current view decoration state or nil if not found
+pub fn get_decoration_mode(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if(LuaUtils.viewById(view_id)) |v| {
+        _ = L.pushString(@tagName(v.current.decoration_mode));
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---@class Edges
+/// ---@field left boolean?
+/// ---@field top boolean?
+/// ---@field right boolean?
+/// ---@field bottom boolean?
+
+/// ---Set the tiling edge status of a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param edges Edges tiling edges to set, where nil fields retain the current edge state
+pub fn set_tiled_edges(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    if(!L.isTable(2)) {
+        const type_name = L.typeName(L.typeOf(2));
+        L.raiseErrorStr("Expected table for argument 2, found {s}", .{ type_name.ptr });
+    }
+
+    const view = LuaUtils.viewById(view_id);
+    if (view == null) return 0;
+
+    errdefer L.raiseErrorStr("Expected boolean for all fields of edges", .{});
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        _ = L.getField(2, "left");
+        const left: bool = if (L.isNil(-1))
+            v.current.tiled_edges.left
+        else
+            L.toBoolean(-2);
+        L.pop(1);
+
+        _ = L.getField(2, "top");
+        const top: bool = if (L.isNil(-1))
+            v.current.tiled_edges.top
+        else
+            L.toBoolean(-2);
+        L.pop(1);
+
+        _ = L.getField(2, "right");
+        const right: bool = if (L.isNil(-1))
+            v.current.tiled_edges.right
+        else
+            L.toBoolean(-2);
+        L.pop(1);
+
+        _ = L.getField(2, "bottom");
+        const bottom: bool = if (L.isNil(-1))
+            v.current.tiled_edges.bottom
+        else
+            L.toBoolean(-2);
+        L.pop(1);
+
+        v.setTiledEdges(.{
+            .left = left,
+            .top = top,
+            .right = right,
+            .bottom = bottom
+        });
+    }
+
+    return 0;
+}
+
+/// ---Set the tiling edge status of a view
+/// ---@param view_id integer 0 maps to focused view
+/// ---@return Edges?
+pub fn get_tiled_edges(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        L.newTable();
+
+        L.pushBoolean(v.current.tiled_edges.left);
+        L.setField(-2, "left");
+
+        L.pushBoolean(v.current.tiled_edges.top);
+        L.setField(-2, "top");
+
+        L.pushBoolean(v.current.tiled_edges.right);
+        L.setField(-2, "right");
+
+        L.pushBoolean(v.current.tiled_edges.bottom);
+        L.setField(-2, "bottom");
+
+        return 1;
+    }
+
+    L.pushNil();
+    return 1;
+}
+
+/// ---Set a view as closing (part of the state cycle)
+/// ---@param view_id integer 0 maps to focused view
+/// ---@param closing boolean
+pub fn set_closing(L: *zlua.Lua) i32 {
+    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
+    const closing = L.toBoolean(2);
+
+    if (LuaUtils.viewById(view_id)) |v| {
+        v.setClosing(closing);
+    }
+
+    return 0;
 }
 
 /// ---Get the title of the view
@@ -197,13 +391,10 @@ pub fn get_title(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        if (v.xdg_toplevel.title == null) {
-            L.pushNil();
+        if (v.xdg_toplevel.title) |title| {
+            _ = L.pushString(std.mem.span(title));
             return 1;
         }
-
-        _ = L.pushString(std.mem.span(v.xdg_toplevel.title.?));
-        return 1;
     }
 
     L.pushNil();
@@ -217,85 +408,22 @@ pub fn get_app_id(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        if (v.xdg_toplevel.app_id == null) {
-            L.pushNil();
+        if(v.xdg_toplevel.app_id) |app_id| {
+            _ = L.pushString(std.mem.span(app_id));
             return 1;
         }
-
-        _ = L.pushString(std.mem.span(v.xdg_toplevel.app_id.?));
-        return 1;
     }
 
     L.pushNil();
     return 1;
 }
 
-/// ---Enable or disable a view
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param enabled boolean
-pub fn set_enabled(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if (!L.isBoolean(2)) {
-        L.raiseErrorStr("argument 2 must be a boolean", .{});
-    }
-    const activate = L.toBoolean(2);
 
-    if (LuaUtils.viewById(view_id)) |v| {
-        v.scene_tree.node.setEnabled(activate);
-        return 0;
-    }
+/// --- Apply all pending state changes
+pub fn apply(_: *zlua.Lua) i32 {
+    server.root.applyPending();
 
-    L.pushNil();
-    return 1;
-}
-
-/// ---Check if a view is enabled
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return boolean?
-pub fn get_enabled(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        _ = L.pushBoolean(v.scene_tree.node.enabled);
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Set a view you intend to resize
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param enable boolean
-pub fn set_resizing(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    if (!L.isBoolean(2)) {
-        L.raiseErrorStr("argument 2 must be a boolean", .{});
-    }
-    const resizing = L.toBoolean(2);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        _ = v.xdg_toplevel.setResizing(resizing);
-        return 0;
-    }
-
-    L.pushNil();
-    return 1;
-}
-
-/// ---Check if a view is resizing
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return boolean? nil if view cannot be found
-pub fn get_resizing(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        _ = L.pushBoolean(v.xdg_toplevel.current.resizing);
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 // ---Set the borders of a view
@@ -411,6 +539,6 @@ pub fn at_xy(L: *zlua.Lua) i32 {
         return 1;
     };
 
-    L.pushInteger(@intCast(surface.scene_node_data.view.id));
+    L.pushInteger(@intCast(surface.surface_snd.view.id));
     return 1;
 }

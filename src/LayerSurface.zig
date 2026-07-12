@@ -6,12 +6,12 @@ const wlr = @import("wlroots");
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
+const SceneNode = @import("SceneNode.zig");
 
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
-scene_node_data: SceneNodeData,
+layer_surface_snd: SceneNode.Data,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
 scene_layer_surface: *wlr.SceneLayerSurfaceV1,
 
@@ -30,13 +30,8 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     self.* = .{
         .wlr_layer_surface = wlr_layer_surface,
         .scene_layer_surface = undefined,
-        .scene_node_data = .{ .layer_surface = self },
+        .layer_surface_snd = .{ .layer_surface = self },
     };
-
-    if (wlr_layer_surface.output.?.data == null) {
-        std.log.err("wlr_output arbitrary data not assigned", .{});
-        unreachable;
-    }
 
     self.scene_layer_surface = blk: {
         inline for (std.meta.fields(@TypeOf(wlr_layer_surface.current.layer))) |field| {
@@ -50,8 +45,8 @@ pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
         });
     };
 
-    self.wlr_layer_surface.surface.data = &self.scene_node_data;
-    self.scene_layer_surface.tree.node.data = &self.scene_node_data;
+    self.wlr_layer_surface.surface.data = &self.layer_surface_snd;
+    self.scene_layer_surface.tree.node.data = &self.layer_surface_snd;
 
     self.wlr_layer_surface.events.destroy.add(&self.destroy);
     self.wlr_layer_surface.surface.events.map.add(&self.map);
