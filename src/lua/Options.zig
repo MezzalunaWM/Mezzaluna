@@ -9,17 +9,22 @@ const DEFAULT_OPTIONS = .{
     .{ .name = "new_view_hidden", .default = false }
 };
 
+const default_options = struct {
+    new_view_output: c_int = 0,
+    new_view_hidden: bool = false
+};
+
 pub fn getDefaultOptions(L: *zlua.Lua) void {
     L.newTable();
 
-    inline for(DEFAULT_OPTIONS) |option| {
-        L.pushAny(option.default) catch {
-            log.err("Improper default value provided for option {s}", .{option.name});
+    inline for(@typeInfo(default_options).@"struct".fields) |op| {
+        L.pushAny(op.defaultValue().?) catch {
+            log.err("Improper default value provided for option {s}", .{op.name});
             continue;
         };
 
-        std.log.debug("Pushing {s} as {}", .{option.name, option.default});
-        L.setField(-2, option.name);
+        std.log.debug("Pushing {s} as {}", .{op.name, op.defaultValue().?});
+        L.setField(-2, op.name);
     }
 }
 
@@ -30,10 +35,8 @@ pub fn getOption(comptime T: zlua.LuaType, option_name: [:0]const u8) ?ReturnTyp
     defer L.pop(1);
 
     _ = L.pushString("opt");
-    switch(L.getTable(-2)) {
-        .table => {
-        },
-        else => unreachable
+    if(L.getTable(-2) != .table) {
+        unreachable;
     }
     defer L.pop(1);
 
