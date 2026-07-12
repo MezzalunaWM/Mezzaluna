@@ -236,7 +236,7 @@ M.remove_view = function(view_id)
     tag.master = table.remove(tag.stack, 1)
 
     if M.config.refocus_on_kill then
-      mez.view.set_focused(tag.master)
+      mez.seat.set_focused(0, tag.master)
     end
   elseif type == "stacking" then
     local is_last = #tag.stack == view_idx
@@ -447,7 +447,7 @@ M.setup = function(config)
   end
 
   mez.hook.add("ViewCommitPost", { callback = function(view_id, initial) if initial then M.add_view(view_id) end end })
-  mez.hook.add("ViewSetClosePre", { callback = function(view_id, close) if close then M.remove_view(view_id) end end })
+  mez.hook.add("ViewSetClosingPre", { callback = function(view_id, closing) if closing then M.remove_view(view_id) end end })
 
   mez.input.add_keymap(M.config.mod_key, "j", { press = function () M.focus_next() end })
   mez.input.add_keymap(M.config.mod_key, "k", { press = function () M.focus_prev() end })

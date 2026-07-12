@@ -49,29 +49,6 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the id for the focused view
-/// ---@param integer? seat seat id, nil for the default seat
-/// ---@return integer? result nil if the seat provided doesn't exist
-pub fn get_focused_id(L: *zlua.Lua) i32 {
-    const seat = if (!L.isNil(1)) blk: {
-        const seat_id = LuaUtils.coerceInteger(u32, L.checkInteger(1)) catch Seat.seat_id_err(L);
-        break :blk LuaUtils.seatFromId(seat_id) orelse {
-            L.pushNil();
-            return 1;
-        };
-    } else server.getDefaultSeat();
-
-    if (seat.focused_surface) |fs| {
-        if (fs == .view) {
-            L.pushInteger(@intCast(fs.view.id));
-            return 1;
-        }
-    }
-
-    L.pushNil();
-    return 1;
-}
-
 /// ---@class Box
 /// ---@field x number?
 /// ---@field y number?
@@ -211,25 +188,6 @@ pub fn get_fullscreen(L: *zlua.Lua) i32 {
     return 1;
 }
 
-
-/// ---Remove focus from current view, and set to given id
-/// ---@param view_id integer? Id of the view to be focused, or nil to remove focus
-pub fn set_focused(L: *zlua.Lua) i32 {
-
-    if(L.isNil(1)) {
-        server.getDefaultSeat().focusSurface(null);
-        return 0;
-    }
-
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if(LuaUtils.viewById(view_id)) |v| {
-        server.getDefaultSeat().focusSurface(.{ .view = v });
-    }
-
-    return 0;
-}
-
 /// ---Enable or disable a view
 /// ---@param view_id integer 0 maps to focused view
 /// ---@param enabled boolean
@@ -298,10 +256,8 @@ pub fn set_decoration_mode(L: *zlua.Lua) i32 {
     }
 
     const mode_str = L.checkString(2);
-    const mode: wlr.XdgToplevelDecorationV1.Mode = if (std.mem.eql(u8, mode_str, "server_side")) .server_side
-        else if (std.mem.eql(u8, mode_str, "client_side")) .client_side
-        else if (std.mem.eql(u8, mode_str, "none")) .none
-        else L.raiseErrorStr("argument two must be one of { \"server_side\", \"client_side\", \"none\" }", .{});
+    const mode = std.meta.stringToEnum(wlr.XdgToplevelDecorationV1.Mode, mode_str) orelse
+        L.raiseErrorStr("argument two must be one of { \"server_side\", \"client_side\", \"none\" }", .{});
 
     if(LuaUtils.viewById(view_id)) |v| {
         v.setDecorationMode(mode);
@@ -317,11 +273,7 @@ pub fn get_decoration_mode(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
     if(LuaUtils.viewById(view_id)) |v| {
-        _ = L.pushString(switch(v.current.decoration_mode) {
-            .client_side => "client_side",
-            .server_side => "server_side",
-            .none => "none"
-        });
+        _ = L.pushString(@tagName(v.current.decoration_mode));
         return 1;
     }
 
@@ -337,7 +289,7 @@ pub fn get_decoration_mode(L: *zlua.Lua) i32 {
 
 /// ---Set the tiling edge status of a view
 /// ---@param view_id integer 0 maps to focused view
-/// ---@param edges Edges tiling edges
+/// ---@param edges Edges tiling edges to set, where nil fields retain the current edge state
 pub fn set_tiled_edges(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if(!L.isTable(2)) {
@@ -421,27 +373,15 @@ pub fn get_tiled_edges(L: *zlua.Lua) i32 {
 /// ---Set a view as closing (part of the state cycle)
 /// ---@param view_id integer 0 maps to focused view
 /// ---@param closing boolean
-pub fn set_close(L: *zlua.Lua) i32 {
+pub fn set_closing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-    const close = L.toBoolean(2);
+    const closing = L.toBoolean(2);
 
     if (LuaUtils.viewById(view_id)) |v| {
-        v.setClose(close);
+        v.setClosing(closing);
     }
 
     return 0;
-}
-
-pub fn get_close(L: *zlua.Lua) i32 {
-    const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
-
-    if (LuaUtils.viewById(view_id)) |v| {
-        _ = L.pushBoolean(v.current.close);
-        return 1;
-    }
-
-    L.pushNil();
-    return 1;
 }
 
 /// ---Get the title of the view

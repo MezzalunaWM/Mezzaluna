@@ -13,7 +13,6 @@ const LayerSurface = @import("LayerSurface.zig");
 const SceneNode = @import("SceneNode.zig");
 
 const Utils = @import("Utils.zig");
-const Debug = @import("Debug.zig");
 
 scene_node_data: SceneNode.Data,
 
@@ -113,8 +112,8 @@ pub fn viewById(self: *Root, id: u64) ?*View {
     var hidden_it: SceneNode.Iterator(.{}) = .fromSceneTree(self.hidden_tree);
     while(hidden_it.next()) |data| {
         std.debug.assert(data.* == .view);
-        if(data.view.id == id)
-            return data.view;
+
+        if(data.view.id == id) return data.view;
     }
 
     var output_it = self.output_layout.outputs.iterator(.forward);
@@ -129,8 +128,7 @@ pub fn viewById(self: *Root, id: u64) ?*View {
             while(view_it.next()) |data| {
                 std.debug.assert(data.* == .view);
 
-                if(data.view.id == id)
-                    return data.view;
+                if(data.view.id == id) return data.view;
             }
         }
     }
@@ -144,8 +142,7 @@ pub fn outputById(self: *Root, id: u64) ?*Output {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data));
 
-        if(output.id == id) 
-            return output;
+        if(output.id == id) return output;
     }
 
     return null;

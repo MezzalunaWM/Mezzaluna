@@ -27,7 +27,7 @@ const State = struct {
 
     decoration_mode: wlr.XdgToplevelDecorationV1.Mode,
     tiled_edges: wlr.Edges,
-    close: bool,
+    closing: bool,
 };
 
 id: u64,
@@ -127,7 +127,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
             .activated = false,
             .enabled = true,
             .resizing = false,
-            .close = false,
+            .closing = false,
 
             .decoration_mode = .server_side,
             .tiled_edges = .{
@@ -156,7 +156,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
 
             .decoration_mode = .server_side,
             .tiled_edges = self.xdg_toplevel.current.tiled,
-            .close = false,
+            .closing = false,
         },
 
         .awaiting_buffer = false,
@@ -284,16 +284,16 @@ pub fn setResizing(self: *View, resizing: bool) void {
     self.pending.?.resizing = resizing;
 }
 
-pub fn setClose(self: *View, close: bool) void {
+pub fn setClosing(self: *View, closing: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
-    if (close and self.current.fullscreen) {
+    if (closing and self.current.fullscreen) {
         self.setFullscreen(false);
     }
 
-    server.events.exec("ViewSetClosePre", .{ self.id, close }, "A view has had it's pending closing status set.");
+    server.events.exec("ViewSetClosingPre", .{ self.id, closing }, "A view has had it's pending closing status set.");
 
-    self.pending.?.close = close;
+    self.pending.?.closing = closing;
 }
 
 pub fn setDecorationMode(self: *View, mode: wlr.XdgToplevelDecorationV1.Mode) void {
@@ -420,10 +420,10 @@ fn dropSavedSurfaceTree(self: *View) void {
 pub fn applySending(self: *View) void {
     if(self.sending == null) return;
 
-    if (self.sending.?.close) {
+    if (self.sending.?.closing) {
         self.scene_tree.node.setEnabled(false);
 
-        server.events.exec("ViewSetClosePost", .{ self.id }, "A view is being closed.");
+        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view is being closed.");
         
         self.xdg_toplevel.sendClose();
 
@@ -624,8 +624,11 @@ fn handleAckConfigure(listener: *wl.Listener(*wlr.XdgSurface.Configure), configu
     if (view.configure_serial == 0 or configure.serial < view.configure_serial) return;
     view.configure_acked = true;
     view.configure_serial = 0;
+
     // Client has acked — wait for the actual buffer commit. Set a shorter
     // timeout so we don't block other views if the client stalls after acking.
+    //  -- BigPickle with love
+
     if (view.awaiting_buffer) {
         view.view_timer.timerUpdate(50) catch {};
     }

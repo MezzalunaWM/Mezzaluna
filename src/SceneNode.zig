@@ -38,25 +38,7 @@ pub const Data = union(enum) {
     }
 
     pub fn getTypeName(self: *const Data) []const u8 {
-        return switch (self.*) {
-            .view => "view",
-            .view_surface_tree => "view_surface_tree",
-            .view_saved_tree => "view_saved_tree",
-            .view_border => "view_border",
-            .view_surface => "view_surface",
-            .view_xdg_surface => "view_xdg_surface",
-
-            .popup_surface => "popup_surface",
-
-            .hidden_tree => "hidden_tree",
-
-            .output => "output",
-            .output_layer => "output_layer",
-
-            .layer_surface => "layer_surface",
-
-            .root => "root"
-        };
+        return @tagName(self.*);
     }
 };
 
