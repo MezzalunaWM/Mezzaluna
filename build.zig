@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
     const pixman = b.dependency("pixman", .{}).module("pixman");
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
-    const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua51 }).module("zlua");
+    const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua54 }).module("zlua");
     const clap = b.dependency("clap", .{ .optimize = optimize, .target = target }).module("clap");
     const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize }).module("xev");
 
@@ -91,7 +91,7 @@ pub fn build(b: *std.Build) void {
     const version = b.runAllowFail(
         &.{ "git", "-C", b.build_root.path orelse ".", "describe", "--tags", "--dirty" },
         &ret,
-        .Inherit,
+        .inherit
     ) catch "dev\n";
 
     const runtime_path_prefix = b.option([]const u8, "prefix", "Where mez looks for the runtime dir")

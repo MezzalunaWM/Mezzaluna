@@ -6,9 +6,9 @@ const wlr = @import("wlroots");
 const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 
-const gpa = std.heap.c_allocator;
-
-const env_map = &@import("../main.zig").env_map;
+const gpa = &@import("../main.zig").gpa;
+const io = &@import("../main.zig").io;
+const environ_map = &@import("../main.zig").environ_map;
 const server = &@import("../main.zig").server;
 
 /// ---Spawn new application via the shell command. If you wish to pass in args
@@ -19,7 +19,7 @@ pub fn spawn(L: *zlua.Lua) i32 {
     const command = switch (t) {
         .string => &[_][]const u8{ L.checkString(1) },
         .table => blk: {
-            const list = gpa.alloc([]const u8, L.objectLen(1)) catch Utils.oomPanic();
+            const list = gpa.alloc([]const u8, L.lenRaw(1)) catch Utils.oomPanic();
 
             var i: u32 = 0;
             L.pushNil();
@@ -38,9 +38,10 @@ pub fn spawn(L: *zlua.Lua) i32 {
         gpa.free(command);
     };
 
-    var child = std.process.Child.init(command, gpa);
-    child.env_map = env_map;
-    child.spawn() catch |err| switch (err) {
+    _ = std.process.spawn(io.*, .{ 
+        .argv = command,
+        .environ_map = environ_map.*
+    }) catch |err| switch (err) {
         error.OutOfMemory => Utils.oomPanic(),
         else => L.raiseErrorStr("Unable to spawn process child process", .{}),
     };

@@ -71,28 +71,28 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     const x: i32 = if (L.isNil(-1))
         view.?.current.geometry.x
     else
-        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
+        @intFromFloat(L.checkNumber(-1));
     L.pop(1);
 
     _ = L.getField(2, "y");
     const y: i32 = if (L.isNil(-1))
         view.?.current.geometry.y
     else
-        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
+        @intFromFloat(L.checkNumber(-1));
     L.pop(1);
 
     _ = L.getField(2, "width");
     const width: i32 = if (L.isNil(-1))
         view.?.current.geometry.width
     else
-        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
+        @intFromFloat(L.checkNumber(-1));
     L.pop(1);
 
     _ = L.getField(2, "height");
     const height: i32 = if (L.isNil(-1))
         view.?.current.geometry.height
     else
-        try LuaUtils.coerceInteger(i32, L.checkInteger(-1));
+        @intFromFloat(L.checkNumber(-1));
     L.pop(1);
 
     view.?.setGeometry(x, y, width, height);

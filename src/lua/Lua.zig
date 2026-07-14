@@ -32,10 +32,7 @@ pub fn init(self: *Lua, cfg: Config) !void {
     }
 
     // load lua files
-    loadRuntimeDir(self.state) catch |err| switch (err) {
-        error.OutOfMemory => Utils.oomPanic(),
-        else => log.err("{}", .{ err })
-    };
+    loadRuntimeDir(self.state) catch Utils.oomPanic();
 
     if (cfg.enabled) loadConfigDir(self.state);
     loadBaseConfig(self.state);
@@ -57,9 +54,9 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
     defer gpa.free(path_dir);
 
     {
-        _ = try self.getGlobal("mez");
+        if(self.getGlobal("mez") == .nil) unreachable;
         defer self.pop(1);
-        _ = self.getField(-1, "path");
+        if(self.getField(-1, "path") == .nil) unreachable;
         defer self.pop(1);
         _ = self.pushString(path_dir);
         self.setField(-2, "runtime");
@@ -75,14 +72,14 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
 }
 
 pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
-    _ = try self.getGlobal("mez");
+    // Maybe we should check for nil here
+    _ = self.getGlobal("mez");
     defer self.pop(1);
     _ = self.getField(-1, "path");
     defer self.pop(1);
     _ = self.pushString(path);
     self.setField(-2, "config");
 }
-
 
 fn loadBaseConfig(self: *zlua.Lua) void {
     const lua_path = "mez.path.base_config";

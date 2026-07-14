@@ -12,7 +12,7 @@ pub fn getNestedField(L: *zlua.Lua, path: []const u8) bool {
     while (tokens.next()) |token| {
         const tok = gpa.dupeZ(u8, token) catch return false;
         if (first) {
-            _ = L.getGlobal(tok) catch return false;
+            if(L.getGlobal(tok) == .nil) return false;
             first = false;
         } else {
             _ = L.getField(-1, tok);

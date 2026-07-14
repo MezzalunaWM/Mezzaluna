@@ -152,8 +152,7 @@ pub fn set_focused_view(L: *zlua.Lua) i32 {
         seat.focusSurface(.{ .view = view });
     }
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Get the focused view of a seat. Returns nil if no seat was found.

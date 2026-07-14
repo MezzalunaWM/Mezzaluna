@@ -54,7 +54,7 @@ pub fn newLib(L: *zlua.Lua, f: []const zlua.FnReg) void {
 /// if we're unable to do so return "nil"
 pub fn toStringEx(L: *zlua.Lua) [:0]const u8 {
     const errstr = "nil";
-    _ = L.getGlobal("tostring") catch return errstr;
+    if(L.getGlobal("tostring") == .nil) return errstr;
     L.insert(1);
     L.protectedCall(.{ .args = 1, .results = 1 }) catch return errstr;
     return L.toString(-1) catch errstr;

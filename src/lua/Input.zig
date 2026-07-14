@@ -45,7 +45,7 @@ pub const KeymapData = struct {
     pub fn callback(self: *const KeymapData, release: bool) void {
         const lua_ref_idx = if (release) self.options.lua_release_ref_idx else self.options.lua_press_ref_idx;
 
-        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        const t = Lua.state.getIndexRaw(zlua.registry_index, lua_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
             Lua.state.pop(1);
@@ -95,7 +95,7 @@ pub const MousemapData = struct {
             .scroll => self.options.lua_scroll_ref_idx
         };
 
-        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        const t = Lua.state.getIndexRaw(zlua.registry_index, lua_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call mousemap, it doesn't have a callback.");
             Lua.state.pop(1);
@@ -105,7 +105,9 @@ pub const MousemapData = struct {
         // allow passing any arguments to the lua hook
         var i: u8 = 0;
         inline for (args, 1..) |field, k| {
-            try Lua.state.pushAny(field);
+            Lua.state.pushAny(field) catch {
+                Lua.state.pushNil();
+            };
             i = k;
         }
 
@@ -149,12 +151,12 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
     _ = L.getField(3, "press");
     if (L.isFunction(-1)) {
-        keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index);
     }
 
     _ = L.getField(3, "release");
     if (L.isFunction(-1)) {
-        keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index);
     }
 
     _ = L.getField(3, "repeat");
@@ -240,24 +242,24 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 
         _ = L.getField(3, "press");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index);
         }
 
         _ = L.getField(3, "release");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index);
         }
 
         _ = L.getField(3, "drag");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index);
         }
     } else if(rel_event_code != 1){
         mousemap.event_code = rel_event_code;
 
         _ = L.getField(3, "scroll");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index);
         }
     }
 

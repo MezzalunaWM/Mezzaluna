@@ -67,7 +67,7 @@ fn asyncCallback(
     };
     const self: *AsyncData = userdata.?;
 
-    const t = Lua.state.rawGetIndex(zlua.registry_index, self.lua_cb_ref_idx);
+    const t = Lua.state.getIndexRaw(zlua.registry_index, self.lua_cb_ref_idx);
     if (t != zlua.LuaType.function) {
         RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");
         Lua.state.pop(1);
@@ -108,7 +108,7 @@ pub fn run(L: *zlua.Lua) i32 {
 
     if (L.isFunction(1)) {
         L.pushValue(1); // move the function to to top of the stack
-        async.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        async.lua_cb_ref_idx = L.ref(zlua.registry_index);
     } else L.raiseErrorStr("argument 1 must be a function", .{});
 
     switch (L.typeOf(2)) {

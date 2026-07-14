@@ -31,7 +31,7 @@ pub fn getDefaultOptions(L: *zlua.Lua) void {
 pub fn getOption(comptime T: zlua.LuaType, option_name: [:0]const u8) ?ReturnTypeFromLuaType(T) {
     const L = &@import("../main.zig").lua.state.*;
 
-    _ = L.getGlobal("mez") catch unreachable;
+    if(L.getGlobal("mez") == .nil) unreachable;
     defer L.pop(1);
 
     _ = L.pushString("opt");

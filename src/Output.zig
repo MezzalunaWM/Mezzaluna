@@ -14,7 +14,6 @@ const LayerSurface = @import("LayerSurface.zig");
 
 const SceneNode = @import("SceneNode.zig");
 
-const posix = std.posix;
 const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
 
@@ -225,9 +224,8 @@ fn handleFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         std.log.warn("setting output state failed for output: {}", .{ self.id });
     }
 
-    var now = posix.clock_gettime(posix.CLOCK.MONOTONIC) catch {
-        std.debug.panic("CLOCK_MONOTONIC not supported", .{});
-    };
+    var now: std.posix.timespec = undefined;
+    _ = std.posix.system.clock_gettime(.MONOTONIC, &now);
     self.scene_output.sendFrameDone(&now);
 }
 

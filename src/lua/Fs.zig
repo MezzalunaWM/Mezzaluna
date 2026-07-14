@@ -7,7 +7,8 @@ const zlua = @import("zlua");
 const Lua = @import("Lua.zig");
 const Utils = @import("../Utils.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("../main.zig").gpa;
+const io = &@import("../main.zig").io;
 
 /// ---Join any number of paths into one path
 /// ---@param ... string Paths to join
@@ -18,8 +19,8 @@ pub fn joinpath(L: *zlua.Lua) i32 {
         L.raiseErrorStr("Expected at least two paths to join", .{});
     }
 
-    var paths = std.ArrayList([:0]const u8).initCapacity(gpa, @intCast(nargs)) catch Utils.oomPanic();
-    defer paths.deinit(gpa);
+    var paths = std.ArrayList([:0]const u8).initCapacity(gpa.*, @intCast(nargs)) catch Utils.oomPanic();
+    defer paths.deinit(gpa.*);
 
     var i: u8 = 1;
     while (i <= nargs) : (i += 1) {
@@ -28,10 +29,10 @@ pub fn joinpath(L: *zlua.Lua) i32 {
         }
 
         const partial_path = L.toString(i) catch unreachable;
-        paths.append(gpa, partial_path) catch Utils.oomPanic();
+        paths.append(gpa.*, partial_path) catch Utils.oomPanic();
     }
 
-    const final_path: []const u8 = std.fs.path.join(gpa, paths.items) catch Utils.oomPanic();
+    const final_path: []const u8 = std.fs.path.join(gpa.*, paths.items) catch Utils.oomPanic();
     defer gpa.free(final_path);
 
     _ = L.pushString(final_path);
@@ -58,15 +59,16 @@ pub fn joinpath(L: *zlua.Lua) i32 {
 pub fn open_directory(L: *zlua.Lua) i32 {
     const path = L.checkString(1);
 
-    const iterator = L.newUserdata(std.fs.Dir.Iterator);
-    { // create a metatable for the userdata and add set the __gc function
-        L.newTable();
-        defer L.setMetatable(-2);
-        L.pushFunction(zlua.wrap(directory__gc));
-        L.setField(-2, "__gc");
-    }
+    // create a metatable for the userdata and add set the __gc function
+    L.newTable();
+    L.pushFunction(zlua.wrap(directory__gc));
+    L.setField(-2, "__gc");
+    L.setMetatable(-2);
 
-    const dir = std.fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+    // PLEASE CHECK THIS, IDK IF THIS IS CORRECT
+    const iterator = L.newUserdata(std.Io.Dir.Iterator, 1);
+
+    const dir = std.Io.Dir.cwd().openDir(io.*, path, .{ .iterate = true }) catch |err| {
         L.raiseErrorStr("Failed to open directory `{s}`: `{s}`", .{ path.ptr, @errorName(err).ptr });
     };
     iterator.* = dir.iterate();
@@ -77,11 +79,11 @@ pub fn open_directory(L: *zlua.Lua) i32 {
 }
 
 fn directory_iterator(L: *zlua.Lua) i32 {
-    var iterator = L.toUserdata(std.fs.Dir.Iterator, zlua.Lua.upvalueIndex(1)) catch |err| {
+    var iterator = L.toUserdata(std.Io.Dir.Iterator, zlua.Lua.upvalueIndex(1)) catch |err| {
         L.raiseErrorStr("Invalid user data: {}", .{ @errorName(err).ptr });
     };
 
-    const entry = iterator.next() catch return 0; // the iterator shouldn't error
+    const entry = iterator.next(io.*) catch return 0; // the iterator shouldn't error
     if (entry) |e| {
         _ = L.pushString(e.name);
         L.pushAny(e.kind) catch Utils.oomPanic();
@@ -93,7 +95,7 @@ fn directory_iterator(L: *zlua.Lua) i32 {
 }
 
 fn directory__gc(L: *zlua.Lua) i32 {
-    const iterator = L.toUserdata(std.fs.Dir.Iterator, 1) catch return 0;
-    iterator.dir.close();
+    const iterator = L.toUserdata(std.Io.Dir.Iterator, 1) catch return 0;
+    iterator.reader.dir.close(io.*);
     return 0;
 }
