@@ -4,7 +4,7 @@ const std = @import("std");
 const wlr = @import("wlroots");
 
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 
 const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");

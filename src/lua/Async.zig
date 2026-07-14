@@ -6,8 +6,7 @@ const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
-const gpa = std.heap.c_allocator;
-
+const gpa = &@import("../main.zig").gpa;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
 

@@ -7,7 +7,7 @@ const std = @import("std");
 const Seat = @import("Seat.zig");
 const Utils = @import("Utils.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 constraint: *wlr.PointerConstraintV1,

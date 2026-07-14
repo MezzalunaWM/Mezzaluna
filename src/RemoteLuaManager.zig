@@ -7,7 +7,7 @@ const RemoteLua = @import("RemoteLua.zig");
 const wl = wayland.server.wl;
 const mez = wayland.server.zmez;
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 global: *wl.Global,

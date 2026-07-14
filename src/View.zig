@@ -11,7 +11,7 @@ const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
 const Debug = @import("Debug.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 const State = struct {
@@ -244,7 +244,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
         self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
         self.pending.?.fullscreen = true;
 
-        fullscreens.append(gpa, self) catch Utils.oomPanic();
+        fullscreens.append(gpa.*, self) catch Utils.oomPanic();
     } else if (!fullscreen and self.current.fullscreen) {
         self.setParent(self.output.?.layers.content);
         self.pending.?.fullscreen = false;

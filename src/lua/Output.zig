@@ -2,6 +2,9 @@
 const std = @import("std");
 const zlua = @import("zlua");
 
+const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
+
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Utils = @import("../Utils.zig");
@@ -9,10 +12,7 @@ const Seat = @import("Seat.zig");
 const SceneNode = @import("../SceneNode.zig");
 
 const server = &@import("../main.zig").server;
-const wlr = @import("wlroots");
-const wl = @import("wayland").server.wl;
-const posix = std.posix;
-const gpa = std.heap.c_allocator;
+const gpa = &@import("../main.zig").gpa;
 
 const Mode = struct {
     width: i32,

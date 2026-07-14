@@ -9,8 +9,8 @@ const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
-const gpa = std.heap.c_allocator;
 const server = &@import("../main.zig").server;
+const gpa = &@import("../main.zig").gpa;
 const Lua = &@import("../main.zig").lua;
 
 pub const Events = struct {

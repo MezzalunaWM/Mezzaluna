@@ -8,7 +8,7 @@ const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 layer_surface_snd: SceneNode.Data,

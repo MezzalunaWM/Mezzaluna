@@ -5,7 +5,7 @@ const wlr = @import("wlroots");
 
 const Utils = @import("Utils.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 idle_notifier: *wlr.IdleNotifierV1,

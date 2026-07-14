@@ -21,7 +21,7 @@ const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 
 pub const FocusData = union(enum) {
     view: *View,
@@ -94,8 +94,8 @@ pub fn init(name: [*:0]const u8) !*Seat {
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
     self.cursor.init(self);
 
-    self.keymaps = .init(gpa);
-    self.mousemaps = .init(gpa);
+    self.keymaps = .init(gpa.*);
+    self.mousemaps = .init(gpa.*);
     self.constraints.init();
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);

@@ -14,7 +14,7 @@ const LayerSurface = @import("LayerSurface.zig");
 
 const SceneNode = @import("SceneNode.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 
 id: u64,
@@ -60,7 +60,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     self.* = .{
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
-        .fullscreens = std.ArrayList(*View).initCapacity(gpa, 8) catch Utils.oomPanic(),
+        .fullscreens = std.ArrayList(*View).initCapacity(gpa.*, 8) catch Utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),

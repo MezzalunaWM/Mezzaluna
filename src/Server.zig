@@ -23,7 +23,7 @@ const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 
 running: bool,
 event_loop: *wl.EventLoop,
@@ -141,9 +141,9 @@ pub fn init(self: *Server) void {
         // lua stuff
         .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
         .remote_lua_clients = .{},
-        .hooks = .init(gpa),
-        .events = try .init(gpa),
-        .async_callbacks = .init(gpa),
+        .hooks = .init(gpa.*),
+        .events = try .init(gpa.*),
+        .async_callbacks = .init(gpa.*),
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {

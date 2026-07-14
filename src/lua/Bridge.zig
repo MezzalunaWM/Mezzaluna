@@ -3,7 +3,7 @@ const Bridge = @This();
 const std = @import("std");
 const zlua = @import("zlua");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("../main.zig").gpa;
 
 pub fn getNestedField(L: *zlua.Lua, path: []const u8) bool {
     var tokens = std.mem.tokenizeScalar(u8, path, '.');

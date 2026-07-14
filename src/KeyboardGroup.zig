@@ -9,8 +9,8 @@ const Keyboard = @import("Keyboard.zig");
 const Utils = @import("Utils.zig");
 const Seat = @import("Seat.zig");
 
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
 
 wlr_group: *wlr.KeyboardGroup,
 repeat_source: ?*wl.EventSource,

@@ -9,7 +9,7 @@ const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
 const Options = @import("Options.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("../main.zig").gpa;
 pub const log = std.log.scoped(.lua);
 
 state: *zlua.Lua,
@@ -20,7 +20,7 @@ pub const Config = struct {
 };
 
 pub fn init(self: *Lua, cfg: Config) !void {
-    self.state = try zlua.Lua.init(gpa);
+    self.state = try zlua.Lua.init(gpa.*);
     errdefer self.state.deinit();
     self.state.openLibs();
 
@@ -45,7 +45,7 @@ pub fn deinit(self: *Lua) void {
 }
 
 pub fn loadRuntimeDir(self: *zlua.Lua) !void {
-    const path_dir = try std.fs.path.joinZ(gpa, &[_][]const u8{
+    const path_dir = try std.fs.path.joinZ(gpa.*, &[_][]const u8{
         config.runtime_path_prefix,
         "mez",
         "runtime",
@@ -62,7 +62,7 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
         self.setField(-2, "runtime");
     }
 
-    const path_full = try std.fs.path.joinZ(gpa, &[_][]const u8{
+    const path_full = try std.fs.path.joinZ(gpa.*, &[_][]const u8{
         path_dir,
         "init.lua",
     });
