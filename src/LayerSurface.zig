@@ -8,6 +8,7 @@ const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.LayerSurface);
 
 const LayerSurface = @This();
 

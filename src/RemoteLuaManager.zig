@@ -8,6 +8,7 @@ const RemoteLua = @import("RemoteLua.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.RemoteLuaManager);
 
 const RemoteLuaManager = @This();
 

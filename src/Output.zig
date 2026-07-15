@@ -14,6 +14,7 @@ const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Output);
 
 const Output = @This();
 
@@ -50,7 +51,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     errdefer Utils.oomPanic();
 
     if (!wlr_output.initRender(server.allocator, server.renderer)) {
-        std.log.err("Unable to start output {s}", .{wlr_output.name});
+        log.err("Unable to start output {s}", .{wlr_output.name});
         return null;
     }
 
@@ -105,7 +106,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     state.setEnabled(true);
 
     if (!wlr_output.commitState(&state)) {
-        std.log.err("Unable to commit state to output {s}", .{ wlr_output.name });
+        log.err("Unable to commit state to output {s}", .{ wlr_output.name });
     }
 
     server.events.exec("OutputInitPost", .{self.id}, "After a new output is initialized. You're probably looking for OutputStateChange.");
@@ -206,7 +207,7 @@ fn handleRequestState(
     const self: *Output = @fieldParentPtr("request_state", listener);
 
     if (!self.wlr_output.commitState(event.state)) {
-        std.log.warn("failed to set output state {}", .{event.state});
+        log.warn("failed to set output state {}", .{event.state});
         // nothing should've changed, so we don't do anything
         return;
     }
@@ -221,7 +222,7 @@ fn handleFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const self: *Output = @fieldParentPtr("frame", listener);
 
     if (!self.scene_output.commit(null)) {
-        std.log.warn("setting output state failed for output: {}", .{ self.id });
+        log.warn("setting output state failed for output: {}", .{ self.id });
     }
 
     var now: std.posix.timespec = undefined;

@@ -11,6 +11,7 @@ const Debug = @import("Debug.zig");
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.View);
 
 const View = @This();
 
@@ -221,7 +222,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
     if (self.output == null) {
-        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
+        log.debug("View {d} has no output to fullscreen on", .{self.id});
         return;
     }
 
@@ -230,7 +231,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     // passed view_id and true `true` if being fullscreened `false` otherwise
     server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen }, "A view has had it's pending fullscreen status set.");
 
-    // std.log.debug("Setting fullscreen to {}", .{fullscreen});
+    // log.debug("Setting fullscreen to {}", .{fullscreen});
 
     const fullscreens = &self.output.?.fullscreens;
     if(fullscreen and !self.current.fullscreen) {
@@ -667,17 +668,17 @@ fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_minimize", listener);
     server.events.exec("ViewRequestMinimize", .{view.id}, "Before the view requests to be minimized.");
-    std.log.debug("request_minimize unimplemented", .{});
+    log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_app_id", listener);
     server.events.exec("ViewAppIdUpdate", .{view.id}, "Before the view requests to update its appid.");
-    std.log.debug("request_set_app_id unimplemented", .{});
+    log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_title", listener);
     server.events.exec("ViewTitleUpdate", .{view.id}, "Before the view requests to update its title.");
-    std.log.debug("request_set_title unimplemented", .{});
+    log.debug("request_set_title unimplemented", .{});
 }

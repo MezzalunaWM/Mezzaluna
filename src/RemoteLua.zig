@@ -12,6 +12,7 @@ const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
 const io = &@import("main.zig").io;
 const lua = &@import("main.zig").lua;
+const log = std.log.scoped(.RemoteLua);
 
 const RemoteLua = @This();
 

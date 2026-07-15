@@ -3,6 +3,7 @@ const wlr = @import("wlroots");
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.Debug);
 
 const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
@@ -10,9 +11,9 @@ const SceneNode = @import("SceneNode.zig");
 const Debug = @This();
 
 pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
-    std.log.debug("=== SCENE TREE DEBUG ===", .{});
+    log.debug("=== SCENE TREE DEBUG ===", .{});
     printNode(root, 0);
-    std.log.debug("=== END SCENE TREE ===", .{});
+    log.debug("=== END SCENE TREE ===", .{});
 }
 
 fn printNode(node: *wlr.SceneNode, depth: usize) void {
@@ -113,7 +114,7 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
     }
 
     // Print the complete line
-    std.log.debug("{s}", .{buffer.items});
+    log.debug("{s}", .{buffer.items});
 
     if(stop_recurse) {
         writer.print("Recurse stopped prematurely\n", .{}) catch unreachable;
@@ -136,7 +137,7 @@ fn printNode(node: *wlr.SceneNode, depth: usize) void {
                 empty_buffer.writer(gpa).writeAll("\t") catch unreachable;
             }
             empty_buffer.writer(gpa).writeAll("     (no children)") catch unreachable;
-            std.log.debug("{s}", .{empty_buffer.items});
+            log.debug("{s}", .{empty_buffer.items});
         }
     }
 }

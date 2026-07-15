@@ -11,6 +11,7 @@ pub var gpa: std.mem.Allocator = undefined;
 pub var io: std.Io = undefined;
 pub var lua: Lua = undefined;
 pub var environ_map: *std.process.Environ.Map = undefined;
+const log = std.log.scoped(.Main);
 
 const usage =
     \\Usage: mez [options]
@@ -68,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
         // this is freed in lua/lua.zig
         const path = std.Io.Dir.cwd().realPathFileAlloc(io, res.args.u.?, gpa) catch |err| switch (err) {
             error.FileNotFound => {
-                std.log.err("Path {s} does not exist, and therefore won't be used for the configuration.", .{ res.args.u.? });
+                log.err("Path {s} does not exist, and therefore won't be used for the configuration.", .{ res.args.u.? });
                 break :blk;
             },
             else => return err,
@@ -79,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
     }
 
     wlr.log.init(.err, null);
-    std.log.info("Starting mezzaluna", .{});
+    log.info("Starting mezzaluna", .{});
 
     server.init();
     defer server.deinit();
@@ -103,14 +104,14 @@ pub fn main(init: std.process.Init) !void {
         _ = std.process.spawn(io, .{
             .argv = &.{ cmd },
             .environ_map = environ_map
-        }) catch { std.log.err("Unable to spawn child processes from cli arguments", .{}); };
+        }) catch { log.err("Unable to spawn child processes from cli arguments", .{}); };
     }
 
-    std.log.info("Starting backend", .{});
+    log.info("Starting backend", .{});
     server.backend.start() catch |err| {
         std.debug.panic("Failed to start backend: {}", .{ err });
     };
 
-    std.log.info("Starting server", .{});
+    log.info("Starting server", .{});
     server.run();
 }

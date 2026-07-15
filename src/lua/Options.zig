@@ -1,6 +1,6 @@
 const std = @import("std");
 const zlua = @import("zlua");
-pub const log = std.log.scoped(.lua);
+pub const log = std.log.scoped(.Lua);
 
 const server = &@import("../main.zig").server;
 
@@ -23,7 +23,6 @@ pub fn getDefaultOptions(L: *zlua.Lua) void {
             continue;
         };
 
-        std.log.debug("Pushing {s} as {}", .{op.name, op.defaultValue().?});
         L.setField(-2, op.name);
     }
 }

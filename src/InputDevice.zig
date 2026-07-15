@@ -3,6 +3,8 @@ const wlr = @import("wlroots");
 
 const Keyboard = @import("Keyboard.zig");
 
+const log = std.log.scoped(.InputDevice);
+
 pub const InputDevice = union(wlr.InputDevice.Type) {
     keyboard: *Keyboard,
     pointer: *wlr.Pointer,
@@ -22,7 +24,7 @@ pub const InputDevice = union(wlr.InputDevice.Type) {
                 // the pointer
                 self.data = null;
             },
-            else => |t| std.log.err("unsupported input method: {}", .{ t }),
+            else => |t| log.err("unsupported input method: {}", .{ t }),
         }
     }
 
@@ -36,7 +38,7 @@ pub const InputDevice = union(wlr.InputDevice.Type) {
             .pointer => {
                 std.debug.assert(self.data == null);
             },
-            else => |t| std.log.err("unsupported input method: {}", .{ t }),
+            else => |t| log.err("unsupported input method: {}", .{ t }),
         }
     }
 
@@ -45,7 +47,7 @@ pub const InputDevice = union(wlr.InputDevice.Type) {
             .keyboard => .{ .keyboard = @alignCast(@ptrCast(self.data)) },
             .pointer => .{ .pointer = self.toPointer(), },
             else => |t| blk: {
-                std.log.err("unsupported input method: {}", .{ t });
+                log.err("unsupported input method: {}", .{ t });
                 break :blk null;
             },
         };

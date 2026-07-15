@@ -7,6 +7,7 @@ const Output = @import("Output.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Popup);
 
 const Popup = @This();
 

@@ -37,7 +37,7 @@ pub fn init(self: *Lua, cfg: Config) !void {
     if (cfg.enabled) loadConfigDir(self.state);
     loadBaseConfig(self.state);
 
-    log.debug("Loaded lua", .{});
+    log.info("Loaded lua", .{});
 }
 
 pub fn deinit(self: *Lua) void {

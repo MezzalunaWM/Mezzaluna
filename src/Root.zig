@@ -11,6 +11,7 @@ const SceneNode = @import("SceneNode.zig");
 const Utils = @import("Utils.zig");
 
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Root);
 
 const Root = @This();
 
@@ -36,7 +37,7 @@ output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutpu
 output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleOutputPowerManagerSet),
 
 pub fn init(self: *Root) void {
-    std.log.info("Creating root of mezzaluna\n", .{});
+    log.info("Creating root of mezzaluna\n", .{});
 
     errdefer Utils.oomPanic();
 

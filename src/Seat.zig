@@ -20,6 +20,7 @@ const SceneNodeData = @import("SceneNode.zig").Data;
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.Seat);
 
 const Seat = @This();
 
@@ -62,13 +63,13 @@ pub fn init(name: [*:0]const u8) !*Seat {
     errdefer gpa.destroy(self);
 
     const xkb_context = xkb.Context.new(.no_flags) orelse {
-        std.log.err("Unable to create a xkb context, exiting", .{});
+        log.err("Unable to create a xkb context, exiting", .{});
         return error.xkbContext;
     };
     defer xkb_context.unref();
 
     const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
-        std.log.err("Unable to create a xkb keymap, exiting", .{});
+        log.err("Unable to create a xkb keymap, exiting", .{});
         return error.xkbKeymap;
     };
     defer xkb_keymap.unref();
@@ -194,7 +195,7 @@ pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
             self.cursor.wlr_cursor.attachInputDevice(device);
             device.data = &self.cursor;
         },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+        else => |t| log.err("unsupported input method: {}", .{ t }),
     }
 
     self.wlr_seat.setCapabilities(.{
@@ -213,7 +214,7 @@ pub fn removeInputDevice(self: *Seat, device: *wlr.InputDevice) void {
             self.cursor.wlr_cursor.detachInputDevice(device);
             device.data = null;
         },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+        else => |t| log.err("unsupported input method: {}", .{ t }),
     }
 }
 

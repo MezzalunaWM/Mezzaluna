@@ -7,6 +7,7 @@ const Utils = @import("Utils.zig");
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.PointerConstraint);
 
 const PointerConstraint = @This();
 

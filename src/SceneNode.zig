@@ -8,6 +8,8 @@ const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const Root = @import("Root.zig");
 
+const log = std.log.scoped(.SceneNode);
+
 pub const Data = union(enum) { 
     view: *View,
     view_surface_tree: *View,

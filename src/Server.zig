@@ -22,6 +22,7 @@ const PointerConstraint = @import("PointerConstraint.zig");
 const InputDevice = @import("InputDevice.zig").InputDevice;
 
 const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.Server);
 
 const Server = @This();
 
@@ -85,7 +86,7 @@ pub fn init(self: *Server) void {
     errdefer Utils.oomPanic();
 
     const wl_server = wl.Server.create() catch {
-        std.log.err("Server create failed, exiting with 2", .{});
+        log.err("Server create failed, exiting with 2", .{});
         std.process.exit(2);
     };
 
@@ -93,12 +94,12 @@ pub fn init(self: *Server) void {
 
     var session: ?*wlr.Session = undefined;
     const backend = wlr.Backend.autocreate(event_loop, &session) catch {
-        std.log.err("Backend create failed, exiting with 3", .{});
+        log.err("Backend create failed, exiting with 3", .{});
         std.process.exit(3);
     };
 
     const renderer = wlr.Renderer.autocreate(backend) catch {
-        std.log.err("Renderer create failed, exiting with 4", .{});
+        log.err("Renderer create failed, exiting with 4", .{});
         std.process.exit(4);
     };
 
@@ -116,7 +117,7 @@ pub fn init(self: *Server) void {
         .backend = backend,
         .renderer = renderer,
         .allocator = wlr.Allocator.autocreate(backend, renderer) catch {
-            std.log.err("Allocator create failed, exiting with 5", .{});
+            log.err("Allocator create failed, exiting with 5", .{});
             std.process.exit(5);
         },
         .root = undefined,
@@ -161,7 +162,7 @@ pub fn init(self: *Server) void {
     }
 
     self.renderer.initServer(wl_server) catch {
-        std.log.err("Renderer init failed, exiting with 6", .{});
+        log.err("Renderer init failed, exiting with 6", .{});
         std.process.exit(6);
     };
 
@@ -238,7 +239,7 @@ pub fn run(self: *Server) void {
     }.callback);
 
     self.xev_event_loop.run(.until_done) catch |err| {
-        std.log.err("Failed to run wayland event loop: {}", .{ err });
+        log.err("Failed to run wayland event loop: {}", .{ err });
     };
 }
 
@@ -271,7 +272,7 @@ pub fn deinit(self: *Server) noreturn {
 
     self.async_callbacks.deinit();
 
-    std.log.debug("Exiting mez succesfully", .{});
+    log.info("Exiting mez succesfully", .{});
     std.process.exit(0);
 }
 
@@ -300,13 +301,13 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
 fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const self: *Server = @fieldParentPtr("new_output", listener);
     const output = Output.init(wlr_output) orelse {
-        std.log.err("Failed to create new output", .{});
+        log.err("Failed to create new output", .{});
         return;
     };
 
     // TODO: Allow user to define output positions
     const layout_output = self.root.output_layout.addAuto(output.wlr_output) catch {
-        std.log.err("failed to add output to the output layout", .{});
+        log.err("failed to add output to the output layout", .{});
         return;
     };
 
@@ -336,15 +337,15 @@ fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorat
 }
 
 fn handleNewXdgPopup(_: *wl.Listener(*wlr.XdgPopup), _: *wlr.XdgPopup) void {
-    std.log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
+    log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
 }
 
 fn handleNewLayerSurface(listener: *wl.Listener(*wlr.LayerSurfaceV1), layer_surface: *wlr.LayerSurfaceV1) void {
     const self: *Server = @fieldParentPtr("new_layer_surface", listener);
-    std.log.debug("requested layer shell\n", .{});
+    log.debug("requested layer shell\n", .{});
     if (layer_surface.output == null) {
         if (self.getDefaultSeat().focused_output == null) {
-            std.log.err("No output available for new layer surface", .{});
+            log.err("No output available for new layer surface", .{});
             layer_surface.destroy();
             return;
         }
@@ -375,7 +376,7 @@ fn handleRequestActivate(
         }
         self.getDefaultSeat().focusSurface(.{ .view = scene_node_data.view });
     } else {
-        std.log.warn("Ignoring request to activate non-view", .{});
+        log.warn("Ignoring request to activate non-view", .{});
     }
 }
 
@@ -408,7 +409,7 @@ fn handleDrmRequest(
 ) void {
     const lease = request.grant();
     if (lease == null) {
-        std.log.err("Failed to grant drm lease request.", .{});
+        log.err("Failed to grant drm lease request.", .{});
         request.reject();
     }
 }

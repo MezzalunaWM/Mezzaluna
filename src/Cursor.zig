@@ -13,6 +13,7 @@ const Mousemap = @import("lua/Input.zig").MousemapData;
 const c = @import("C.zig").c;
 
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Cursor);
 
 pub const Cursor = @This();
 
@@ -288,7 +289,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
             self.drag.?.view = null;
         },
         else => {
-            std.log.err("Invalid/Unimplemented pointer button event type", .{});
+            log.err("Invalid/Unimplemented pointer button event type", .{});
         },
     }
 
