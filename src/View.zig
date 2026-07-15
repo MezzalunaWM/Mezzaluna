@@ -1,18 +1,18 @@
-const View = @This();
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
-
 const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
 const Debug = @import("Debug.zig");
 
-const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const gpa = &@import("main.zig").gpa;
+
+const View = @This();
 
 const State = struct {
     // The total geometry including borders

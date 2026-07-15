@@ -1,13 +1,13 @@
-const IdleInhibitor = @This();
-
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const Utils = @import("Utils.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const IdleInhibitor = @This();
 
 inhibitor: *wlr.IdleInhibitorV1,
 

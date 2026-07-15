@@ -1,5 +1,3 @@
-const Output = @This();
-
 const wl = @import("wayland").server.wl;
 const zwlr = @import("wayland").server.zwlr;
 const wlr = @import("wlroots");
@@ -16,6 +14,8 @@ const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const Output = @This();
 
 id: u64,
 fullscreens: std.ArrayList(*View),

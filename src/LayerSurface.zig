@@ -1,8 +1,6 @@
-const LayerSurface = @This();
-
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
@@ -10,6 +8,8 @@ const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const LayerSurface = @This();
 
 layer_surface_snd: SceneNode.Data,
 wlr_layer_surface: *wlr.LayerSurfaceV1,

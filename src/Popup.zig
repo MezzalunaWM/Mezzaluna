@@ -1,14 +1,14 @@
-const Popup = @This();
-
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
 const Utils = @import("Utils.zig");
 const Output = @import("Output.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const Popup = @This();
 
 id: u64,
 

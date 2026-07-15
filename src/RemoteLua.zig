@@ -1,19 +1,19 @@
-const RemoteLua = @This();
-
 const std = @import("std");
+const wl = wayland.server.wl;
 const zlua = @import("zlua");
+
 const wayland = @import("wayland");
 const Utils = @import("Utils.zig");
 const LuaUtils = @import("lua/LuaUtils.zig");
 const Lua = @import("lua/Lua.zig");
-const wl = wayland.server.wl;
 const mez = wayland.server.zmez;
 
+const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
 const io = &@import("main.zig").io;
-const server = &@import("main.zig").server;
-
 const lua = &@import("main.zig").lua;
+
+const RemoteLua = @This();
 
 node: std.DoublyLinkedList.Node,
 remote_lua_v1: *mez.RemoteLuaV1,

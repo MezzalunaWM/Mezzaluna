@@ -1,8 +1,6 @@
-const KeyboardGroup = @This();
-
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 const xkb = @import("xkbcommon");
 
 const Keyboard = @import("Keyboard.zig");
@@ -11,6 +9,8 @@ const Seat = @import("Seat.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const KeyboardGroup = @This();
 
 wlr_group: *wlr.KeyboardGroup,
 repeat_source: ?*wl.EventSource,

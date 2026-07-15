@@ -1,8 +1,6 @@
-const Server = @This();
-
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 const xev = @import("xev");
 
 const Root = @import("Root.zig");
@@ -15,15 +13,17 @@ const IdleInhibitor = @import("IdleInhibitor.zig");
 const IdleNotifier = @import("IdleNotifer.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
-const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
 const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
+const InputDevice = @import("InputDevice.zig").InputDevice;
 
 const gpa = &@import("main.zig").gpa;
+
+const Server = @This();
 
 running: bool,
 event_loop: *wl.EventLoop,
@@ -280,10 +280,10 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
     const self: *Server = @fieldParentPtr("new_input", listener);
 
     // create the device
-    input_device.init(device);
+    InputDevice.init(device);
 
     self.events.exec("DeviceAddPre", .{ device }, "Called before a new device is added to the compositor.");
-    const dev = input_device.get(device) orelse return;
+    const dev = InputDevice.get(device) orelse return;
 
     // has the user already given the device to a seat?
     const seated = switch (dev) {

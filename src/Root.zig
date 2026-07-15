@@ -1,18 +1,18 @@
-/// The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs:
-const Root = @This();
+//! The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
-const server = &@import("main.zig").server;
-
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const SceneNode = @import("SceneNode.zig");
-
 const Utils = @import("Utils.zig");
+
+const server = &@import("main.zig").server;
+
+const Root = @This();
 
 scene_node_data: SceneNode.Data,
 

@@ -1,8 +1,6 @@
 //! Maintains state related to cursor position, rendering, and
 //! events such as button presses and dragging
 
-pub const Cursor = @This();
-
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
@@ -15,6 +13,8 @@ const Mousemap = @import("lua/Input.zig").MousemapData;
 const c = @import("C.zig").c;
 
 const server = &@import("main.zig").server;
+
+pub const Cursor = @This();
 
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,

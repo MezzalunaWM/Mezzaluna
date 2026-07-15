@@ -1,9 +1,7 @@
-const Seat = @This();
-
 const std = @import("std");
 const wlr = @import("wlroots");
-const wayland = @import("wayland");
 const wl = wayland.server.wl;
+const wayland = @import("wayland");
 const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
 
@@ -11,17 +9,20 @@ const KeyboardGroup = @import("KeyboardGroup.zig");
 const Keyboard = @import("Keyboard.zig");
 const Cursor = @import("Cursor.zig");
 const Utils = @import("Utils.zig");
-const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
 const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
+const InputDevice = @import("InputDevice.zig").InputDevice;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
+
+const Seat = @This();
+
 
 pub const FocusData = union(enum) {
     view: *View,
@@ -186,7 +187,7 @@ pub fn focusOutput(self: *Seat, output: *Output) void {
 pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = (input_device.get(device) orelse return).keyboard;
+            const keyboard = (InputDevice.get(device) orelse return).keyboard;
             self.keyboard_group.addKeyboard(keyboard);
         },
         .pointer => {
@@ -205,7 +206,7 @@ pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
 pub fn removeInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = (input_device.get(device) orelse return).keyboard;
+            const keyboard = (InputDevice.get(device) orelse return).keyboard;
             self.keyboard_group.removeKeyboard(keyboard);
         },
         .pointer => {

@@ -1,15 +1,14 @@
 const std = @import("std");
+const wlr = @import("wlroots");
 const config = @import("config");
 const clap = @import("clap");
-const wlr = @import("wlroots");
 
 const Server = @import("Server.zig");
 const Lua = @import("lua/Lua.zig");
 
+pub var server: Server = undefined;
 pub var gpa: std.mem.Allocator = undefined;
 pub var io: std.Io = undefined;
-
-pub var server: Server = undefined;
 pub var lua: Lua = undefined;
 pub var environ_map: *std.process.Environ.Map = undefined;
 

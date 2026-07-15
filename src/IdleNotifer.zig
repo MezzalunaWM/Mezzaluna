@@ -1,5 +1,3 @@
-const IdleNotifer = @This();
-
 const std = @import("std");
 const wlr = @import("wlroots");
 
@@ -7,6 +5,8 @@ const Utils = @import("Utils.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+
+const IdleNotifer = @This();
 
 idle_notifier: *wlr.IdleNotifierV1,
 

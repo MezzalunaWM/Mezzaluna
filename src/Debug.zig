@@ -1,5 +1,3 @@
-const Debug = @This();
-
 const std = @import("std");
 const wlr = @import("wlroots");
 
@@ -8,6 +6,8 @@ const gpa = &@import("main.zig").gpa;
 
 const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
+
+const Debug = @This();
 
 pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
     std.log.debug("=== SCENE TREE DEBUG ===", .{});

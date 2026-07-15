@@ -1,5 +1,3 @@
-const PointerConstraint = @This();
-
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 const std = @import("std");
@@ -7,8 +5,10 @@ const std = @import("std");
 const Seat = @import("Seat.zig");
 const Utils = @import("Utils.zig");
 
-const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const gpa = &@import("main.zig").gpa;
+
+const PointerConstraint = @This();
 
 constraint: *wlr.PointerConstraintV1,
 seat: *Seat,

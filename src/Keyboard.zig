@@ -1,22 +1,22 @@
 //! Maintains state related to keyboard input devices,
 //! events such as button presses and dragging
 
-const Keyboard = @This();
-
 const std = @import("std");
+const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
+
 const Keymap = @import("lua/Input.zig").KeymapData;
 const Utils = @import("Utils.zig");
 const KeyboardGroup = @import("KeyboardGroup.zig");
 const Seat = @import("Seat.zig");
 
-const wl = @import("wayland").server.wl;
-const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
-
 const c = @import("C.zig").c;
+
+const Keyboard = @This();
 
 wlr_keyboard: *wlr.Keyboard,
 context: *xkb.Context,
