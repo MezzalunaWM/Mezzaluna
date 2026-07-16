@@ -75,11 +75,16 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(&self.scene.tree);
+    self.output_manager_apply.link.remove();
+    self.output_manager_test.link.remove();
+    self.output_power_manager_set.link.remove();
 
-    while (it.next()) |scene_node_data| {
-        std.debug.assert(scene_node_data.* == .output);
-        scene_node_data.output.deinit();
+    var output_it = self.output_layout.outputs.safeIterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        output.deinit();
     }
 
     self.output_layout.destroy();

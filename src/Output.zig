@@ -115,7 +115,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
 }
 
 pub fn deinit(self: *Output) void {
-    server.events.exec("OutputDeinitPre", .{self.id}, "Before an output is de-initialized.");
+    server.events.exec("OutputDeinitPre", .{ self.id }, "Before an output is de-initialized.");
 
     self.frame.link.remove();
     self.request_state.link.remove();

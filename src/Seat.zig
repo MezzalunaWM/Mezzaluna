@@ -119,7 +119,10 @@ pub fn deinit(self: *Seat) void {
     self.mousemaps.deinit();
 
     self.keyboard_group.deinit();
+    self.cursor.deinit();
     self.wlr_seat.destroy();
+
+    gpa.destroy(self);
 }
 
 pub fn id(self: *Seat) u32 {

@@ -150,6 +150,7 @@ pub fn init(self: *Server) void {
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
         self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
     }
+
     if (renderer.features.timeline and backend.features.timeline) {
         const drm_fd = renderer.getDrmFd();
         if (drm_fd >= 0) {
@@ -157,8 +158,8 @@ pub fn init(self: *Server) void {
         }
     }
 
-    if (self.drm_lease_manager != null) {
-        self.drm_lease_manager.?.events.request.add(&self.drm_lease_request);
+    if (self.drm_lease_manager) |drmlm| {
+        drmlm.events.request.add(&self.drm_lease_request);
     }
 
     self.renderer.initServer(wl_server) catch {
@@ -260,16 +261,26 @@ pub fn deinit(self: *Server) noreturn {
     self.new_xdg_popup.link.remove();
     self.new_xdg_toplevel_decoration.link.remove();
     self.new_layer_surface.link.remove();
-
-    self.root.deinit();
+    self.new_idle_inhibitor.link.remove();
+    self.request_activate.link.remove();
+    self.new_virtual_pointer.link.remove();
+    self.new_virtual_keyboard.link.remove();
+    self.new_pointer_constraint.link.remove();
+    if (self.drm_lease_manager) |drmlm| {
+        drmlm.events.request.add(&self.drm_lease_request);
+    }
 
     self.backend.destroy();
-
     self.wl_server.destroyClients();
+    self.root.deinit();
+
+    var iter_seat = self.seats.safeIterator(.forward);
+    while (iter_seat.next()) |seat| {
+        seat.deinit();
+    }
+
     self.wl_server.destroy();
-
     self.xev_event_loop.deinit();
-
     self.async_callbacks.deinit();
 
     log.info("Exiting mez succesfully", .{});

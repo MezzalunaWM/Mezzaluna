@@ -79,6 +79,7 @@ pub fn deinit(self: *Cursor) void {
     self.frame.link.remove();
     self.hold_begin.link.remove();
     self.hold_end.link.remove();
+    self.request_set_cursor_shape.link.remove();
 
     self.wlr_cursor.destroy();
     self.x_cursor_manager.destroy();
