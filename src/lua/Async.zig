@@ -9,6 +9,7 @@ const RemoteLua = @import("../RemoteLua.zig");
 const gpa = &@import("../main.zig").gpa;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.Async);
 
 pub const AsyncData = struct {
     lua_cb_ref_idx: i32,

@@ -10,6 +10,7 @@ const gpa = &@import("../main.zig").gpa;
 const io = &@import("../main.zig").io;
 const environ_map = &@import("../main.zig").environ_map;
 const server = &@import("../main.zig").server;
+const log = std.log.scoped(.Api);
 
 /// ---Spawn new application via the shell command. If you wish to pass in args
 /// ---to your command then you must use a table of strings.

@@ -7,6 +7,7 @@ const zlua = @import("zlua");
 
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
+pub const log = std.log.scoped(.Remote);
 
 /// ---Print a string to whetstone
 /// ---@param string string String to print

@@ -15,6 +15,7 @@ const Seat = @import("Seat.zig");
 const c = @import("../C.zig").c;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.Input);
 
 fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     var it = std.mem.splitScalar(u8, modStr, '|');

@@ -12,6 +12,7 @@ const RemoteLua = @import("../RemoteLua.zig");
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.Hook);
 
 pub const Events = struct {
     const Node = struct {
@@ -179,9 +180,7 @@ pub fn add(L: *zlua.Lua) i32 {
     }
 
     _ = L.getField(2, "once");
-    if (L.isBoolean(-1)) {
-        hook.options.once = L.toBoolean(-1);
-    }
+    hook.options.once = if(L.isBoolean(-1)) L.toBoolean(-1) else false;
 
     // TEST: this should be safe as the lua_cb_ref_idx's should never be the same
     // but that all really depends on the implementation of the hashmap

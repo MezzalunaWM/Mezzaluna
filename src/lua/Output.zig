@@ -13,6 +13,7 @@ const SceneNode = @import("../SceneNode.zig");
 
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
+pub const log = std.log.scoped(.Output);
 
 const Mode = struct {
     width: i32,

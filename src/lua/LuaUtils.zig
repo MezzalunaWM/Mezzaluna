@@ -13,6 +13,7 @@ const RemoteLua = @import("../RemoteLua.zig");
 
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
+pub const log = std.log.scoped(.LuaUtils);
 
 pub fn coerceNumber(comptime x: type, number: zlua.Number) error{InvalidNumber}!x {
     const size = switch (@typeInfo(x)) {

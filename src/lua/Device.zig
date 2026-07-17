@@ -2,6 +2,7 @@
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
+const log = std.log.scoped(.Device);
 
 fn device_error(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("Unable to get device.", .{});

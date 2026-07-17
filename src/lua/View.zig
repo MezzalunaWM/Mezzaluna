@@ -12,6 +12,7 @@ const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
+pub const log = std.log.scoped(.View);
 
 fn view_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The view id must be >= 0 and < inf", .{});

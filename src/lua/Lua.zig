@@ -10,7 +10,7 @@ const Bridge = @import("Bridge.zig");
 const Options = @import("Options.zig");
 
 const gpa = &@import("../main.zig").gpa;
-pub const log = std.log.scoped(.lua);
+pub const log = std.log.scoped(.Lua);
 
 state: *zlua.Lua,
 

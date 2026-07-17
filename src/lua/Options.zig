@@ -1,8 +1,8 @@
 const std = @import("std");
 const zlua = @import("zlua");
-pub const log = std.log.scoped(.Lua);
 
 const server = &@import("../main.zig").server;
+pub const log = std.log.scoped(.Options);
 
 const DEFAULT_OPTIONS = .{
     .{ .name = "new_view_output", .default = 0 },
