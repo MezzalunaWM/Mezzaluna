@@ -9,7 +9,7 @@ Mezzaluna is a Wayland compositor written in Zig, shouldering the complexities o
 As of now, we don't package or distribute ready made binaries whatsoever.
 
 But **don't let that stop you from playing around**. You can really easily build `mez` for yourself, ensuring you have the following dependencies:
-* Zig 0.15.x
+* Zig 0.16.x
 * wlroots-0.20
 * pixman
 * xkbcommon
