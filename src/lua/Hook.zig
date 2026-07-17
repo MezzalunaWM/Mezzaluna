@@ -130,7 +130,7 @@ pub const HookData = struct {
         var i: u8 = 0;
         inline for (args, 1..) |field, k| {
             Lua.state.pushAny(field) catch {
-                std.log.err("Unabled to push field to callback", .{});
+                std.log.err("Unable to push field to callback", .{});
                 Lua.state.pushNil();
             };
             i = k;

@@ -10,7 +10,7 @@ const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const IdleInhibitor = @import("IdleInhibitor.zig");
-const IdleNotifier = @import("IdleNotifer.zig");
+const IdleNotifier = @import("IdleNotifier.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
@@ -283,7 +283,7 @@ pub fn deinit(self: *Server) noreturn {
     self.xev_event_loop.deinit();
     self.async_callbacks.deinit();
 
-    log.info("Exiting mez succesfully", .{});
+    log.info("Exiting mez successfully", .{});
     std.process.exit(0);
 }
 

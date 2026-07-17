@@ -50,7 +50,7 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
         "mez",
         "runtime",
     });
-    std.debug.print("path_dir: {s}\n", .{path_dir});
+    log.info("path_dir: {s}\n", .{path_dir});
     defer gpa.free(path_dir);
 
     {

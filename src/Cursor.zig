@@ -97,7 +97,7 @@ pub fn processCursorMotion(
     var dx = delta_x;
     var dy = delta_y;
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
@@ -339,7 +339,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
         _ = self.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 }
@@ -391,7 +391,7 @@ fn handleAxis(
         }
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 

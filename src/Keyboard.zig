@@ -20,7 +20,7 @@ const log = std.log.scoped(.Keyboard);
 const Keyboard = @This();
 
 wlr_keyboard: *wlr.Keyboard,
-context: *xkb.Context,
+context: ?*xkb.Context,
 // there's wlr.KeyboardGroup.fromKeyboard, but it doesn't seem to work
 group: ?*KeyboardGroup,
 
@@ -35,15 +35,8 @@ destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 pub fn init(device: *wlr.InputDevice) *Keyboard {
     const self = gpa.create(Keyboard) catch Utils.oomPanic();
 
-    // TODO: there is no world where pluggin in a keyboard should crash the
-    // compositor >:(
-    errdefer {
-        log.err("Unable to initialize new keyboard, exiting", .{});
-        std.process.exit(6);
-    }
-
     self.* = .{
-        .context = xkb.Context.new(.no_flags) orelse return error.ContextFailed,
+        .context = xkb.Context.new(.no_flags),
         .wlr_keyboard = device.toKeyboard(),
         .group = null,
     };
@@ -136,7 +129,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(seat.wlr_seat);
 }

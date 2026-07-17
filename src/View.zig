@@ -199,8 +199,8 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
 
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    // const eventual = self.pending orelse self.sending orelse self.current;
-    // if (eventual.fullscreen) return;
+    // You shouldn't be able to resize fullscreen views
+    if(self.current.fullscreen) return;
 
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
@@ -540,7 +540,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
 
-    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
+    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visible to the user.");
 
     var iter = server.seats.iterator(.forward);
     while (iter.next()) |seat| {
@@ -570,7 +570,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     view.set_app_id.link.remove();
 
 
-    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visibile to the user.");
+    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visible to the user.");
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {

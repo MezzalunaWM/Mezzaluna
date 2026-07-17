@@ -9,7 +9,7 @@ const Utils = @import("../Utils.zig");
 
 const gpa = &@import("../main.zig").gpa;
 const io = &@import("../main.zig").io;
-const log = std.log.scoped(.Device);
+const log = std.log.scoped(.Fs);
 
 /// ---Join any number of paths into one path
 /// ---@param ... string Paths to join
