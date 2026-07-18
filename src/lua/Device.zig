@@ -1,14 +1,12 @@
-//! mez.device
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
-const log = std.log.scoped(.Device);
+const log = std.log.scoped(.@"Lua.Device");
 
 fn device_error(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("Unable to get device.", .{});
 }
 
-/// ---Get the type of a device
 /// ---@param device userdata
 /// ---@return string type
 pub fn get_type(L: *zlua.Lua) i32 {
@@ -17,7 +15,6 @@ pub fn get_type(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the name of a device
 /// ---@param device userdata
 /// ---@return string name
 pub fn get_name(L: *zlua.Lua) i32 {

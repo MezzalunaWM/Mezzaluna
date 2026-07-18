@@ -1,12 +1,14 @@
-//! Maintains state related to keyboard input devices,
-//! events such as button presses and dragging
+/// Maintains state related to keyboard input devices,
+/// events such as button presses and dragging
+
+const Keyboard = @This();
 
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 
 const Keymap = @import("lua/Input.zig").KeymapData;
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const KeyboardGroup = @import("KeyboardGroup.zig");
 const Seat = @import("Seat.zig");
 
@@ -14,10 +16,8 @@ const xkb = @import("xkbcommon");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
-const c = @import("C.zig").c;
+const c = @import("c");
 const log = std.log.scoped(.Keyboard);
-
-const Keyboard = @This();
 
 wlr_keyboard: *wlr.Keyboard,
 context: ?*xkb.Context,
@@ -33,7 +33,7 @@ modifiers: wl.Listener(*wlr.Keyboard) = .init(handleModifiers),
 destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 
 pub fn init(device: *wlr.InputDevice) *Keyboard {
-    const self = gpa.create(Keyboard) catch Utils.oomPanic();
+    const self = gpa.create(Keyboard) catch utils.oomPanic();
 
     self.* = .{
         .context = xkb.Context.new(.no_flags),

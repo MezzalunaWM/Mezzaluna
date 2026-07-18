@@ -1,9 +1,11 @@
+const RemoteLua = @This();
+
 const std = @import("std");
 const wl = wayland.server.wl;
 const zlua = @import("zlua");
+const utils = @import("utils.zig");
 
 const wayland = @import("wayland");
-const Utils = @import("Utils.zig");
 const LuaUtils = @import("lua/LuaUtils.zig");
 const Lua = @import("lua/Lua.zig");
 const mez = wayland.server.zmez;
@@ -13,8 +15,6 @@ const gpa = &@import("main.zig").gpa;
 const io = &@import("main.zig").io;
 const lua = &@import("main.zig").lua;
 const log = std.log.scoped(.RemoteLua);
-
-const RemoteLua = @This();
 
 node: std.DoublyLinkedList.Node,
 remote_lua_v1: *mez.RemoteLuaV1,
@@ -64,7 +64,7 @@ fn handleRequest(
             }, 0) catch return catchLuaFail(remote);
             defer gpa.free(str);
 
-            L.loadBuffer(str, "=repl", .text) catch {
+            L.loadBuffer(str, "=repl") catch {
                 L.pop(L.getTop());
                 L.loadString(chunk) catch {
                     catchLuaFail(remote);

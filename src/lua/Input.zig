@@ -1,4 +1,6 @@
-//! mez.input
+/// `mez.input` allows custom interactions between input
+/// devices and the Mezzaluna via keymaps and mousemaps
+
 const Input = @This();
 
 const std = @import("std");
@@ -6,16 +8,16 @@ const zlua = @import("zlua");
 const xkb = @import("xkbcommon");
 const wlr = @import("wlroots");
 
-const Utils = @import("../Utils.zig");
+const utils = @import("../utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 const ServerSeat = @import("../Seat.zig");
 const Seat = @import("Seat.zig");
 
-const c = @import("../C.zig").c;
+const c = @import("c");
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
-const log = std.log.scoped(.Input);
+const log = std.log.scoped(.@"Lua.Input");
 
 fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     var it = std.mem.splitScalar(u8, modStr, '|');
@@ -165,7 +167,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
     const hash = KeymapData.hash(keymap.modifier, keymap.keysym);
     const seat = if (keymap.options.seat) |seat| seat else server.getDefaultSeat();
-    seat.keymaps.put(hash, keymap) catch Utils.oomPanic();
+    seat.keymaps.put(hash, keymap) catch utils.oomPanic();
 
     return 0;
 }
@@ -267,7 +269,7 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
     if(mousemap.event_code != -1) {
         const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
         const seat = if (mousemap.options.seat) |seat| seat else server.getDefaultSeat();
-        seat.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
+        seat.mousemaps.put(hash, mousemap) catch utils.oomPanic();
     }
 
     return 0;

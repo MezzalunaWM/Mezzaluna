@@ -3,14 +3,14 @@ const Lua = @This();
 const std = @import("std");
 const config = @import("config");
 const zlua = @import("zlua");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
 const Options = @import("Options.zig");
 
 const gpa = &@import("../main.zig").gpa;
-pub const log = std.log.scoped(.Lua);
+pub const log = std.log.scoped(.@"Lua.Lua");
 
 state: *zlua.Lua,
 
@@ -32,7 +32,7 @@ pub fn init(self: *Lua, cfg: Config) !void {
     }
 
     // load lua files
-    loadRuntimeDir(self.state) catch Utils.oomPanic();
+    loadRuntimeDir(self.state) catch utils.oomPanic();
 
     if (cfg.enabled) loadConfigDir(self.state);
     loadBaseConfig(self.state);

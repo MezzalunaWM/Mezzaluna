@@ -1,5 +1,7 @@
-//! Maintains state related to cursor position, rendering, and
-//! events such as button presses and dragging
+/// Maintains state related to cursor position, rendering, and
+/// events such as button presses and dragging
+
+pub const Cursor = @This();
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
@@ -8,14 +10,12 @@ const xkb = @import("xkbcommon");
 
 const View = @import("View.zig");
 const Seat = @import("Seat.zig");
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Mousemap = @import("lua/Input.zig").MousemapData;
-const c = @import("C.zig").c;
+const c = @import("c");
 
 const server = &@import("main.zig").server;
 const log = std.log.scoped(.Cursor);
-
-pub const Cursor = @This();
 
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
@@ -46,7 +46,7 @@ drag: ?struct {
 },
 
 pub fn init(self: *Cursor, seat: *Seat) void {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),

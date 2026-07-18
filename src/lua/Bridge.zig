@@ -4,7 +4,7 @@ const std = @import("std");
 const zlua = @import("zlua");
 
 const gpa = &@import("../main.zig").gpa;
-const log = std.log.scoped(.Bridge);
+const log = std.log.scoped(.@"Lua.Bridge");
 
 pub fn getNestedField(L: *zlua.Lua, path: []const u8) bool {
     var tokens = std.mem.tokenizeScalar(u8, path, '.');

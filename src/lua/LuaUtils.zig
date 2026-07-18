@@ -2,10 +2,10 @@ const LuaUtils = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
+const utils = @import("../utils.zig");
 
 const View = @import("../View.zig");
 const Seat = @import("../Seat.zig");
-const Utils = @import("../Utils.zig");
 const Bridge = @import("Bridge.zig");
 const Remote = @import("Remote.zig");
 const Lua = @import("Lua.zig");
@@ -13,7 +13,7 @@ const RemoteLua = @import("../RemoteLua.zig");
 
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
-pub const log = std.log.scoped(.LuaUtils);
+pub const log = std.log.scoped(.@"Lua.LuaUtils");
 
 pub fn coerceNumber(comptime x: type, number: zlua.Number) error{InvalidNumber}!x {
     const size = switch (@typeInfo(x)) {
@@ -43,7 +43,7 @@ pub fn coerceInteger(comptime x: type, number: zlua.Integer) error{InvalidIntege
 }
 
 pub fn newLib(L: *zlua.Lua, f: []const zlua.FnReg) void {
-    L.newLibTable(f); // documented as being unavailable, but it is.
+    L.createTable(0, @intCast(f.len));
     for (f) |value| {
         if (value.func == null) continue;
         L.pushClosure(value.func.?, 0);

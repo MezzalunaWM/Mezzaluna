@@ -1,29 +1,28 @@
+const Seat = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = wayland.server.wl;
 const wayland = @import("wayland");
 const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
+const utils = @import("utils.zig");
 
 const KeyboardGroup = @import("KeyboardGroup.zig");
 const Keyboard = @import("Keyboard.zig");
 const Cursor = @import("Cursor.zig");
-const Utils = @import("Utils.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
-const InputDevice = @import("InputDevice.zig").InputDevice;
+const InputDevice = @import("input_device.zig").InputDevice;
 const SceneNodeData = @import("SceneNode.zig").Data;
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
 const log = std.log.scoped(.Seat);
-
-const Seat = @This();
-
 
 pub const FocusData = union(enum) {
     view: *View,

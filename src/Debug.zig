@@ -1,14 +1,14 @@
+const Debug = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
+const utils = @import("utils.zig");
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
 const log = std.log.scoped(.Debug);
 
-const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
-
-const Debug = @This();
 
 pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
     log.debug("=== SCENE TREE DEBUG ===", .{});
@@ -17,7 +17,7 @@ pub fn debugPrintSceneTree(root: *wlr.SceneNode) void {
 }
 
 fn printNode(node: *wlr.SceneNode, depth: usize) void {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     var buffer: std.ArrayList(u8) = try .initCapacity(gpa, 512);
     defer buffer.deinit(gpa);

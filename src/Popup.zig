@@ -1,15 +1,15 @@
+const Popup = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Output = @import("Output.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 const log = std.log.scoped(.Popup);
-
-const Popup = @This();
 
 id: u64,
 
@@ -26,7 +26,7 @@ pub fn init(
     xdg_popup: *wlr.XdgPopup,
     parent: *wlr.SceneTree,
 ) *Popup {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(Popup);
     errdefer gpa.destroy(self);

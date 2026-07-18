@@ -1,15 +1,18 @@
+/// `mez.async` allows for the creation and 
+/// manipulation of anychronous logic
+
 const std = @import("std");
 const zlua = @import("zlua");
 const xev = @import("xev");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
 const gpa = &@import("../main.zig").gpa;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
-const log = std.log.scoped(.Async);
+const log = std.log.scoped(.@"Lua.Async");
 
 pub const AsyncData = struct {
     lua_cb_ref_idx: i32,
@@ -21,7 +24,7 @@ pub const AsyncData = struct {
     timer: xev.Timer,
 
     pub fn init() *AsyncData {
-        const async = gpa.create(AsyncData) catch Utils.oomPanic();
+        const async = gpa.create(AsyncData) catch utils.oomPanic();
         async.* = .{
             .once = true,
             .timeout = 0,
@@ -134,7 +137,7 @@ pub fn run(L: *zlua.Lua) i32 {
     async.timer.run(&server.xev_event_loop, &async.completion, async.timeout, AsyncData, async, asyncCallback);
 
     const id = @intFromPtr(async);
-    server.async_callbacks.put(id, async) catch Utils.oomPanic();
+    server.async_callbacks.put(id, async) catch utils.oomPanic();
     L.pushInteger(@intCast(id));
     return 1;
 }

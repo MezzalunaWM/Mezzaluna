@@ -2,8 +2,9 @@ const std = @import("std");
 const zlua = @import("zlua");
 
 const server = &@import("../main.zig").server;
-pub const log = std.log.scoped(.Options);
+pub const log = std.log.scoped(.@"Lua.Options");
 
+// Defenitions of mezzaluna option and their defaults
 const DEFAULT_OPTIONS = .{
     .{ .name = "new_view_output", .default = 0 },
     .{ .name = "new_view_hidden", .default = false }

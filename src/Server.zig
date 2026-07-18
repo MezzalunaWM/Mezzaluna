@@ -1,7 +1,10 @@
+const Server = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 const xev = @import("xev");
+const utils = @import("utils.zig");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
@@ -16,15 +19,12 @@ const Async = @import("lua/Async.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
-const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
-const InputDevice = @import("InputDevice.zig").InputDevice;
+const InputDevice = @import("input_device.zig").InputDevice;
 
 const gpa = &@import("main.zig").gpa;
 const log = std.log.scoped(.Server);
-
-const Server = @This();
 
 running: bool,
 event_loop: *wl.EventLoop,
@@ -83,7 +83,7 @@ drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest)
 new_pointer_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(handleNewPointerConstraint),
 
 pub fn init(self: *Server) void {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const wl_server = wl.Server.create() catch {
         log.err("Server create failed, exiting with 2", .{});
@@ -140,7 +140,7 @@ pub fn init(self: *Server) void {
         .pointer_constraints = try wlr.PointerConstraintsV1.create(self.wl_server),
 
         // lua stuff
-        .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
+        .remote_lua_manager = RemoteLuaManager.init() catch utils.oomPanic(),
         .remote_lua_clients = .{},
         .hooks = .init(gpa.*),
         .events = try .init(gpa.*),

@@ -1,22 +1,20 @@
+const Output = @This();
+
 const wl = @import("wayland").server.wl;
 const zwlr = @import("wayland").server.zwlr;
 const wlr = @import("wlroots");
 const std = @import("std");
-
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 
 const Server = @import("Server.zig");
 const Root = @import("Root.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-
 const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 const log = std.log.scoped(.Output);
-
-const Output = @This();
 
 id: u64,
 fullscreens: std.ArrayList(*View),
@@ -48,7 +46,7 @@ destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
 
 // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
 pub fn init(wlr_output: *wlr.Output) ?*Output {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     if (!wlr_output.initRender(server.allocator, server.renderer)) {
         log.err("Unable to start output {s}", .{wlr_output.name});
@@ -61,7 +59,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     self.* = .{
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
-        .fullscreens = std.ArrayList(*View).initCapacity(gpa.*, 8) catch Utils.oomPanic(),
+        .fullscreens = std.ArrayList(*View).initCapacity(gpa.*, 8) catch utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),

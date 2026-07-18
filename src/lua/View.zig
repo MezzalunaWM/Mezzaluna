@@ -1,4 +1,6 @@
-//! mez.view
+/// `mez.view` contians utilities relating to
+/// views and manipulating their state
+
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
@@ -12,7 +14,7 @@ const LuaUtils = @import("LuaUtils.zig");
 const Seat = @import("Seat.zig");
 
 const server = &@import("../main.zig").server;
-pub const log = std.log.scoped(.View);
+pub const log = std.log.scoped(.@"Lua.View");
 
 fn view_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
@@ -56,9 +58,11 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 /// ---@field width number?
 /// ---@field height number?
 
-/// ---Position and size the view. Size includes borders and position is from top left.
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param geometry Box Missing dimensions map to current dimensions
+/// ---Position and size the view. Size includes borders and position 
+/// ---is relative to the top left of the view's output. 
+/// ---Requires an "apply" to see effects, see `mez.view.apply()`
+/// ---@param view_id integer 0 maps to default focused view
+/// ---@param geometry Box Nil dimensions map to current dimensions
 pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     if (!L.isTable(2)) return 0;
@@ -102,7 +106,6 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     return 0;
 }
 
-/// ---Get the geometry of the view
 /// ---@param view_id integer 0 maps to focused view
 /// ---@return Box?
 pub fn get_geometry(L: *zlua.Lua) i32 {
@@ -130,7 +133,8 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the geometry of the view before its last `set_geometry` or fullscreen
+/// ---Get the geometry of the view before its last geometry
+/// ---application or fullscreen
 /// ---@param view_id integer 0 maps to the focused view
 /// ---@return Box?
 pub fn get_previous_geometry(L: *zlua.Lua) i32 {

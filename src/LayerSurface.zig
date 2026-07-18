@@ -1,16 +1,16 @@
+const LayerSurface = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
 
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
 
 const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
 const log = std.log.scoped(.LayerSurface);
-
-const LayerSurface = @This();
 
 layer_surface_snd: SceneNode.Data,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
@@ -24,7 +24,7 @@ commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
 
 pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     errdefer wlr_layer_surface.destroy();
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(LayerSurface);
 

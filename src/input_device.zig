@@ -1,9 +1,9 @@
+const log = std.log.scoped(.InputDevice);
+
 const std = @import("std");
 const wlr = @import("wlroots");
 
 const Keyboard = @import("Keyboard.zig");
-
-const log = std.log.scoped(.InputDevice);
 
 pub const InputDevice = union(wlr.InputDevice.Type) {
     keyboard: *Keyboard,

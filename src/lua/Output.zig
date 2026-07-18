@@ -1,19 +1,21 @@
-//! mez.output
+/// `mez.output` contians utilities relating to
+/// outputs and manipulating their state
+
 const std = @import("std");
 const zlua = @import("zlua");
 
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
+const utils = @import("../utils.zig");
 
 const Output = @import("../Output.zig");
 const LuaUtils = @import("LuaUtils.zig");
-const Utils = @import("../Utils.zig");
 const Seat = @import("Seat.zig");
 const SceneNode = @import("../SceneNode.zig");
 
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
-pub const log = std.log.scoped(.Output);
+pub const log = std.log.scoped(.@"Lua.Output");
 
 const Mode = struct {
     width: i32,
@@ -26,7 +28,7 @@ fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
 }
 
-/// ---Get the ids for all available outputs
+/// ---Get the view ids for all available outputs
 /// ---@return integer[]
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var it = server.root.scene.outputs.iterator(.forward);
@@ -101,7 +103,7 @@ pub fn get_state(L: *zlua.Lua) i32 {
     const output: ?*Output = if (output_id == 0) server.getDefaultSeat().focused_output else server.root.outputById(output_id);
     if (output) |o| {
         const output_layout = server.root.output_layout.get(o.wlr_output);
-        const modes: []Mode = gpa.alloc(Mode, o.wlr_output.modes.length()) catch Utils.oomPanic();
+        const modes: []Mode = gpa.alloc(Mode, o.wlr_output.modes.length()) catch utils.oomPanic();
         defer gpa.free(modes);
         var iter = o.wlr_output.modes.iterator(.forward);
 
@@ -143,13 +145,11 @@ pub fn get_state(L: *zlua.Lua) i32 {
     return 1;
 }
 
-// TODO: remove the default values once we switch to a commit after 22cad3a
-/// all setter data is optional
 const set_output_state = struct {
-    position: ?struct { x: c_int = 0, y: c_int = 0 } = null,
-    scale: ?f32 = null,
-    transform: ?wl.Output.Transform = null,
-    mode: ?Mode = null,
+    position: ?struct { x: c_int = 0, y: c_int = 0 },
+    scale: ?f32,
+    transform: ?wl.Output.Transform,
+    mode: ?Mode,
 };
 
 pub fn set_state(L: *zlua.Lua) i32 {
@@ -190,9 +190,8 @@ pub fn set_state(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the id of the output's fullscreened view if it exists
 /// ---@param output_id integer 0 maps to focused output
-/// ---@return integer?
+/// ---@return integer? nil if output has no fullscreen view
 pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -206,7 +205,7 @@ pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---Get the id of the output at a xy coordinate
+/// ---Get the id of the output at a coordinate
 /// ---@param x integer
 /// ---@param y integer
 /// ---@return output_id?

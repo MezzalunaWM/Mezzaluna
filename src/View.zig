@@ -1,19 +1,19 @@
+const View = @This();
+
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
+const utils = @import("utils.zig");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
-const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
 const Debug = @import("Debug.zig");
 
 const server = &@import("main.zig").server;
 const gpa = &@import("main.zig").gpa;
 const log = std.log.scoped(.View);
-
-const View = @This();
 
 const State = struct {
     // The total geometry including borders
@@ -88,7 +88,7 @@ set_app_id: wl.Listener(void) = .init(handleSetAppId),
 set_title: wl.Listener(void) = .init(handleSetTitle),
 
 pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(View);
     errdefer gpa.destroy(self);
@@ -163,7 +163,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .awaiting_buffer = false,
         .configure_serial = 0,
         .configure_acked = false,
-        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch Utils.oomPanic()
+        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch utils.oomPanic()
     };
 
     self.saved_surface_tree.node.setEnabled(false);
@@ -245,7 +245,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
         self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
         self.pending.?.fullscreen = true;
 
-        fullscreens.append(gpa.*, self) catch Utils.oomPanic();
+        fullscreens.append(gpa.*, self) catch utils.oomPanic();
     } else if (!fullscreen and self.current.fullscreen) {
         self.setParent(self.output.?.layers.content);
         self.pending.?.fullscreen = false;
@@ -401,7 +401,7 @@ fn saveSurfaceTreeIter(scene_buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, sav
     const buffer = scene_buffer.buffer orelse return;
 
     // Create saved scene buffer
-    const saved = saved_surface_tree.createSceneBuffer(buffer) catch Utils.oomPanic();
+    const saved = saved_surface_tree.createSceneBuffer(buffer) catch utils.oomPanic();
 
     // Copy all properties
     saved.node.setPosition(sx, sy);

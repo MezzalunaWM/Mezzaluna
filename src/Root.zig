@@ -1,19 +1,19 @@
-//! The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs
+/// The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs
+
+const Root = @This();
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const utils = @import("utils.zig");
 
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const SceneNode = @import("SceneNode.zig");
-const Utils = @import("Utils.zig");
 
 const server = &@import("main.zig").server;
 const log = std.log.scoped(.Root);
-
-const Root = @This();
 
 scene_node_data: SceneNode.Data,
 
@@ -39,7 +39,7 @@ output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) =
 pub fn init(self: *Root) void {
     log.info("Creating root of mezzaluna\n", .{});
 
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const output_layout = try wlr.OutputLayout.create(server.wl_server);
     errdefer output_layout.destroy();
@@ -94,15 +94,15 @@ pub fn deinit(self: *Root) void {
 
 pub fn configureOutputs(self: *const Root) void {
     // update the config with all monitors and send it to the output_manager
-    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+    const config = wlr.OutputConfigurationV1.create() catch utils.oomPanic();
 
     // TODO: do we ommit disabled monitors here?
     var iter = self.scene.outputs.iterator(.forward);
     while (iter.next()) |scene_output| {
-        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
+        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch utils.oomPanic();
 
         if (self.output_layout.get(scene_output.output)) |o| {
-            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch Utils.oomPanic();
+            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch utils.oomPanic();
 
             config_head.state.x = o.x;
             config_head.state.y = o.y;

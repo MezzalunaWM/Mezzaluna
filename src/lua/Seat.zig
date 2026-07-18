@@ -1,18 +1,20 @@
-//! mez.seat
+/// `mez.seat` contians utilities relating to
+/// seats and manipulating their state
+
 const Seat = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
+const utils = @import("../utils.zig");
 
 const LuaUtils = @import("LuaUtils.zig");
-const Utils = @import("../Utils.zig");
 const ServerSeat = @import("../Seat.zig");
 
 const server = &@import("../main.zig").server;
 const gpa = &@import("../main.zig").gpa;
-pub const log = std.log.scoped(.Seat);
+pub const log = std.log.scoped(.@"Lua.Seat");
 
 pub fn seat_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The seat id must be >= 0 and < inf", .{});
@@ -241,7 +243,7 @@ pub fn get_repeat_info(L: *zlua.Lua) i32 {
         L.pushAny(.{
             .rate = repeat_info.rate,
             .delay = repeat_info.delay,
-        }) catch Utils.oomPanic();
+        }) catch utils.oomPanic();
     } else {
         // if the seat isn't found then return nil
         L.pushNil();

@@ -1,15 +1,16 @@
-//! mez.fs
+/// `mez.fs` provides filesystem io
+
 const Fs = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
+const utils = @import("../utils.zig");
 
 const Lua = @import("Lua.zig");
-const Utils = @import("../Utils.zig");
 
 const gpa = &@import("../main.zig").gpa;
 const io = &@import("../main.zig").io;
-const log = std.log.scoped(.Fs);
+const log = std.log.scoped(.@"Lua.Fs");
 
 /// ---Join any number of paths into one path
 /// ---@param ... string Paths to join
@@ -20,7 +21,7 @@ pub fn joinpath(L: *zlua.Lua) i32 {
         L.raiseErrorStr("Expected at least two paths to join", .{});
     }
 
-    var paths = std.ArrayList([:0]const u8).initCapacity(gpa.*, @intCast(nargs)) catch Utils.oomPanic();
+    var paths = std.ArrayList([:0]const u8).initCapacity(gpa.*, @intCast(nargs)) catch utils.oomPanic();
     defer paths.deinit(gpa.*);
 
     var i: u8 = 1;
@@ -30,10 +31,10 @@ pub fn joinpath(L: *zlua.Lua) i32 {
         }
 
         const partial_path = L.toString(i) catch unreachable;
-        paths.append(gpa.*, partial_path) catch Utils.oomPanic();
+        paths.append(gpa.*, partial_path) catch utils.oomPanic();
     }
 
-    const final_path: []const u8 = std.fs.path.join(gpa.*, paths.items) catch Utils.oomPanic();
+    const final_path: []const u8 = std.fs.path.join(gpa.*, paths.items) catch utils.oomPanic();
     defer gpa.free(final_path);
 
     _ = L.pushString(final_path);
@@ -60,17 +61,16 @@ pub fn joinpath(L: *zlua.Lua) i32 {
 pub fn open_directory(L: *zlua.Lua) i32 {
     const path = L.checkString(1);
 
-    // create a metatable for the userdata and add set the __gc function
-    L.newTable();
-    L.pushFunction(zlua.wrap(directory__gc));
-    L.setField(-2, "__gc");
-    L.setMetatable(-2);
-
-    // PLEASE CHECK THIS, IDK IF THIS IS CORRECT
-    const iterator = L.newUserdata(std.Io.Dir.Iterator, 1);
+    const iterator = L.newUserdata(std.Io.Dir.Iterator);
+    { // create a metatable for the userdata and add set the __gc function
+        L.newTable();
+        defer L.setMetatable(-2);
+        L.pushFunction(zlua.wrap(directory__gc));
+        L.setField(-2, "__gc");
+    }
 
     const dir = std.Io.Dir.cwd().openDir(io.*, path, .{ .iterate = true }) catch |err| {
-        L.raiseErrorStr("Failed to open directory `{s}`: `{s}`", .{ path.ptr, @errorName(err).ptr });
+        L.raiseErrorStr("Failed to open directory '{s}': '{s}'", .{ path.ptr, @errorName(err).ptr });
     };
     iterator.* = dir.iterate();
 
@@ -87,7 +87,7 @@ fn directory_iterator(L: *zlua.Lua) i32 {
     const entry = iterator.next(io.*) catch return 0; // the iterator shouldn't error
     if (entry) |e| {
         _ = L.pushString(e.name);
-        L.pushAny(e.kind) catch Utils.oomPanic();
+        L.pushAny(e.kind) catch utils.oomPanic();
         return 2;
     }
 
