@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     const xkbcommon = b.dependency("xkbcommon", .{}).module("xkbcommon");
     const pixman = b.dependency("pixman", .{}).module("pixman");
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
-    const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .lua54 }).module("zlua");
+    const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .luajit }).module("zlua");
     const clap = b.dependency("clap", .{ .optimize = optimize, .target = target }).module("clap");
     const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize }).module("xev");
 
@@ -55,16 +55,36 @@ pub fn build(b: *std.Build) void {
     wlroots.resolved_target = target;
     wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
+        .optimize = optimize,
+        .target = target
+    });
+    translate_c.linkSystemLibrary("libevdev", .{});
+
     const mez = b.addExecutable(.{
         .name = "mez",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{
+                .{ .name = "c", .module = translate_c.createModule() },
+                .{ .name = "wayland", .module = wayland },
+                .{ .name = "xkbcommon", .module = xkbcommon },
+                .{ .name = "wlroots", .module = wlroots },
+                .{ .name = "zlua", .module = zlua },
+                .{ .name = "clap", .module = clap },
+                .{ .name = "xev", .module = xev },
+            }
         }),
     });
 
-    mez.root_module.link_libc = true;
+    mez.root_module.linkSystemLibrary("wayland-server", .{});
+    mez.root_module.linkSystemLibrary("xkbcommon", .{});
+    mez.root_module.linkSystemLibrary("pixman-1", .{});
+    mez.root_module.linkSystemLibrary("libevdev", .{});
 
     const docgen = b.addExecutable(.{
         .name = "docgen",
@@ -74,18 +94,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-
-    mez.root_module.addImport("wayland", wayland);
-    mez.root_module.addImport("xkbcommon", xkbcommon);
-    mez.root_module.addImport("wlroots", wlroots);
-    mez.root_module.addImport("zlua", zlua);
-    mez.root_module.addImport("clap", clap);
-    mez.root_module.addImport("xev", xev);
-
-    mez.root_module.linkSystemLibrary("wayland-server", .{});
-    mez.root_module.linkSystemLibrary("xkbcommon", .{});
-    mez.root_module.linkSystemLibrary("pixman-1", .{});
-    mez.root_module.linkSystemLibrary("libevdev", .{});
 
     var ret: u8 = undefined;
     const version = b.runAllowFail(
