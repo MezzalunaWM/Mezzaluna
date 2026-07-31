@@ -368,7 +368,8 @@ pub fn applyPending(self: *View) void {
 
     // Activated
     if (pending.activated != current.activated) {
-        serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
+        if (self.pending.?.activated) self.focus_count += 1 else self.focus_count -= 1;
+        serial = @max(serial, self.xdg_toplevel.setActivated(self.focus_count != 0));
     }
 
     // Decoration mode
