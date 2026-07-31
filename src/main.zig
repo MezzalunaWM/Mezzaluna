@@ -82,6 +82,9 @@ pub fn main() !void {
     defer env_map.deinit();
     env_map.remove("DISPLAY"); // prevent x11 clients from trying to spawn outside of mez
     try env_map.put("WAYLAND_DISPLAY", socket);
+    if (server.xwayland) |xwayland| {
+        try env_map.put("DISPLAY", std.mem.span(xwayland.display_name));
+    }
 
     // tell the kernel to reap the children
     var act = std.posix.Sigaction{
