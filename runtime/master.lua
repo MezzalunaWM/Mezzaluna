@@ -1,11 +1,26 @@
----@class Master
+---@class Layout_Manager
 local M = {}
 
 local utils = {}
 
+---@alias window_type "tiling" | "floating"
+---@alias view_id integer
+
+---Find view ID withing all tags
+---@param view_id view_id
+---@return window_type | nil
+---@return integer | nil tag_index
+---@return integer | nil view_index
+utils.find_view = function(view_id)
+  for i, curr_tag in ipairs(M.state.tags) do
+  end
+
+  return nil, nil, nil
+end
+
 ---Find view ID within all tags
 ---@param view_id integer
----@return "master" | "floating" | "stacking" | nil view_type
+---@return "master" | "floating" | "stacking" | nil
 ---@return number | nil tag_index
 ---@return number | nil view_index
 utils.find_view = function(view_id)
