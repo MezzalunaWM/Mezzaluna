@@ -1,4 +1,4 @@
-/// `mez.fs` provides filesystem io
+/// mez.fs provides filesystem io
 
 const Fs = @This();
 

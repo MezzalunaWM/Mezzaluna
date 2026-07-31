@@ -4,8 +4,8 @@ local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
 
-local master = require("layout_manager")
-master.setup({ mod_key = mod })
+local layout_manager = require("layout_manager")
+layout_manager.setup({ mod_key = mod })
 
 -- local euclid = require("euclid")
 -- euclid.setup({ mod_key = mod })

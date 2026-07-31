@@ -1,5 +1,4 @@
-/// `mez.view` contians utilities relating to
-/// views and manipulating their state
+/// mez.view contians utilities relating to views and manipulating their state
 
 const std = @import("std");
 const zlua = @import("zlua");

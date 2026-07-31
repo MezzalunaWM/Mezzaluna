@@ -1,5 +1,4 @@
-/// `mez.async` allows for the creation and 
-/// manipulation of anychronous logic
+/// mez.async allows for the creation and manipulation of anychronous logic
 
 const std = @import("std");
 const zlua = @import("zlua");

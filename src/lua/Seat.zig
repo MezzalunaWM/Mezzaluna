@@ -1,5 +1,4 @@
-/// `mez.seat` contians utilities relating to
-/// seats and manipulating their state
+/// mez.seat contians utilities relating to seats and manipulating their state
 
 const Seat = @This();
 

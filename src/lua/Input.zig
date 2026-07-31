@@ -1,5 +1,4 @@
-/// `mez.input` allows custom interactions between input
-/// devices and the Mezzaluna via keymaps and mousemaps
+/// mez.input allows custom interactions between input devices and the Mezzaluna via keymaps and mousemaps
 
 const Input = @This();
 
