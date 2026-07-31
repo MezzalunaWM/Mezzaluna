@@ -72,7 +72,22 @@ local default_config = {
     {
       name = "master",
       tile = function (view_ids, output_id, context, gap)
+        local output_state = mez.output.get_state(output_id)
+        local count = #view_ids
 
+        if output_state == nil or #view_idx == 0 then
+          return
+        end
+
+        if count == 1 then
+          mez.view.set_geometry(view_ids[1], {
+            x = gap.screen,
+            y = gap.screen,
+            width
+          })
+        else
+          local stack_count = #view_ids - 1
+        end
       end,
       default_context = {
         master_ratio = 0.5

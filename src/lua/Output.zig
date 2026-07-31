@@ -94,6 +94,8 @@ const get_output_state = struct {
     modes: []Mode,
 };
 
+/// ---@class output_state
+
 /// ---Get the state of an output
 /// ---@param output_id integer 0 maps to focused output
 /// ---@return get_output_state?
