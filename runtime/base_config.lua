@@ -26,7 +26,7 @@ mez.input.add_keymap(mod .. "|shift", "Return", {
 
 mez.input.add_keymap(mod .. "|shift", "C", {
 	press = function ()
-		local view_id = mez.view.get_focused_id(0)
+    local view_id = mez.seat.get_focused_view(0)
 		if view_id then
 			mez.view.set_closing(view_id, true)
 			mez.view.apply()
