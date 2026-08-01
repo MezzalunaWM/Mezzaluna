@@ -2,19 +2,19 @@ const IdleNotifer = @This();
 
 const std = @import("std");
 const wlr = @import("wlroots");
+const utils = @import("utils.zig");
 
-const Utils = @import("Utils.zig");
-
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.IdleNotifier);
 
 idle_notifier: *wlr.IdleNotifierV1,
 
 pub fn init() *IdleNotifer {
-    const self = gpa.create(IdleNotifer) catch Utils.oomPanic();
+    const self = gpa.create(IdleNotifer) catch utils.oomPanic();
 
     self.* = .{
-        .idle_notifier = wlr.IdleNotifierV1.create(server.wl_server) catch Utils.oomPanic(),
+        .idle_notifier = wlr.IdleNotifierV1.create(server.wl_server) catch utils.oomPanic(),
     };
 
     return self;

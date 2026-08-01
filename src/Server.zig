@@ -1,9 +1,10 @@
 const Server = @This();
 
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 const xev = @import("xev");
+const utils = @import("utils.zig");
 
 const Root = @import("Root.zig");
 const Seat = @import("Seat.zig");
@@ -12,18 +13,18 @@ const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const IdleInhibitor = @import("IdleInhibitor.zig");
-const IdleNotifier = @import("IdleNotifer.zig");
+const IdleNotifier = @import("IdleNotifier.zig");
 const Hook = @import("lua/Hook.zig");
 const Async = @import("lua/Async.zig");
-const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const RemoteLua = @import("RemoteLua.zig");
 const RemoteLuaManager = @import("RemoteLuaManager.zig");
-const Utils = @import("Utils.zig");
 const SceneNode = @import("SceneNode.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
+const InputDevice = @import("input_device.zig").InputDevice;
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.Server);
 
 running: bool,
 event_loop: *wl.EventLoop,
@@ -82,10 +83,10 @@ drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest)
 new_pointer_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(handleNewPointerConstraint),
 
 pub fn init(self: *Server) void {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const wl_server = wl.Server.create() catch {
-        std.log.err("Server create failed, exiting with 2", .{});
+        log.err("Server create failed, exiting with 2", .{});
         std.process.exit(2);
     };
 
@@ -93,12 +94,12 @@ pub fn init(self: *Server) void {
 
     var session: ?*wlr.Session = undefined;
     const backend = wlr.Backend.autocreate(event_loop, &session) catch {
-        std.log.err("Backend create failed, exiting with 3", .{});
+        log.err("Backend create failed, exiting with 3", .{});
         std.process.exit(3);
     };
 
     const renderer = wlr.Renderer.autocreate(backend) catch {
-        std.log.err("Renderer create failed, exiting with 4", .{});
+        log.err("Renderer create failed, exiting with 4", .{});
         std.process.exit(4);
     };
 
@@ -116,7 +117,7 @@ pub fn init(self: *Server) void {
         .backend = backend,
         .renderer = renderer,
         .allocator = wlr.Allocator.autocreate(backend, renderer) catch {
-            std.log.err("Allocator create failed, exiting with 5", .{});
+            log.err("Allocator create failed, exiting with 5", .{});
             std.process.exit(5);
         },
         .root = undefined,
@@ -139,16 +140,17 @@ pub fn init(self: *Server) void {
         .pointer_constraints = try wlr.PointerConstraintsV1.create(self.wl_server),
 
         // lua stuff
-        .remote_lua_manager = RemoteLuaManager.init() catch Utils.oomPanic(),
+        .remote_lua_manager = RemoteLuaManager.init() catch utils.oomPanic(),
         .remote_lua_clients = .{},
-        .hooks = .init(gpa),
-        .events = try .init(gpa),
-        .async_callbacks = .init(gpa),
+        .hooks = .init(gpa.*),
+        .events = try .init(gpa.*),
+        .async_callbacks = .init(gpa.*),
     };
 
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
         self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
     }
+
     if (renderer.features.timeline and backend.features.timeline) {
         const drm_fd = renderer.getDrmFd();
         if (drm_fd >= 0) {
@@ -156,12 +158,12 @@ pub fn init(self: *Server) void {
         }
     }
 
-    if (self.drm_lease_manager != null) {
-        self.drm_lease_manager.?.events.request.add(&self.drm_lease_request);
+    if (self.drm_lease_manager) |drmlm| {
+        drmlm.events.request.add(&self.drm_lease_request);
     }
 
     self.renderer.initServer(wl_server) catch {
-        std.log.err("Renderer init failed, exiting with 6", .{});
+        log.err("Renderer init failed, exiting with 6", .{});
         std.process.exit(6);
     };
 
@@ -238,7 +240,7 @@ pub fn run(self: *Server) void {
     }.callback);
 
     self.xev_event_loop.run(.until_done) catch |err| {
-        std.log.err("Failed to run wayland event loop: {}", .{ err });
+        log.err("Failed to run wayland event loop: {}", .{ err });
     };
 }
 
@@ -259,19 +261,29 @@ pub fn deinit(self: *Server) noreturn {
     self.new_xdg_popup.link.remove();
     self.new_xdg_toplevel_decoration.link.remove();
     self.new_layer_surface.link.remove();
-
-    self.root.deinit();
+    self.new_idle_inhibitor.link.remove();
+    self.request_activate.link.remove();
+    self.new_virtual_pointer.link.remove();
+    self.new_virtual_keyboard.link.remove();
+    self.new_pointer_constraint.link.remove();
+    if (self.drm_lease_manager) |drmlm| {
+        drmlm.events.request.add(&self.drm_lease_request);
+    }
 
     self.backend.destroy();
-
     self.wl_server.destroyClients();
+    self.root.deinit();
+
+    var iter_seat = self.seats.safeIterator(.forward);
+    while (iter_seat.next()) |seat| {
+        seat.deinit();
+    }
+
     self.wl_server.destroy();
-
     self.xev_event_loop.deinit();
-
     self.async_callbacks.deinit();
 
-    std.log.debug("Exiting mez succesfully", .{});
+    log.info("Exiting mez successfully", .{});
     std.process.exit(0);
 }
 
@@ -280,10 +292,10 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
     const self: *Server = @fieldParentPtr("new_input", listener);
 
     // create the device
-    input_device.init(device);
+    InputDevice.init(device);
 
     self.events.exec("DeviceAddPre", .{ device }, "Called before a new device is added to the compositor.");
-    const dev = input_device.get(device) orelse return;
+    const dev = InputDevice.get(device) orelse return;
 
     // has the user already given the device to a seat?
     const seated = switch (dev) {
@@ -300,13 +312,13 @@ fn handleNewInput(listener: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDe
 fn handleNewOutput(listener: *wl.Listener(*wlr.Output), wlr_output: *wlr.Output) void {
     const self: *Server = @fieldParentPtr("new_output", listener);
     const output = Output.init(wlr_output) orelse {
-        std.log.err("Failed to create new output", .{});
+        log.err("Failed to create new output", .{});
         return;
     };
 
     // TODO: Allow user to define output positions
     const layout_output = self.root.output_layout.addAuto(output.wlr_output) catch {
-        std.log.err("failed to add output to the output layout", .{});
+        log.err("failed to add output to the output layout", .{});
         return;
     };
 
@@ -336,15 +348,15 @@ fn handleNewXdgToplevelDecoration(listener: *wl.Listener(*wlr.XdgToplevelDecorat
 }
 
 fn handleNewXdgPopup(_: *wl.Listener(*wlr.XdgPopup), _: *wlr.XdgPopup) void {
-    std.log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
+    log.debug("Unimplemented Server.handleNewXdgPopup\n", .{});
 }
 
 fn handleNewLayerSurface(listener: *wl.Listener(*wlr.LayerSurfaceV1), layer_surface: *wlr.LayerSurfaceV1) void {
     const self: *Server = @fieldParentPtr("new_layer_surface", listener);
-    std.log.debug("requested layer shell\n", .{});
+    log.debug("requested layer shell\n", .{});
     if (layer_surface.output == null) {
         if (self.getDefaultSeat().focused_output == null) {
-            std.log.err("No output available for new layer surface", .{});
+            log.err("No output available for new layer surface", .{});
             layer_surface.destroy();
             return;
         }
@@ -375,7 +387,7 @@ fn handleRequestActivate(
         }
         self.getDefaultSeat().focusSurface(.{ .view = scene_node_data.view });
     } else {
-        std.log.warn("Ignoring request to activate non-view", .{});
+        log.warn("Ignoring request to activate non-view", .{});
     }
 }
 
@@ -408,7 +420,7 @@ fn handleDrmRequest(
 ) void {
     const lease = request.grant();
     if (lease == null) {
-        std.log.err("Failed to grant drm lease request.", .{});
+        log.err("Failed to grant drm lease request.", .{});
         request.reject();
     }
 }

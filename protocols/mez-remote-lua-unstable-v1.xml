@@ -72,7 +72,7 @@
 
         The text contains the lua log information the server generates when
         executing lua code. The server does not hold logs from before the client
-        connect, and therefore you will only recieve log information from the
+        connect, and therefore you will only receive log information from the
         point that you start listening for them and on.
       </description>
       <arg name="text" type="string" summary="the log text"/>

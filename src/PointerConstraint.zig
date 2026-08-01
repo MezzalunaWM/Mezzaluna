@@ -3,12 +3,13 @@ const PointerConstraint = @This();
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 const std = @import("std");
+const utils = @import("utils.zig");
 
 const Seat = @import("Seat.zig");
-const Utils = @import("Utils.zig");
 
-const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
+const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.PointerConstraint);
 
 constraint: *wlr.PointerConstraintV1,
 seat: *Seat,
@@ -17,7 +18,7 @@ link: wl.list.Link,
 destroy: wl.Listener(*wlr.PointerConstraintV1) = .init(handleDestroy),
 
 pub fn init(constraint: *wlr.PointerConstraintV1) *PointerConstraint {
-    const self = gpa.create(PointerConstraint) catch Utils.oomPanic();
+    const self = gpa.create(PointerConstraint) catch utils.oomPanic();
 
     self.* = .{
         .constraint = constraint,

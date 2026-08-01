@@ -115,6 +115,7 @@ M.tile_tag = function(tag_id)
     local stack_height = (area.height - (M.config.screen_gap * 2) - ((#tag.stack - 1) * M.config.tile_gap)) / #tag.stack
 
     for i, view_id in ipairs(tag.stack) do
+
       mez.view.set_geometry(view_id, {
         x = stack_x,
         y = (stack_height + M.config.tile_gap) * (i - 1) + M.config.screen_gap + area.y,
@@ -236,7 +237,7 @@ M.remove_view = function(view_id)
     tag.master = table.remove(tag.stack, 1)
 
     if M.config.refocus_on_kill then
-      mez.seat.set_focused(0, tag.master)
+      mez.seat.set_focused_view(0, tag.master)
     end
   elseif type == "stacking" then
     local is_last = #tag.stack == view_idx

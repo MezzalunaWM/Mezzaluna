@@ -1,17 +1,20 @@
 const RemoteLua = @This();
 
 const std = @import("std");
+const wl = wayland.server.wl;
 const zlua = @import("zlua");
+const utils = @import("utils.zig");
+
 const wayland = @import("wayland");
-const Utils = @import("Utils.zig");
 const LuaUtils = @import("lua/LuaUtils.zig");
 const Lua = @import("lua/Lua.zig");
-const wl = wayland.server.wl;
 const mez = wayland.server.zmez;
 
-const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
+const gpa = &@import("main.zig").gpa;
+const io = &@import("main.zig").io;
 const lua = &@import("main.zig").lua;
+const log = std.log.scoped(.RemoteLua);
 
 node: std.DoublyLinkedList.Node,
 remote_lua_v1: *mez.RemoteLuaV1,
@@ -54,14 +57,14 @@ fn handleRequest(
         .push_lua => |req| {
             const chunk: [:0]const u8 = std.mem.sliceTo(req.lua_chunk, 0);
 
-            const str = std.mem.concatWithSentinel(gpa, u8, &[_][]const u8{
+            const str = std.mem.concatWithSentinel(gpa.*, u8, &[_][]const u8{
                 "return ",
                 chunk,
                 ";",
             }, 0) catch return catchLuaFail(remote);
             defer gpa.free(str);
 
-            zlua.Lua.loadBuffer(L, str, "=repl") catch {
+            L.loadBuffer(str, "=repl") catch {
                 L.pop(L.getTop());
                 L.loadString(chunk) catch {
                     catchLuaFail(remote);

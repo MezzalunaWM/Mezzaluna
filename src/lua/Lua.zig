@@ -3,14 +3,14 @@ const Lua = @This();
 const std = @import("std");
 const config = @import("config");
 const zlua = @import("zlua");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
 const Options = @import("Options.zig");
 
-const gpa = std.heap.c_allocator;
-pub const log = std.log.scoped(.lua);
+const gpa = &@import("../main.zig").gpa;
+pub const log = std.log.scoped(.@"Lua.Lua");
 
 state: *zlua.Lua,
 
@@ -20,7 +20,7 @@ pub const Config = struct {
 };
 
 pub fn init(self: *Lua, cfg: Config) !void {
-    self.state = try zlua.Lua.init(gpa);
+    self.state = try zlua.Lua.init(gpa.*);
     errdefer self.state.deinit();
     self.state.openLibs();
 
@@ -32,15 +32,12 @@ pub fn init(self: *Lua, cfg: Config) !void {
     }
 
     // load lua files
-    loadRuntimeDir(self.state) catch |err| switch (err) {
-        error.OutOfMemory => Utils.oomPanic(),
-        else => log.err("{}", .{ err })
-    };
+    loadRuntimeDir(self.state) catch utils.oomPanic();
 
     if (cfg.enabled) loadConfigDir(self.state);
     loadBaseConfig(self.state);
 
-    log.debug("Loaded lua", .{});
+    log.info("Loaded lua", .{});
 }
 
 pub fn deinit(self: *Lua) void {
@@ -48,24 +45,24 @@ pub fn deinit(self: *Lua) void {
 }
 
 pub fn loadRuntimeDir(self: *zlua.Lua) !void {
-    const path_dir = try std.fs.path.joinZ(gpa, &[_][]const u8{
+    const path_dir = try std.fs.path.joinZ(gpa.*, &[_][]const u8{
         config.runtime_path_prefix,
         "mez",
         "runtime",
     });
-    std.debug.print("path_dir: {s}\n", .{path_dir});
+    log.info("path_dir: {s}\n", .{path_dir});
     defer gpa.free(path_dir);
 
     {
-        _ = try self.getGlobal("mez");
+        if(self.getGlobal("mez") == .nil) unreachable;
         defer self.pop(1);
-        _ = self.getField(-1, "path");
+        if(self.getField(-1, "path") == .nil) unreachable;
         defer self.pop(1);
         _ = self.pushString(path_dir);
         self.setField(-2, "runtime");
     }
 
-    const path_full = try std.fs.path.joinZ(gpa, &[_][]const u8{
+    const path_full = try std.fs.path.joinZ(gpa.*, &[_][]const u8{
         path_dir,
         "init.lua",
     });
@@ -75,14 +72,14 @@ pub fn loadRuntimeDir(self: *zlua.Lua) !void {
 }
 
 pub fn setConfig(self: *zlua.Lua, path: []const u8) !void {
-    _ = try self.getGlobal("mez");
+    // Maybe we should check for nil here
+    _ = self.getGlobal("mez");
     defer self.pop(1);
     _ = self.getField(-1, "path");
     defer self.pop(1);
     _ = self.pushString(path);
     self.setField(-2, "config");
 }
-
 
 fn loadBaseConfig(self: *zlua.Lua) void {
     const lua_path = "mez.path.base_config";

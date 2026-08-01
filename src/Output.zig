@@ -4,19 +4,17 @@ const wl = @import("wayland").server.wl;
 const zwlr = @import("wayland").server.zwlr;
 const wlr = @import("wlroots");
 const std = @import("std");
-
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 
 const Server = @import("Server.zig");
 const Root = @import("Root.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
-
 const SceneNode = @import("SceneNode.zig");
 
-const posix = std.posix;
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Output);
 
 id: u64,
 fullscreens: std.ArrayList(*View),
@@ -48,10 +46,10 @@ destroy: wl.Listener(*wlr.Output) = .init(handleDestroy),
 
 // The wlr.Output should be destroyed by the caller on failure to trigger cleanup.
 pub fn init(wlr_output: *wlr.Output) ?*Output {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     if (!wlr_output.initRender(server.allocator, server.renderer)) {
-        std.log.err("Unable to start output {s}", .{wlr_output.name});
+        log.err("Unable to start output {s}", .{wlr_output.name});
         return null;
     }
 
@@ -61,7 +59,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     self.* = .{
         .id = @intFromPtr(wlr_output),
         .wlr_output = wlr_output,
-        .fullscreens = std.ArrayList(*View).initCapacity(gpa, 8) catch Utils.oomPanic(),
+        .fullscreens = std.ArrayList(*View).initCapacity(gpa.*, 8) catch utils.oomPanic(),
         .non_exclusive_area = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 
         .scene_output = try server.root.scene.createSceneOutput(wlr_output),
@@ -106,7 +104,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
     state.setEnabled(true);
 
     if (!wlr_output.commitState(&state)) {
-        std.log.err("Unable to commit state to output {s}", .{ wlr_output.name });
+        log.err("Unable to commit state to output {s}", .{ wlr_output.name });
     }
 
     server.events.exec("OutputInitPost", .{self.id}, "After a new output is initialized. You're probably looking for OutputStateChange.");
@@ -115,7 +113,7 @@ pub fn init(wlr_output: *wlr.Output) ?*Output {
 }
 
 pub fn deinit(self: *Output) void {
-    server.events.exec("OutputDeinitPre", .{self.id}, "Before an output is de-initialized.");
+    server.events.exec("OutputDeinitPre", .{ self.id }, "Before an output is de-initialized.");
 
     self.frame.link.remove();
     self.request_state.link.remove();
@@ -207,7 +205,7 @@ fn handleRequestState(
     const self: *Output = @fieldParentPtr("request_state", listener);
 
     if (!self.wlr_output.commitState(event.state)) {
-        std.log.warn("failed to set output state {}", .{event.state});
+        log.warn("failed to set output state {}", .{event.state});
         // nothing should've changed, so we don't do anything
         return;
     }
@@ -222,12 +220,11 @@ fn handleFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const self: *Output = @fieldParentPtr("frame", listener);
 
     if (!self.scene_output.commit(null)) {
-        std.log.warn("setting output state failed for output: {}", .{ self.id });
+        log.warn("setting output state failed for output: {}", .{ self.id });
     }
 
-    var now = posix.clock_gettime(posix.CLOCK.MONOTONIC) catch {
-        std.debug.panic("CLOCK_MONOTONIC not supported", .{});
-    };
+    var now: std.posix.timespec = undefined;
+    _ = std.posix.system.clock_gettime(.MONOTONIC, &now);
     self.scene_output.sendFrameDone(&now);
 }
 

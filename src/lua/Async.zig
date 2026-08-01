@@ -1,15 +1,18 @@
+/// `mez.async` allows for the creation and 
+/// manipulation of anychronous logic
+
 const std = @import("std");
 const zlua = @import("zlua");
 const xev = @import("xev");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
-const gpa = std.heap.c_allocator;
-
+const gpa = &@import("../main.zig").gpa;
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.@"Lua.Async");
 
 pub const AsyncData = struct {
     lua_cb_ref_idx: i32,
@@ -21,7 +24,7 @@ pub const AsyncData = struct {
     timer: xev.Timer,
 
     pub fn init() *AsyncData {
-        const async = gpa.create(AsyncData) catch Utils.oomPanic();
+        const async = gpa.create(AsyncData) catch utils.oomPanic();
         async.* = .{
             .once = true,
             .timeout = 0,
@@ -67,7 +70,7 @@ fn asyncCallback(
     };
     const self: *AsyncData = userdata.?;
 
-    const t = Lua.state.rawGetIndex(zlua.registry_index, self.lua_cb_ref_idx);
+    const t = Lua.state.getIndexRaw(zlua.registry_index, self.lua_cb_ref_idx);
     if (t != zlua.LuaType.function) {
         RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");
         Lua.state.pop(1);
@@ -108,7 +111,7 @@ pub fn run(L: *zlua.Lua) i32 {
 
     if (L.isFunction(1)) {
         L.pushValue(1); // move the function to to top of the stack
-        async.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        async.lua_cb_ref_idx = L.ref(zlua.registry_index);
     } else L.raiseErrorStr("argument 1 must be a function", .{});
 
     switch (L.typeOf(2)) {
@@ -134,7 +137,7 @@ pub fn run(L: *zlua.Lua) i32 {
     async.timer.run(&server.xev_event_loop, &async.completion, async.timeout, AsyncData, async, asyncCallback);
 
     const id = @intFromPtr(async);
-    server.async_callbacks.put(id, async) catch Utils.oomPanic();
+    server.async_callbacks.put(id, async) catch utils.oomPanic();
     L.pushInteger(@intCast(id));
     return 1;
 }

@@ -1,14 +1,16 @@
 const RemoteLuaManager = @This();
 
 const std = @import("std");
-const wayland = @import("wayland");
-const Utils = @import("Utils.zig");
-const RemoteLua = @import("RemoteLua.zig");
 const wl = wayland.server.wl;
+const wayland = @import("wayland");
 const mez = wayland.server.zmez;
+const utils = @import("utils.zig");
 
-const gpa = std.heap.c_allocator;
+const RemoteLua = @import("RemoteLua.zig");
+
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.RemoteLuaManager);
 
 global: *wl.Global,
 
@@ -23,7 +25,7 @@ pub fn init() !?*RemoteLuaManager {
 fn bind(client: *wl.Client, _: ?*anyopaque, version: u32, id: u32) void {
     const remote_lua_manager_v1 = mez.RemoteLuaManagerV1.create(client, version, id) catch {
         client.postNoMemory();
-        Utils.oomPanic();
+        utils.oomPanic();
     };
     remote_lua_manager_v1.setHandler(?*anyopaque, handleRequest, null, null);
 }
@@ -42,7 +44,7 @@ fn handleRequest(
                 req.id,
             ) catch {
                 remote_lua_manager_v1.getClient().postNoMemory();
-                Utils.oomPanic();
+                utils.oomPanic();
             };
         },
     }

@@ -2,26 +2,27 @@ const Seat = @This();
 
 const std = @import("std");
 const wlr = @import("wlroots");
-const wayland = @import("wayland");
 const wl = wayland.server.wl;
+const wayland = @import("wayland");
 const zwlr = wayland.server.zwlr;
 const xkb = @import("xkbcommon");
+const utils = @import("utils.zig");
 
 const KeyboardGroup = @import("KeyboardGroup.zig");
 const Keyboard = @import("Keyboard.zig");
 const Cursor = @import("Cursor.zig");
-const Utils = @import("Utils.zig");
-const input_device = @import("input_device.zig");
 const Popup = @import("Popup.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const Output = @import("Output.zig");
-const SceneNodeData = @import("SceneNode.zig").Data;
 const Input = @import("lua/Input.zig");
 const PointerConstraint = @import("PointerConstraint.zig");
+const InputDevice = @import("input_device.zig").InputDevice;
+const SceneNodeData = @import("SceneNode.zig").Data;
 
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.Seat);
 
 pub const FocusData = union(enum) {
     view: *View,
@@ -61,13 +62,13 @@ pub fn init(name: [*:0]const u8) !*Seat {
     errdefer gpa.destroy(self);
 
     const xkb_context = xkb.Context.new(.no_flags) orelse {
-        std.log.err("Unable to create a xkb context, exiting", .{});
+        log.err("Unable to create a xkb context, exiting", .{});
         return error.xkbContext;
     };
     defer xkb_context.unref();
 
     const xkb_keymap = xkb.Keymap.newFromNames(xkb_context, null, .no_flags) orelse {
-        std.log.err("Unable to create a xkb keymap, exiting", .{});
+        log.err("Unable to create a xkb keymap, exiting", .{});
         return error.xkbKeymap;
     };
     defer xkb_keymap.unref();
@@ -94,8 +95,8 @@ pub fn init(name: [*:0]const u8) !*Seat {
     self.wlr_seat.setKeyboard(&self.keyboard_group.wlr_group.keyboard);
     self.cursor.init(self);
 
-    self.keymaps = .init(gpa);
-    self.mousemaps = .init(gpa);
+    self.keymaps = .init(gpa.*);
+    self.mousemaps = .init(gpa.*);
     self.constraints.init();
 
     self.wlr_seat.events.request_set_cursor.add(&self.request_set_cursor);
@@ -117,7 +118,10 @@ pub fn deinit(self: *Seat) void {
     self.mousemaps.deinit();
 
     self.keyboard_group.deinit();
+    self.cursor.deinit();
     self.wlr_seat.destroy();
+
+    gpa.destroy(self);
 }
 
 pub fn id(self: *Seat) u32 {
@@ -186,14 +190,14 @@ pub fn focusOutput(self: *Seat, output: *Output) void {
 pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = (input_device.get(device) orelse return).keyboard;
+            const keyboard = (InputDevice.get(device) orelse return).keyboard;
             self.keyboard_group.addKeyboard(keyboard);
         },
         .pointer => {
             self.cursor.wlr_cursor.attachInputDevice(device);
             device.data = &self.cursor;
         },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+        else => |t| log.err("unsupported input method: {}", .{ t }),
     }
 
     self.wlr_seat.setCapabilities(.{
@@ -205,14 +209,14 @@ pub fn addInputDevice(self: *Seat, device: *wlr.InputDevice) void {
 pub fn removeInputDevice(self: *Seat, device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            const keyboard = (input_device.get(device) orelse return).keyboard;
+            const keyboard = (InputDevice.get(device) orelse return).keyboard;
             self.keyboard_group.removeKeyboard(keyboard);
         },
         .pointer => {
             self.cursor.wlr_cursor.detachInputDevice(device);
             device.data = null;
         },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
+        else => |t| log.err("unsupported input method: {}", .{ t }),
     }
 }
 

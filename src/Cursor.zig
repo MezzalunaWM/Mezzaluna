@@ -1,5 +1,5 @@
-//! Maintains state related to cursor position, rendering, and
-//! events such as button presses and dragging
+/// Maintains state related to cursor position, rendering, and
+/// events such as button presses and dragging
 
 pub const Cursor = @This();
 
@@ -10,11 +10,12 @@ const xkb = @import("xkbcommon");
 
 const View = @import("View.zig");
 const Seat = @import("Seat.zig");
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Mousemap = @import("lua/Input.zig").MousemapData;
-const c = @import("C.zig").c;
+const c = @import("c");
 
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Cursor);
 
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
@@ -45,7 +46,7 @@ drag: ?struct {
 },
 
 pub fn init(self: *Cursor, seat: *Seat) void {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     self.* = .{
         .wlr_cursor = try wlr.Cursor.create(),
@@ -78,6 +79,7 @@ pub fn deinit(self: *Cursor) void {
     self.frame.link.remove();
     self.hold_begin.link.remove();
     self.hold_end.link.remove();
+    self.request_set_cursor_shape.link.remove();
 
     self.wlr_cursor.destroy();
     self.x_cursor_manager.destroy();
@@ -95,7 +97,7 @@ pub fn processCursorMotion(
     var dx = delta_x;
     var dy = delta_y;
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
@@ -288,7 +290,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
             self.drag.?.view = null;
         },
         else => {
-            std.log.err("Invalid/Unimplemented pointer button event type", .{});
+            log.err("Invalid/Unimplemented pointer button event type", .{});
         },
     }
 
@@ -337,7 +339,7 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
         _ = self.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 }
@@ -389,7 +391,7 @@ fn handleAxis(
         }
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
