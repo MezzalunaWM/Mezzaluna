@@ -494,7 +494,7 @@ M.setup = function(config)
           x = pos.x - offset.x,
           y = pos.y - offset.y
         })
-        mez.view.apply();
+        mez.view.apply()
       end
     end
   })
