@@ -425,9 +425,9 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.closing) {
         self.scene_tree.node.setEnabled(false);
 
-        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view is being closed.");
-        
         self.xdg_toplevel.sendClose();
+
+        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view has been closed.");
 
         self.current = self.sending.?;
         self.sending = null;
