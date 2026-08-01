@@ -1,15 +1,17 @@
-//! mez.api
+/// `mez.api` more important
+
 const std = @import("std");
 const zlua = @import("zlua");
 const wlr = @import("wlroots");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 
-const gpa = std.heap.c_allocator;
-
-const env_map = &@import("../main.zig").env_map;
+const gpa = &@import("../main.zig").gpa;
+const io = &@import("../main.zig").io;
+const environ_map = &@import("../main.zig").environ_map;
 const server = &@import("../main.zig").server;
+const log = std.log.scoped(.@"Lua.Api");
 
 /// ---Spawn new application via the shell command. If you wish to pass in args
 /// ---to your command then you must use a table of strings.
@@ -19,13 +21,13 @@ pub fn spawn(L: *zlua.Lua) i32 {
     const command = switch (t) {
         .string => &[_][]const u8{ L.checkString(1) },
         .table => blk: {
-            const list = gpa.alloc([]const u8, L.objectLen(1)) catch Utils.oomPanic();
+            const list = gpa.alloc([]const u8, L.objectLen(1)) catch utils.oomPanic();
 
             var i: u32 = 0;
             L.pushNil();
             while (L.next(1)) : (i += 1) {
                 const s = L.toString(-1) catch L.raiseErrorStr("Unable to spawn process child process", .{});
-                list[i] = gpa.dupe(u8, s) catch Utils.oomPanic();
+                list[i] = gpa.dupe(u8, s) catch utils.oomPanic();
                 L.pop(1);  // remove value, keep key for next iteration
             }
 
@@ -38,10 +40,11 @@ pub fn spawn(L: *zlua.Lua) i32 {
         gpa.free(command);
     };
 
-    var child = std.process.Child.init(command, gpa);
-    child.env_map = env_map;
-    child.spawn() catch |err| switch (err) {
-        error.OutOfMemory => Utils.oomPanic(),
+    _ = std.process.spawn(io.*, .{ 
+        .argv = command,
+        .environ_map = environ_map.*
+    }) catch |err| switch (err) {
+        error.OutOfMemory => utils.oomPanic(),
         else => L.raiseErrorStr("Unable to spawn process child process", .{}),
     };
 
@@ -50,10 +53,11 @@ pub fn spawn(L: *zlua.Lua) i32 {
 
 /// ---Exit mezzaluna
 pub fn exit(L: *zlua.Lua) i32 {
+    _ = L;
+
     server.terminate();
 
-    L.pushNil();
-    return 1;
+    return 0;
 }
 
 /// ---Change to a different virtual terminal
@@ -67,6 +71,5 @@ pub fn change_vt(L: *zlua.Lua) i32 {
         };
     } else L.raiseErrorStr("Mez has not been initialized yet", .{});
 
-    L.pushNil();
-    return 1;
+    return 0;
 }

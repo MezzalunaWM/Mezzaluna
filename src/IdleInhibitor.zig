@@ -1,20 +1,21 @@
 const IdleInhibitor = @This();
 
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.IdleInhibitor);
 
 inhibitor: *wlr.IdleInhibitorV1,
 
 destroy: wl.Listener(*wlr.Surface) = .init(handleDestroy),
 
 pub fn init(inhibitor: *wlr.IdleInhibitorV1) *IdleInhibitor {
-    const self = gpa.create(IdleInhibitor) catch Utils.oomPanic();
+    const self = gpa.create(IdleInhibitor) catch utils.oomPanic();
 
     self.* = .{ .inhibitor = inhibitor };
     self.inhibitor.events.destroy.add(&self.destroy);

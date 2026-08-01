@@ -1,4 +1,4 @@
-const input_device = @This();
+const log = std.log.scoped(.InputDevice);
 
 const std = @import("std");
 const wlr = @import("wlroots");
@@ -12,44 +12,44 @@ pub const InputDevice = union(wlr.InputDevice.Type) {
     tablet: void,
     tablet_pad: void,
     @"switch": void,
+    
+    pub fn init(self: *wlr.InputDevice) void {
+        switch (self.type) {
+            .keyboard => {
+                const keyboard = Keyboard.init(self);
+                self.data = keyboard;
+            },
+            .pointer => {
+                // the data attached here is used to figure out which seat owns
+                // the pointer
+                self.data = null;
+            },
+            else => |t| log.err("unsupported input method: {}", .{ t }),
+        }
+    }
+
+    pub fn remove(self: *wlr.InputDevice) void {
+        switch (self.type) {
+            .keyboard => {
+                const keyboard = (get(self) orelse return).keyboard;
+                std.debug.assert(keyboard.group == null);
+                keyboard.deinit();
+            },
+            .pointer => {
+                std.debug.assert(self.data == null);
+            },
+            else => |t| log.err("unsupported input method: {}", .{ t }),
+        }
+    }
+
+    pub fn get(self: *wlr.InputDevice) ?InputDevice {
+        return switch (self.type) {
+            .keyboard => .{ .keyboard = @alignCast(@ptrCast(self.data)) },
+            .pointer => .{ .pointer = self.toPointer(), },
+            else => |t| blk: {
+                log.err("unsupported input method: {}", .{ t });
+                break :blk null;
+            },
+        };
+    }
 };
-
-pub fn init(device: *wlr.InputDevice) void {
-    switch (device.type) {
-        .keyboard => {
-            const keyboard = Keyboard.init(device);
-            device.data = keyboard;
-        },
-        .pointer => {
-            // the data attached here is used to figure out which seat owns
-            // the pointer
-            device.data = null;
-        },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
-    }
-}
-
-pub fn remove(device: *wlr.InputDevice) void {
-    switch (device.type) {
-        .keyboard => {
-            const keyboard = (get(device) orelse return).keyboard;
-            std.debug.assert(keyboard.group == null);
-            keyboard.deinit();
-        },
-        .pointer => {
-            std.debug.assert(device.data == null);
-        },
-        else => |t| std.log.err("unsupported input method: {}", .{ t }),
-    }
-}
-
-pub fn get(device: *wlr.InputDevice) ?InputDevice {
-    return switch (device.type) {
-        .keyboard => .{ .keyboard = @alignCast(@ptrCast(device.data)) },
-        .pointer => .{ .pointer = device.toPointer(), },
-        else => |t| blk: {
-            std.log.err("unsupported input method: {}", .{ t });
-            break :blk null;
-        },
-    };
-}

@@ -1,18 +1,19 @@
 const View = @This();
+
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
+const utils = @import("utils.zig");
 
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
-
-const Utils = @import("Utils.zig");
 const Options = @import("lua/Options.zig");
 const Debug = @import("Debug.zig");
 
-const gpa = std.heap.c_allocator;
 const server = &@import("main.zig").server;
+const gpa = &@import("main.zig").gpa;
+const log = std.log.scoped(.View);
 
 const State = struct {
     // The total geometry including borders
@@ -87,7 +88,7 @@ set_app_id: wl.Listener(void) = .init(handleSetAppId),
 set_title: wl.Listener(void) = .init(handleSetTitle),
 
 pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(View);
     errdefer gpa.destroy(self);
@@ -162,7 +163,7 @@ pub fn init(xdg_toplevel: *wlr.XdgToplevel) *View {
         .awaiting_buffer = false,
         .configure_serial = 0,
         .configure_acked = false,
-        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch Utils.oomPanic()
+        .view_timer = server.event_loop.addTimer(*View, handleViewTimer, self) catch utils.oomPanic()
     };
 
     self.saved_surface_tree.node.setEnabled(false);
@@ -198,8 +199,8 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
 
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
-    // const eventual = self.pending orelse self.sending orelse self.current;
-    // if (eventual.fullscreen) return;
+    // You shouldn't be able to resize fullscreen views
+    if(self.current.fullscreen) return;
 
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
@@ -221,7 +222,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
     if (self.output == null) {
-        std.log.debug("View {d} has no output to fullscreen on", .{self.id});
+        log.debug("View {d} has no output to fullscreen on", .{self.id});
         return;
     }
 
@@ -230,7 +231,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     // passed view_id and true `true` if being fullscreened `false` otherwise
     server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen }, "A view has had it's pending fullscreen status set.");
 
-    // std.log.debug("Setting fullscreen to {}", .{fullscreen});
+    // log.debug("Setting fullscreen to {}", .{fullscreen});
 
     const fullscreens = &self.output.?.fullscreens;
     if(fullscreen and !self.current.fullscreen) {
@@ -244,7 +245,7 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
         self.setGeometry(0, 0, self.output.?.wlr_output.width, self.output.?.wlr_output.height);
         self.pending.?.fullscreen = true;
 
-        fullscreens.append(gpa, self) catch Utils.oomPanic();
+        fullscreens.append(gpa.*, self) catch utils.oomPanic();
     } else if (!fullscreen and self.current.fullscreen) {
         self.setParent(self.output.?.layers.content);
         self.pending.?.fullscreen = false;
@@ -401,7 +402,7 @@ fn saveSurfaceTreeIter(scene_buffer: *wlr.SceneBuffer, sx: c_int, sy: c_int, sav
     const buffer = scene_buffer.buffer orelse return;
 
     // Create saved scene buffer
-    const saved = saved_surface_tree.createSceneBuffer(buffer) catch Utils.oomPanic();
+    const saved = saved_surface_tree.createSceneBuffer(buffer) catch utils.oomPanic();
 
     // Copy all properties
     saved.node.setPosition(sx, sy);
@@ -540,7 +541,7 @@ fn handleMap(listener: *wl.Listener(void)) void {
 fn handleUnmap(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("unmap", listener);
 
-    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visibile to the user.");
+    server.events.exec("ViewUnmapPre", .{view.id}, "Before the view is unmapped. This view is still currently visible to the user.");
 
     var iter = server.seats.iterator(.forward);
     while (iter.next()) |seat| {
@@ -570,7 +571,7 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
     view.set_app_id.link.remove();
 
 
-    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visibile to the user.");
+    server.events.exec("ViewUnmapPost", .{view.id}, "After the view is unmapped. This view is no longer visible to the user.");
 }
 
 fn handleDestroy(listener: *wl.Listener(void)) void {
@@ -668,17 +669,17 @@ fn handleRequestFullscreen(listener: *wl.Listener(void)) void {
 fn handleRequestMinimize(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("request_minimize", listener);
     server.events.exec("ViewRequestMinimize", .{view.id}, "Before the view requests to be minimized.");
-    std.log.debug("request_minimize unimplemented", .{});
+    log.debug("request_minimize unimplemented", .{});
 }
 
 fn handleSetAppId(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_app_id", listener);
     server.events.exec("ViewAppIdUpdate", .{view.id}, "Before the view requests to update its appid.");
-    std.log.debug("request_set_app_id unimplemented", .{});
+    log.debug("request_set_app_id unimplemented", .{});
 }
 
 fn handleSetTitle(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("set_title", listener);
     server.events.exec("ViewTitleUpdate", .{view.id}, "Before the view requests to update its title.");
-    std.log.debug("request_set_title unimplemented", .{});
+    log.debug("request_set_title unimplemented", .{});
 }

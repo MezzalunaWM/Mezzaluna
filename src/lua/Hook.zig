@@ -1,17 +1,20 @@
-//! mez.hook
+/// `mez.hook` allows for callbacks to be attached 
+/// hooks for custom reponses to compositor events
+
 const Hook = @This();
 
 const std = @import("std");
 const zlua = @import("zlua");
 const config = @import("config");
+const utils = @import("../utils.zig");
 
-const Utils = @import("../Utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 
-const gpa = std.heap.c_allocator;
 const server = &@import("../main.zig").server;
+const gpa = &@import("../main.zig").gpa;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.@"Lua.Hook");
 
 pub const Events = struct {
     const Node = struct {
@@ -105,7 +108,7 @@ pub const HookData = struct {
     },
 
     pub fn init() *HookData {
-        const self = gpa.create(HookData) catch Utils.oomPanic();
+        const self = gpa.create(HookData) catch utils.oomPanic();
         return self;
     }
 
@@ -118,7 +121,7 @@ pub const HookData = struct {
     }
 
     pub fn callback(self: *const HookData, args: anytype) void {
-        const t = Lua.state.rawGetIndex(zlua.registry_index, self.options.lua_cb_ref_idx);
+        const t = Lua.state.getIndexRaw(zlua.registry_index, self.options.lua_cb_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");
             Lua.state.pop(1);
@@ -128,7 +131,10 @@ pub const HookData = struct {
         // allow passing any arguments to the lua hook
         var i: u8 = 0;
         inline for (args, 1..) |field, k| {
-            try Lua.state.pushAny(field);
+            Lua.state.pushAny(field) catch {
+                std.log.err("Unable to push field to callback", .{});
+                Lua.state.pushNil();
+            };
             i = k;
         }
 
@@ -153,39 +159,37 @@ pub fn add(L: *zlua.Lua) i32 {
     // add. Regardless of which type is passed in we create an arraylist of
     // []const u8's
     if (L.isTable(1)) {
-        hook.events = gpa.alloc(comptime []const u8, L.objectLen(1)) catch Utils.oomPanic();
+        hook.events = gpa.alloc(comptime []const u8, L.lenRaw(1)) catch utils.oomPanic();
         var i: u32 = 0;
         L.pushNil();
         while (L.next(1)) {
             if (L.isString(-1)) {
                 const s = L.checkString(-1);
-                hook.events[i] = gpa.dupe(u8, s) catch Utils.oomPanic();
+                hook.events[i] = gpa.dupe(u8, s) catch utils.oomPanic();
                 i += 1;
             }
             L.pop(1);
         }
     } else if (L.isString(1)) {
-        hook.events = gpa.alloc(comptime []const u8, 1) catch Utils.oomPanic();
+        hook.events = gpa.alloc(comptime []const u8, 1) catch utils.oomPanic();
         const s = L.checkString(1);
-        hook.events[0] = gpa.dupe(u8, s) catch Utils.oomPanic();
+        hook.events[0] = gpa.dupe(u8, s) catch utils.oomPanic();
     }
 
     _ = L.getField(2, "callback");
     if (L.isFunction(-1)) {
-        hook.options.lua_cb_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        hook.options.lua_cb_ref_idx = L.ref(zlua.registry_index);
     }
 
     _ = L.getField(2, "once");
-    if (L.isBoolean(-1)) {
-        hook.options.once = L.toBoolean(-1);
-    }
+    hook.options.once = if(L.isBoolean(-1)) L.toBoolean(-1) else false;
 
     // TEST: this should be safe as the lua_cb_ref_idx's should never be the same
     // but that all really depends on the implementation of the hashmap
-    server.hooks.put(hook.options.lua_cb_ref_idx, hook) catch Utils.oomPanic();
+    server.hooks.put(hook.options.lua_cb_ref_idx, hook) catch utils.oomPanic();
 
     for (hook.events) |value| {
-        server.events.put(value, hook) catch Utils.oomPanic();
+        server.events.put(value, hook) catch utils.oomPanic();
     }
 
     L.pushInteger(hook.options.lua_cb_ref_idx);

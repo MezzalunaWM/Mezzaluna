@@ -1,4 +1,6 @@
-//! mez.input
+/// `mez.input` allows custom interactions between input
+/// devices and the Mezzaluna via keymaps and mousemaps
+
 const Input = @This();
 
 const std = @import("std");
@@ -6,15 +8,16 @@ const zlua = @import("zlua");
 const xkb = @import("xkbcommon");
 const wlr = @import("wlroots");
 
-const Utils = @import("../Utils.zig");
+const utils = @import("../utils.zig");
 const LuaUtils = @import("LuaUtils.zig");
 const RemoteLua = @import("../RemoteLua.zig");
 const ServerSeat = @import("../Seat.zig");
 const Seat = @import("Seat.zig");
 
-const c = @import("../C.zig").c;
+const c = @import("c");
 const server = &@import("../main.zig").server;
 const Lua = &@import("../main.zig").lua;
+const log = std.log.scoped(.@"Lua.Input");
 
 fn parse_modkeys(modStr: []const u8) wlr.Keyboard.ModifierMask {
     var it = std.mem.splitScalar(u8, modStr, '|');
@@ -45,7 +48,7 @@ pub const KeymapData = struct {
     pub fn callback(self: *const KeymapData, release: bool) void {
         const lua_ref_idx = if (release) self.options.lua_release_ref_idx else self.options.lua_press_ref_idx;
 
-        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        const t = Lua.state.getIndexRaw(zlua.registry_index, lua_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
             Lua.state.pop(1);
@@ -95,7 +98,7 @@ pub const MousemapData = struct {
             .scroll => self.options.lua_scroll_ref_idx
         };
 
-        const t = Lua.state.rawGetIndex(zlua.registry_index, lua_ref_idx);
+        const t = Lua.state.getIndexRaw(zlua.registry_index, lua_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call mousemap, it doesn't have a callback.");
             Lua.state.pop(1);
@@ -105,7 +108,9 @@ pub const MousemapData = struct {
         // allow passing any arguments to the lua hook
         var i: u8 = 0;
         inline for (args, 1..) |field, k| {
-            try Lua.state.pushAny(field);
+            Lua.state.pushAny(field) catch {
+                Lua.state.pushNil();
+            };
             i = k;
         }
 
@@ -149,12 +154,12 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
     _ = L.getField(3, "press");
     if (L.isFunction(-1)) {
-        keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        keymap.options.lua_press_ref_idx = L.ref(zlua.registry_index);
     }
 
     _ = L.getField(3, "release");
     if (L.isFunction(-1)) {
-        keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+        keymap.options.lua_release_ref_idx = L.ref(zlua.registry_index);
     }
 
     _ = L.getField(3, "repeat");
@@ -162,7 +167,7 @@ pub fn add_keymap(L: *zlua.Lua) i32 {
 
     const hash = KeymapData.hash(keymap.modifier, keymap.keysym);
     const seat = if (keymap.options.seat) |seat| seat else server.getDefaultSeat();
-    seat.keymaps.put(hash, keymap) catch Utils.oomPanic();
+    seat.keymaps.put(hash, keymap) catch utils.oomPanic();
 
     return 0;
 }
@@ -240,31 +245,31 @@ pub fn add_mousemap(L: *zlua.Lua) i32 {
 
         _ = L.getField(3, "press");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_press_ref_idx = L.ref(zlua.registry_index);
         }
 
         _ = L.getField(3, "release");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_release_ref_idx = L.ref(zlua.registry_index);
         }
 
         _ = L.getField(3, "drag");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_drag_ref_idx = L.ref(zlua.registry_index);
         }
     } else if(rel_event_code != 1){
         mousemap.event_code = rel_event_code;
 
         _ = L.getField(3, "scroll");
         if (L.isFunction(-1)) {
-            mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index) catch Utils.oomPanic();
+            mousemap.options.lua_scroll_ref_idx = L.ref(zlua.registry_index);
         }
     }
 
     if(mousemap.event_code != -1) {
         const hash = MousemapData.hash(mousemap.modifier, mousemap.event_code);
         const seat = if (mousemap.options.seat) |seat| seat else server.getDefaultSeat();
-        seat.mousemaps.put(hash, mousemap) catch Utils.oomPanic();
+        seat.mousemaps.put(hash, mousemap) catch utils.oomPanic();
     }
 
     return 0;

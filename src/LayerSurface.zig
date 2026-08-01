@@ -1,15 +1,16 @@
 const LayerSurface = @This();
 
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.LayerSurface);
 
 layer_surface_snd: SceneNode.Data,
 wlr_layer_surface: *wlr.LayerSurfaceV1,
@@ -23,7 +24,7 @@ commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
 
 pub fn init(wlr_layer_surface: *wlr.LayerSurfaceV1) *LayerSurface {
     errdefer wlr_layer_surface.destroy();
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(LayerSurface);
 
@@ -78,10 +79,10 @@ fn handleDestroy(listener: *wl.Listener(*wlr.LayerSurfaceV1), _: *wlr.LayerSurfa
 }
 
 fn handleMap(listener: *wl.Listener(void)) void {
-    const layer_suraface: *LayerSurface = @fieldParentPtr("map", listener);
-    layer_suraface.getOutput().arrangeLayers();
-    if (layer_suraface.wlr_layer_surface.current.keyboard_interactive != .none) {
-        server.getDefaultSeat().focusSurface(.{ .layer_surface = layer_suraface });
+    const layer_surface: *LayerSurface = @fieldParentPtr("map", listener);
+    layer_surface.getOutput().arrangeLayers();
+    if (layer_surface.wlr_layer_surface.current.keyboard_interactive != .none) {
+        server.getDefaultSeat().focusSurface(.{ .layer_surface = layer_surface });
     }
 }
 
@@ -94,7 +95,6 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
         }
     }
 
-    // FIXME: this crashes mez when killing mez
     layer_surface.getOutput().arrangeLayers();
 
     // TODO: Idk if this should be deiniting the layer surface entirely

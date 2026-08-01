@@ -1,16 +1,17 @@
 const KeyboardGroup = @This();
 
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 const xkb = @import("xkbcommon");
 
 const Keyboard = @import("Keyboard.zig");
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Seat = @import("Seat.zig");
 
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
-const gpa = std.heap.c_allocator;
+const log = std.log.scoped(.KeyboardGroup);
 
 wlr_group: *wlr.KeyboardGroup,
 repeat_source: ?*wl.EventSource,
@@ -19,14 +20,14 @@ keysyms: ?[]const xkb.Keysym,
 seat: *Seat,
 
 pub fn init(seat: *Seat) *KeyboardGroup {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(KeyboardGroup);
     self.* = .{
-        .wlr_group = wlr.KeyboardGroup.create() catch Utils.oomPanic(),
+        .wlr_group = wlr.KeyboardGroup.create() catch utils.oomPanic(),
         .repeat_source = blk: {
             break :blk server.event_loop.addTimer(?*KeyboardGroup, handleRepeat, self) catch {
-                std.log.err("Failed to create event loop timer, keyboard repeating will not work!", .{});
+                log.err("Failed to create event loop timer, keyboard repeating will not work!", .{});
                 break :blk null;
             };
         },
@@ -45,7 +46,7 @@ pub fn addKeyboard(self: *KeyboardGroup, keyboard: *Keyboard) void {
     }
 
     if (!self.wlr_group.addKeyboard(keyboard.wlr_keyboard)) {
-        std.log.err("Adding new keyboard `{s}` failed", .{ keyboard.wlr_keyboard.base.name orelse "(unnamed)" });
+        log.err("Adding new keyboard `{s}` failed", .{ keyboard.wlr_keyboard.base.name orelse "(unnamed)" });
     }
     keyboard.group = self;
 }
@@ -75,7 +76,7 @@ fn handleRepeat(data: ?*KeyboardGroup) c_int {
         @divTrunc(1000, data.?.wlr_group.keyboard.repeat_info.rate),
     ) catch {
         // not sure how big of a deal it is if we miss a timer update
-        std.log.warn("failed to update keyboard repeat timer", .{});
+        log.warn("failed to update keyboard repeat timer", .{});
     };
     for (data.?.keysyms.?) |sym| {
         _ = Keyboard.keypress(data.?.seat, data.?.modifiers.?, sym, .pressed);

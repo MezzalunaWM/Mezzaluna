@@ -1,14 +1,15 @@
 const Popup = @This();
 
 const std = @import("std");
-const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
 
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const Output = @import("Output.zig");
 
-const gpa = std.heap.c_allocator;
+const gpa = &@import("main.zig").gpa;
 const server = &@import("main.zig").server;
+const log = std.log.scoped(.Popup);
 
 id: u64,
 
@@ -16,16 +17,16 @@ xdg_popup: *wlr.XdgPopup,
 tree: *wlr.SceneTree,
 
 // Surface Listeners
-destroy: wl.Listener(void) = wl.Listener(void).init(handleDestroy),
-commit: wl.Listener(*wlr.Surface) = wl.Listener(*wlr.Surface).init(handleCommit),
-new_popup: wl.Listener(*wlr.XdgPopup) = wl.Listener(*wlr.XdgPopup).init(handleNewPopup),
-reposition: wl.Listener(void) = wl.Listener(void).init(handleReposition),
+destroy: wl.Listener(void) = .init(handleDestroy),
+commit: wl.Listener(*wlr.Surface) = .init(handleCommit),
+new_popup: wl.Listener(*wlr.XdgPopup) = .init(handleNewPopup),
+reposition: wl.Listener(void) = .init(handleReposition),
 
 pub fn init(
     xdg_popup: *wlr.XdgPopup,
     parent: *wlr.SceneTree,
 ) *Popup {
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const self = try gpa.create(Popup);
     errdefer gpa.destroy(self);

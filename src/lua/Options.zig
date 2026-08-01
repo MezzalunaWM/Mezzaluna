@@ -1,9 +1,10 @@
 const std = @import("std");
 const zlua = @import("zlua");
-pub const log = std.log.scoped(.lua);
 
 const server = &@import("../main.zig").server;
+pub const log = std.log.scoped(.@"Lua.Options");
 
+// Defenitions of mezzaluna option and their defaults
 const DEFAULT_OPTIONS = .{
     .{ .name = "new_view_output", .default = 0 },
     .{ .name = "new_view_hidden", .default = false }
@@ -23,7 +24,6 @@ pub fn getDefaultOptions(L: *zlua.Lua) void {
             continue;
         };
 
-        std.log.debug("Pushing {s} as {}", .{op.name, op.defaultValue().?});
         L.setField(-2, op.name);
     }
 }
@@ -31,7 +31,7 @@ pub fn getDefaultOptions(L: *zlua.Lua) void {
 pub fn getOption(comptime T: zlua.LuaType, option_name: [:0]const u8) ?ReturnTypeFromLuaType(T) {
     const L = &@import("../main.zig").lua.state.*;
 
-    _ = L.getGlobal("mez") catch unreachable;
+    if(L.getGlobal("mez") == .nil) unreachable;
     defer L.pop(1);
 
     _ = L.pushString("opt");

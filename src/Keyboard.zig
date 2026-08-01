@@ -1,24 +1,26 @@
-//! Maintains state related to keyboard input devices,
-//! events such as button presses and dragging
+/// Maintains state related to keyboard input devices,
+/// events such as button presses and dragging
 
 const Keyboard = @This();
 
 const std = @import("std");
-const gpa = std.heap.c_allocator;
-const server = &@import("main.zig").server;
+const wlr = @import("wlroots");
+const wl = @import("wayland").server.wl;
+
 const Keymap = @import("lua/Input.zig").KeymapData;
-const Utils = @import("Utils.zig");
+const utils = @import("utils.zig");
 const KeyboardGroup = @import("KeyboardGroup.zig");
 const Seat = @import("Seat.zig");
 
-const wl = @import("wayland").server.wl;
-const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
-const c = @import("C.zig").c;
+const gpa = &@import("main.zig").gpa;
+const server = &@import("main.zig").server;
+const c = @import("c");
+const log = std.log.scoped(.Keyboard);
 
 wlr_keyboard: *wlr.Keyboard,
-context: *xkb.Context,
+context: ?*xkb.Context,
 // there's wlr.KeyboardGroup.fromKeyboard, but it doesn't seem to work
 group: ?*KeyboardGroup,
 
@@ -31,17 +33,10 @@ modifiers: wl.Listener(*wlr.Keyboard) = .init(handleModifiers),
 destroy: wl.Listener(*wlr.InputDevice) = .init(handleDestroy),
 
 pub fn init(device: *wlr.InputDevice) *Keyboard {
-    const self = gpa.create(Keyboard) catch Utils.oomPanic();
-
-    // TODO: there is no world where pluggin in a keyboard should crash the
-    // compositor >:(
-    errdefer {
-        std.log.err("Unable to initialize new keyboard, exiting", .{});
-        std.process.exit(6);
-    }
+    const self = gpa.create(Keyboard) catch utils.oomPanic();
 
     self.* = .{
-        .context = xkb.Context.new(.no_flags) orelse return error.ContextFailed,
+        .context = xkb.Context.new(.no_flags),
         .wlr_keyboard = device.toKeyboard(),
         .group = null,
     };
@@ -75,7 +70,7 @@ fn handleModifiers(listener: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Key
 fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
     const self: *Keyboard = @fieldParentPtr("key", listener);
     const seat = if (self.group) |group| group.seat else {
-        std.log.warn(
+        log.warn(
             "dropping keyboard event: `{}` no keyboard group available",
             .{event}
         );
@@ -122,7 +117,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         self.group.?.repeat_source.?.timerUpdate(
             self.wlr_keyboard.repeat_info.delay,
         ) catch {
-            std.log.warn("failed to update keyboard repeat timer", .{});
+            log.warn("failed to update keyboard repeat timer", .{});
         };
     } else {
         self.group.?.modifiers = null;
@@ -134,7 +129,7 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
     }
 
-    // tell the idle notifier that we've recieved activity now that it's been
+    // tell the idle notifier that we've received activity now that it's been
     // fully processed
     server.idle_notifier.notifyActivity(seat.wlr_seat);
 }
@@ -159,13 +154,13 @@ pub fn keypress(
 }
 
 fn handleKeyMap(_: *wl.Listener(*wlr.Keyboard), _: *wlr.Keyboard) void {
-    std.log.err("Unimplemented handle keyboard keymap", .{});
+    log.err("Unimplemented handle keyboard keymap", .{});
 }
 
 pub fn handleDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {
     const keyboard: *Keyboard = @fieldParentPtr("destroy", listener);
 
-    std.log.debug("removing keyboard: {s}", .{keyboard.wlr_keyboard.base.name orelse "(null)"});
+    log.debug("removing keyboard: {s}", .{keyboard.wlr_keyboard.base.name orelse "(null)"});
 
     keyboard.modifiers.link.remove();
     keyboard.key.link.remove();

@@ -1,18 +1,19 @@
-/// The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs:
+/// The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs
+
 const Root = @This();
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
-
-const server = &@import("main.zig").server;
+const utils = @import("utils.zig");
 
 const Output = @import("Output.zig");
 const View = @import("View.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const SceneNode = @import("SceneNode.zig");
 
-const Utils = @import("Utils.zig");
+const server = &@import("main.zig").server;
+const log = std.log.scoped(.Root);
 
 scene_node_data: SceneNode.Data,
 
@@ -36,9 +37,9 @@ output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutpu
 output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleOutputPowerManagerSet),
 
 pub fn init(self: *Root) void {
-    std.log.info("Creating root of mezzaluna\n", .{});
+    log.info("Creating root of mezzaluna\n", .{});
 
-    errdefer Utils.oomPanic();
+    errdefer utils.oomPanic();
 
     const output_layout = try wlr.OutputLayout.create(server.wl_server);
     errdefer output_layout.destroy();
@@ -74,11 +75,16 @@ pub fn init(self: *Root) void {
 }
 
 pub fn deinit(self: *Root) void {
-    var it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(&self.scene.tree);
+    self.output_manager_apply.link.remove();
+    self.output_manager_test.link.remove();
+    self.output_power_manager_set.link.remove();
 
-    while (it.next()) |scene_node_data| {
-        std.debug.assert(scene_node_data.* == .output);
-        scene_node_data.output.deinit();
+    var output_it = self.output_layout.outputs.safeIterator(.forward);
+    while(output_it.next()) |o| {
+        std.debug.assert(o.output.data != null);
+        const output: *Output = @ptrCast(@alignCast(o.output.data.?));
+
+        output.deinit();
     }
 
     self.output_layout.destroy();
@@ -88,15 +94,15 @@ pub fn deinit(self: *Root) void {
 
 pub fn configureOutputs(self: *const Root) void {
     // update the config with all monitors and send it to the output_manager
-    const config = wlr.OutputConfigurationV1.create() catch Utils.oomPanic();
+    const config = wlr.OutputConfigurationV1.create() catch utils.oomPanic();
 
     // TODO: do we ommit disabled monitors here?
     var iter = self.scene.outputs.iterator(.forward);
     while (iter.next()) |scene_output| {
-        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch Utils.oomPanic();
+        const config_head = wlr.OutputConfigurationV1.Head.create(config, scene_output.output) catch utils.oomPanic();
 
         if (self.output_layout.get(scene_output.output)) |o| {
-            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch Utils.oomPanic();
+            _ = self.output_layout.add(scene_output.output, o.x, o.y) catch utils.oomPanic();
 
             config_head.state.x = o.x;
             config_head.state.y = o.y;
