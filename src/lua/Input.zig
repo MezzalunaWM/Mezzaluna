@@ -105,10 +105,14 @@ pub const MousemapData = struct {
             return false;
         }
 
-        // allow passing any arguments to the lua hook
+        // allow passing any arguments to the lua callback
         var i: u8 = 0;
         inline for (args, 1..) |field, k| {
             Lua.state.pushAny(field) catch {
+                std.log.err(
+                    "Unable to push field (type {}) to mousemap callback",
+                    .{@TypeOf(field)}
+                );
                 Lua.state.pushNil();
             };
             i = k;
