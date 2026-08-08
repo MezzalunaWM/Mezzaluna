@@ -27,8 +27,10 @@ fn output_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The output id must be >= 0 and < inf", .{});
 }
 
+/// ---@class output_id
+
 /// ---Get the view ids for all available outputs
-/// ---@return integer[]
+/// ---@return view_id[]
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var it = server.root.scene.outputs.iterator(.forward);
     var index: usize = 1;
@@ -49,8 +51,8 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 }
 
 /// ---Returns all the ids of views within an output
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return integer[]?
+/// ---@param output_id output_id|`0` 0 maps to focused output
+/// ---@return view_id[]
 pub fn get_views(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -108,7 +110,7 @@ const get_output_state = struct {
 /// ---@field modes { width: integer, height: integer, refresh: number, preferred: bool }
 
 /// ---Get the state of an output
-/// ---@param output_id integer 0 maps to focused output
+/// ---@param output_id output_id|`0` 0 maps to focused output
 /// ---@return output_state?
 pub fn get_state(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
@@ -165,6 +167,15 @@ const set_output_state = struct {
     mode: ?Mode,
 };
 
+/// ---@class output_options
+/// ---@field position { x: integer, y: integer }?
+/// ---@field scale number?
+/// ---@field transform any
+/// ---@field mode { width: integer, height: integer, refresh: integer }
+
+/// ---Set the state of an output
+/// ---@param output_id output_id|`0` 0 maps to focused output
+/// ---@param output_options output_options
 pub fn set_state(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
@@ -203,8 +214,8 @@ pub fn set_state(L: *zlua.Lua) i32 {
     return 1;
 }
 
-/// ---@param output_id integer 0 maps to focused output
-/// ---@return integer? nil if output has no fullscreen view
+/// ---@param output_id output_id|`0` 0 maps to focused output
+/// ---@return view_id? nil if output has no fullscreen view
 pub fn get_fullscreen_view(L: *zlua.Lua) i32 {
     const output_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch output_id_err(L);
 
