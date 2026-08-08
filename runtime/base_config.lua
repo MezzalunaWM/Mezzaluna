@@ -6,24 +6,58 @@ local run_launcher = "wmenu-run"
 
 do
   local layout_manager = require("layout_manager")
-  layout_manager.setup({ mod_key = mod })
-
+  local config = {
+    mod_key = mod,
+    tag_count = 5
+  }
+  layout_manager.setup(config)
   local master_layout = layout_manager.get_layout("master")
-  mez.input.add_keymap(mod, "h", {
+
+  mez.input.add_keymap(config.mod_key, "j", {
+    press = function ()
+      layout_manager.focus_next()
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_keymap(config.mod_key, "k", {
+    press = function ()
+      layout_manager.focus_previous()
+      mez.view.apply()
+    end
+  })
+
+  for i = 1, config.tag_count do
+    mez.input.add_keymap(config.mod_key, tostring(i), {
+      press = function ()
+        layout_manager.switch_to_tag(i)
+        mez.view.apply()
+      end
+    })
+
+    mez.input.add_keymap(config.mod_key .. "|shift", tostring(i), {
+      press = function ()
+        layout_manager.send_to_tag(0, i)
+        mez.view.apply()
+      end
+    })
+  end
+
+  mez.input.add_keymap(config.mod_key, "h", {
     press = function ()
       master_layout.builtins.dec_master_ratio(0.05)
       mez.view.apply()
     end
   })
 
-  mez.input.add_keymap(mod, "l", {
+  mez.input.add_keymap(config.mod_key, "l", {
     press = function ()
       master_layout.builtins.inc_master_ratio(0.05)
       mez.view.apply()
     end
   })
 
-  mez.input.add_keymap(mod, "Return", {
+  mez.input.add_keymap(config.mod_key, "Return", {
     press = function ()
       master_layout.builtins.zoom(0)
       mez.view.apply()
@@ -85,6 +119,7 @@ mez.hook.add("ViewCommitPost", {
 mez.hook.add("ViewPointerMotion", {
 	callback = function (view_id, _, _, seat_id)
     mez.seat.set_focused_view(seat_id, view_id)
+    mez.view.apply()
 	end
 })
 

@@ -122,11 +122,10 @@ M.focus_next = function ()
   local list = view_addr.floating and tag.floating or tag.tiling
   local other = view_addr.floating and tag.tiling or tag.floating
 
-  local next_view = list[view_addr.view_idx + 1]
-      or other[1]
-      or list[1]
+  local next_view = list[view_addr.view_idx + 1] or other[1] or list[1]
 
   mez.seat.set_focused_view(0, next_view)
+  tag.last_focused = next_view
 end
 
 --- Focus the previous view in the tag. Cycles the floating list,
@@ -148,6 +147,7 @@ M.focus_previous = function ()
       or list[#list]
 
   mez.seat.set_focused_view(0, prev_view)
+  tag.last_focused = prev_view
 end
 
 
@@ -177,6 +177,61 @@ M.make_tiling = function (view_id)
 
   local tag = M.get_tag(view_addr.tag_idx)
   tag.tiling[#tag.tiling + 1] = table.remove(tag.floating, view_addr.view_idx)
+end
+
+---Send view to a tag, will retain current state in new tag
+---@param view_id view_id|`0` 0 maps ot focused view
+---@param tag_idx integer
+M.send_to_tag = function (view_id, tag_idx)
+  if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
+  if not view_id then return end
+
+  local view_addr = M.find_view(view_id)
+  if not view_addr then return end
+
+  local from_tag = M.state.tags[view_addr.tag_idx]
+  local to_tag = M.state.tags[tag_idx]
+  if not to_tag then return end
+
+  local from_list = view_addr.floating and from_tag.floating or from_tag.tiling
+  local to_list = view_addr.floating and to_tag.floating or to_tag.tiling
+
+  to_list[#to_list + 1] = table.remove(from_list, view_addr.view_idx)
+
+  M.tile_tag(view_addr.tag_idx)
+  M.tile_tag(tag_idx)
+end
+
+---Set the enable of all views in a tag
+---@param tag_idx integer
+M.set_tag_enabled = function (tag_idx, enabled)
+  local tag = M.state.tags[tag_idx]
+
+  for _, view_id in ipairs(tag.floating) do
+    mez.view.set_enabled(view_id, enabled)
+  end
+
+  for _, view_id in ipairs(tag.tiling) do
+    mez.view.set_enabled(view_id, enabled)
+  end
+end
+
+---Disable current tag, and enabled new tag
+---@param tag_idx integer
+M.switch_to_tag = function (tag_idx)
+  if tag_idx == M.state.tag_idx then return end
+
+  local view_id = mez.seat.get_focused_view(0)
+  local view_addr = M.find_view(view_id)
+  if view_addr.tag_idx == tag_idx then
+    M.state.tags[tag_idx].last_focused = view_id
+  end
+
+  M.set_tag_enabled(M.state.tag_idx, false)
+  M.set_tag_enabled(tag_idx, true)
+
+  M.state.tag_idx = tag_idx
+  mez.seat.set_focused_view(0, M.state.tags[tag_idx].last_focused)
 end
 
 ---@class (exact) LM_Config
@@ -341,42 +396,6 @@ M.setup = function (config)
     M.add_layout(layout)
   end
 
-  -- Keybinds
-  mez.input.add_keymap(config.mod_key, "j", {
-    press = function ()
-      M.focus_next()
-    end
-  })
-  mez.input.add_keymap(config.mod_key, "k", {
-    press = function ()
-      M.focus_previous()
-    end
-  })
-
-  for i = 1, config.tag_count do
-    mez.input.add_keymap(config.mod_key, tostring(i), {
-      -- Make this a public function to the layout manager
-      press = function ()
-        local view_addr = M.find_view(0)
-        if not view_addr then return end
-
-        local from_tag = M.state.tags[view_addr.tag_idx]
-        local to_tag = M.state.tags[i]
-        if not to_tag then return end
-
-        local from_list = view_addr.floating and from_tag.floating or from_tag.tiling
-        local to_list = view_addr.floating and to_tag.floating or to_tag.tiling
-
-        to_list[#to_list + 1] = table.remove(from_list, view_addr.view_idx)
-
-        M.tile_tag(view_addr.tag_idx)
-        M.tile_tag(i)
-
-        mez.view.apply()
-      end
-    })
-  end
-
   -- Hooks
   mez.hook.add("ViewCommitPost", {
     callback = function(view_id, initial)
@@ -414,6 +433,7 @@ M.setup = function (config)
     press = function(view_id)
       M.make_floating(view_id)
       M.tile_tag(0)
+      mez.view.raise_to_top(view_id)
       mez.view.apply()
     end,
     drag = function(view_id, pos, _, offset)
@@ -439,6 +459,7 @@ M.setup = function (config)
     press = function(view_id)
       M.make_floating(view_id)
       M.tile_tag(0)
+      mez.view.raise_to_top(view_id)
       mez.view.set_resizing(view_id, true)
       mez.view.apply()
     end,
