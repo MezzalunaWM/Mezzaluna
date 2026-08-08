@@ -2,7 +2,6 @@ local M = {}
 
 local utils = {}
 
-
 ---Find view ID within all tags
 ---@param view_id integer
 ---@return "master" | "floating" | "stacking" | nil view_type

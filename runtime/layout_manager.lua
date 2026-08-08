@@ -150,6 +150,35 @@ M.focus_previous = function ()
   mez.seat.set_focused_view(0, prev_view)
 end
 
+
+---Make a tiling view floating
+---@param view_id view_id|`0` 0 maps to focused view
+M.make_floating = function (view_id)
+  if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
+  if not view_id then return end
+
+  local view_addr = M.find_view(view_id --[[@as view_id]])
+  if not view_addr then return end
+  if view_addr.floating then return end
+
+  local tag = M.get_tag(view_addr.tag_idx)
+  tag.floating[#tag.floating + 1] = table.remove(tag.tiling, view_addr.view_idx)
+end
+
+---Make a floating view tiling
+---@param view_id view_id|`0` 0 maps to focused view
+M.make_tiling = function (view_id)
+  if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
+  if not view_id then return end
+
+  local view_addr = M.find_view(view_id --[[@as view_id]])
+  if not view_addr then return end
+  if not view_addr.floating then return end
+
+  local tag = M.get_tag(view_addr.tag_idx)
+  tag.tiling[#tag.tiling + 1] = table.remove(tag.floating, view_addr.view_idx)
+end
+
 ---@class (exact) LM_Config
 ---@field mod_key string
 ---@field tag_count integer
@@ -212,16 +241,26 @@ local default_config = {
       builtins = {
         ---@param delta number amount to increment the master ratio by
         inc_master_ratio = function (delta)
-          local context = M.get_tag_layout_context(0)
-          if context == nil then return end
-          context.master_ratio = clamp(context.master_ratio + 0.1, 0.1, 0.9)
+          local tag = M.get_tag(0)
+          if not tag then return end
+
+          local context = tag.contexts["master"]
+          if not context then return end
+
+          context.master_ratio = clamp(context.master_ratio + delta, 0.1, 0.9)
+          M.tile_tag(0)
         end,
 
         ---@param delta number amount to decrement the master ratio by
         dec_master_ratio = function (delta)
-          local context = M.get_tag_layout_context(0)
-          if context == nil then return end
-          context.master_ratio = clamp(context.master_ratio + 0.1, 0.1, 0.9)
+          local tag = M.get_tag(0)
+          if not tag then return end
+
+          local context = tag.contexts["master"]
+          if not context then return end
+
+          context.master_ratio = clamp(context.master_ratio - delta, 0.1, 0.9)
+          M.tile_tag(0)
         end,
 
         ---Swap a stack view and the master
@@ -237,34 +276,7 @@ local default_config = {
 
           local from = view_addr.floating and tag.floating or tag.tiling
           table.insert(tag.tiling, 1, table.remove(from, view_addr.view_idx))
-        end,
-
-        ---Make a tiling view floating
-        ---@param view_id view_id|`0` 0 maps to focused view
-        make_floating = function (view_id)
-          if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
-          if not view_id then return end
-
-          local view_addr = M.find_view(view_id --[[@as view_id]])
-          if not view_addr then return end
-          if view_addr.floating then return end
-
-          local tag = M.get_tag(view_addr.tag_idx)
-          tag.floating[#tag.floating + 1] = table.remove(tag.tiling, view_addr.view_idx)
-        end,
-
-        ---Make a floating view tiling
-        ---@param view_id view_id|`0` 0 maps to focused view
-        make_tiling = function (view_id)
-          if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
-          if not view_id then return end
-
-          local view_addr = M.find_view(view_id --[[@as view_id]])
-          if not view_addr then return end
-          if not view_addr.floating then return end
-
-          local tag = M.get_tag(view_addr.tag_idx)
-          tag.tiling[#tag.tiling + 1] = table.remove(tag.floating, view_addr.view_idx)
+          M.tile_tag(0)
         end
       }
     }
@@ -292,6 +304,12 @@ M.add_layout = function (layout)
   for _, tag in ipairs(M.state.tags) do
     tag.contexts[layout.name] = table_deep_copy(layout.default_context)
   end
+end
+
+---@param layout_name string
+---@return LM_Layout?
+M.get_layout = function (layout_name)
+  return M.state.layouts[layout_name]
 end
 
 ---@param config LM_Config
@@ -335,6 +353,30 @@ M.setup = function (config)
     end
   })
 
+  for i = 1, config.tag_count do
+    mez.input.add_keymap(config.mod_key, tostring(i), {
+      -- Make this a public function to the layout manager
+      press = function ()
+        local view_addr = M.find_view(0)
+        if not view_addr then return end
+
+        local from_tag = M.state.tags[view_addr.tag_idx]
+        local to_tag = M.state.tags[i]
+        if not to_tag then return end
+
+        local from_list = view_addr.floating and from_tag.floating or from_tag.tiling
+        local to_list = view_addr.floating and to_tag.floating or to_tag.tiling
+
+        to_list[#to_list + 1] = table.remove(from_list, view_addr.view_idx)
+
+        M.tile_tag(view_addr.tag_idx)
+        M.tile_tag(i)
+
+        mez.view.apply()
+      end
+    })
+  end
+
   -- Hooks
   mez.hook.add("ViewCommitPost", {
     callback = function(view_id, initial)
@@ -365,6 +407,67 @@ M.setup = function (config)
         if view_addr.view_idx == #list + 1 then focus_idx = focus_idx - 1 end
         mez.seat.set_focused_view(0, list[focus_idx])
       end
+    end
+  })
+
+  mez.input.add_mousemap(config.mod_key, "BTN_LEFT", {
+    press = function(view_id)
+      M.make_floating(view_id)
+      M.tile_tag(0)
+      mez.view.apply()
+    end,
+    drag = function(view_id, pos, _, offset)
+      if view_id ~= nil then
+        mez.view.set_geometry(view_id, {
+          x = pos.x - offset.x,
+          y = pos.y - offset.y
+        })
+        mez.view.apply();
+      end
+    end
+  })
+
+  mez.input.add_mousemap(config.mod_key, "BTN_MIDDLE", {
+    press = function(view_id)
+      M.make_tiling(view_id)
+      M.tile_tag(0)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_mousemap(config.mod_key, "BTN_RIGHT", {
+    press = function(view_id)
+      M.make_floating(view_id)
+      M.tile_tag(0)
+      mez.view.set_resizing(view_id, true)
+      mez.view.apply()
+    end,
+    drag = function(view_id, pos, drag_start, offset)
+      if view_id ~= nil then
+        local width = (pos.x - drag_start.x) + offset.x
+        local height = (pos.y - drag_start.y) + offset.y
+
+        if width <= 10 then width = 10 end
+        if height <= 10 then height = 10 end
+        mez.view.set_geometry(view_id, {
+          width = width,
+          height = height
+        })
+        mez.view.apply()
+      end
+    end,
+    release = function (view_id)
+      mez.view.set_resizing(view_id, false)
+      mez.view.apply()
+    end
+  })
+
+  mez.hook.add("OutputStateChange", {
+    callback = function ()
+      for i = 1, #M.state.tags do
+        M.tile_tag(i)
+      end
+      mez.view.apply()
     end
   })
 

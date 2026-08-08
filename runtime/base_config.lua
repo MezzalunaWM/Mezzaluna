@@ -4,8 +4,32 @@ local mod = "alt"
 local terminal_emulator = "foot"
 local run_launcher = "wmenu-run"
 
-local layout_manager = require("layout_manager")
-layout_manager.setup({ mod_key = mod })
+do
+  local layout_manager = require("layout_manager")
+  layout_manager.setup({ mod_key = mod })
+
+  local master_layout = layout_manager.get_layout("master")
+  mez.input.add_keymap(mod, "h", {
+    press = function ()
+      master_layout.builtins.dec_master_ratio(0.05)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_keymap(mod, "l", {
+    press = function ()
+      master_layout.builtins.inc_master_ratio(0.05)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_keymap(mod, "Return", {
+    press = function ()
+      master_layout.builtins.zoom(0)
+      mez.view.apply()
+    end
+  })
+end
 
 -- local master = require("master")
 -- master.setup({ mod_key = mod })
