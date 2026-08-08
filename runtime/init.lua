@@ -36,7 +36,6 @@ local plugin_dir = mez.fs.joinpath(env_data, "mez", "plugins")
 -- TODO: we should make a function for this in mez.fs instead of using the shell
 os.execute("mkdir -p " .. plugin_dir)
 
-
 -- New `package.loaders` searcher that changes the behaviour of "." in `require`
 -- Tokenize `require` argument over ".", and token by token, replace "?" for
 -- each entry in `package.path`. This gives a printf effect for require file finding
@@ -58,8 +57,7 @@ local printf_searcher = function (virtual_file)
       path = string.gsub(path, "?", tok, 1)
     end
 
-    if exausted and io.open(path) ~= nil then
-      print("loading " .. path)
+    if exausted and mez.fs.stat(path) then
       return function ()
         return dofile(path)
       end

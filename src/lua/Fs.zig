@@ -41,6 +41,46 @@ pub fn joinpath(L: *zlua.Lua) i32 {
     return 1;
 }
 
+/// ---@class (exact) FileStat
+/// ---@field kind string
+/// ---@field size integer
+/// ---@field ctime integer time of last status/metadata change in seconds since Unix epoch
+/// ---@field mtime integer time of last modification in seconds since Unix epoch
+
+/// ---give file or file system status
+/// ---@param file string
+/// ---@return FileStat
+pub fn stat(L: *zlua.Lua) i32 {
+    const nargs: i32 = L.getTop();
+    if (nargs < 1) {
+        L.raiseErrorStr("Expected a file path to stat", .{});
+    }
+
+    const file_path = L.checkString(1);
+
+    var follow_symlinks = true;
+    if (L.isTable(2)) {
+        _ = L.pushString("follow_symlinks");
+        if (L.getTable(2) == .boolean) {
+            follow_symlinks = L.toBoolean(-1);
+        }
+        L.pop(1);
+    }
+
+    const res = std.Io.Dir.cwd().statFile(io.*, file_path, .{ .follow_symlinks = follow_symlinks }) catch {
+        L.pushNil();
+        return 1;
+    };
+
+    L.pushAny(.{
+        .kind = @tagName(res.kind),
+        .size = res.size,
+        .ctime = res.ctime.toSeconds(),
+        .mtime = res.mtime.toSeconds()
+    }) catch unreachable;
+    return 1;
+}
+
 /// ---open a directory and return its iterator
 /// ---The iterator returns a `file_name` and `kind`
 /// ---The kind may be any one of the following:
