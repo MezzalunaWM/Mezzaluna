@@ -122,9 +122,12 @@ M.focus_next = function ()
   local list = view_addr.floating and tag.floating or tag.tiling
   local other = view_addr.floating and tag.tiling or tag.floating
 
-  local next_view = list[view_addr.view_idx + 1] or other[1] or list[1]
+  local next_view = list[view_addr.view_idx + 1]
+    or other[1]
+    or list[1]
 
   mez.seat.set_focused_view(0, next_view)
+  M.tile_tag(0)
 end
 
 --- Focus the previous view in the tag. Cycles the floating list,
@@ -146,6 +149,7 @@ M.focus_previous = function ()
       or list[#list]
 
   mez.seat.set_focused_view(0, prev_view)
+  M.tile_tag(0)
 end
 
 ---Toggle fullscreen status of a view
@@ -369,6 +373,7 @@ M.add_layout = function (layout)
   if M.state.layouts[layout.name] ~= nil then return end
   M.state.layouts[layout.name] = layout
 
+  if not layout.default_context then return end
   for _, tag in ipairs(M.state.tags) do
     tag.contexts[layout.name] = table_deep_copy(layout.default_context)
   end

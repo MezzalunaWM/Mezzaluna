@@ -32,7 +32,6 @@ do
     end
   })
 
-
   for i = 1, config.tag_count do
     mez.input.add_keymap(mod, tostring(i), {
       press = function ()
@@ -66,6 +65,14 @@ do
   mez.input.add_keymap(mod, "Return", {
     press = function ()
       master_layout.builtins.zoom(0)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_keymap(mod, "t", {
+    press = function ()
+      layout_manager.get_tag(0).layout = "master"
+      layout_manager.tile_tag(0)
       mez.view.apply()
     end
   })
