@@ -267,7 +267,7 @@ pub fn setActivated(self: *View, activated: bool) void {
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
     // Before a view's focus is set
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "A view has had it's pending focus status set.");
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "A view has had it's pending focus status set.");
 
     self.pending.?.activated = activated;
 }
@@ -443,6 +443,7 @@ pub fn applySending(self: *View) void {
         server.events.exec("ViewSetFullscreenPost", .{ self.id, self.sending.?.fullscreen }, "A view has had it's pending fullscreen status applied.");
 
     if (self.sending.?.activated != self.current.activated) {
+        if (self.sending.?.activated) self.focus_count +|= 1 else self.focus_count -|= 1;
         server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated, self.focus_count }, "A view has had it's pending focus status applied.");
     }
 
