@@ -167,7 +167,7 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 /// ---if true and will enter content layer if false.
 /// ---and remove any preexisting fullscreened view for it's output.
 /// ---@param view_id view_id|`0` 0 maps to focused view
-/// ---@param fullscreen bool status of fullscreen
+/// ---@param fullscreen boolean status of fullscreen
 pub fn set_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const fullscreen = L.toBoolean(2);
@@ -181,7 +181,7 @@ pub fn set_fullscreen(L: *zlua.Lua) i32 {
 
 /// ---True if view is fullscreened, false otherwise
 /// ---@param view_id view_id|`0` 0 maps to focused view
-/// ---@return bool?
+/// ---@return boolean?
 pub fn get_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -225,7 +225,7 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
 
 /// ---Set the view's resizing status.
 /// ---@param view_id view_id|`0` 0 maps to focused view
-/// ---@param resizing bool status of resizing
+/// ---@param resizing boolean status of resizing
 pub fn set_resizing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const resizing = L.toBoolean(2);
@@ -239,7 +239,7 @@ pub fn set_resizing(L: *zlua.Lua) i32 {
 
 /// ---True if view is resizing, false otherwise
 /// ---@param view_id view_id|`0` 0 maps to focused view
-/// ---@return bool
+/// ---@return boolean
 pub fn get_resizing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 

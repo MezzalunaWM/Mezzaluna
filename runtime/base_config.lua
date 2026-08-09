@@ -6,36 +6,42 @@ local run_launcher = "wmenu-run"
 
 do
   local layout_manager = require("layout_manager")
-  local config = {
-    mod_key = mod,
-    tag_count = 5
-  }
+  local config = { tag_count = 5 }
   layout_manager.setup(config)
   local master_layout = layout_manager.get_layout("master")
 
-  mez.input.add_keymap(config.mod_key, "j", {
+  -- Keybinds and mousemaps for layout manager
+  mez.input.add_keymap(mod, "j", {
     press = function ()
       layout_manager.focus_next()
       mez.view.apply()
     end
   })
 
-  mez.input.add_keymap(config.mod_key, "k", {
+  mez.input.add_keymap(mod, "k", {
     press = function ()
       layout_manager.focus_previous()
       mez.view.apply()
     end
   })
 
+  mez.input.add_keymap(mod .. "|shift", "F", {
+    press = function ()
+      layout_manager.toggle_fullscreen(0)
+      mez.view.apply()
+    end
+  })
+
+
   for i = 1, config.tag_count do
-    mez.input.add_keymap(config.mod_key, tostring(i), {
+    mez.input.add_keymap(mod, tostring(i), {
       press = function ()
         layout_manager.switch_to_tag(i)
         mez.view.apply()
       end
     })
 
-    mez.input.add_keymap(config.mod_key .. "|shift", tostring(i), {
+    mez.input.add_keymap(mod .. "|shift", tostring(i), {
       press = function ()
         layout_manager.send_to_tag(0, i)
         mez.view.apply()
@@ -43,23 +49,77 @@ do
     })
   end
 
-  mez.input.add_keymap(config.mod_key, "h", {
+  mez.input.add_keymap(mod, "h", {
     press = function ()
       master_layout.builtins.dec_master_ratio(0.05)
       mez.view.apply()
     end
   })
 
-  mez.input.add_keymap(config.mod_key, "l", {
+  mez.input.add_keymap(mod, "l", {
     press = function ()
       master_layout.builtins.inc_master_ratio(0.05)
       mez.view.apply()
     end
   })
 
-  mez.input.add_keymap(config.mod_key, "Return", {
+  mez.input.add_keymap(mod, "Return", {
     press = function ()
       master_layout.builtins.zoom(0)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_mousemap(mod, "BTN_LEFT", {
+    press = function(view_id)
+      layout_manager.make_floating(view_id)
+      layout_manager.tile_tag(0)
+      mez.view.raise_to_top(view_id)
+      mez.view.apply()
+    end,
+    drag = function(view_id, pos, _, offset)
+      if view_id ~= nil then
+        mez.view.set_geometry(view_id, {
+          x = pos.x - offset.x,
+          y = pos.y - offset.y
+        })
+        mez.view.apply();
+      end
+    end
+  })
+
+  mez.input.add_mousemap(mod, "BTN_MIDDLE", {
+    press = function(view_id)
+      layout_manager.make_tiling(view_id)
+      layout_manager.tile_tag(0)
+      mez.view.apply()
+    end
+  })
+
+  mez.input.add_mousemap(mod, "BTN_RIGHT", {
+    press = function(view_id)
+      layout_manager.make_floating(view_id)
+      layout_manager.tile_tag(0)
+      mez.view.raise_to_top(view_id)
+      mez.view.set_resizing(view_id, true)
+      mez.view.apply()
+    end,
+    drag = function(view_id, pos, drag_start, offset)
+      if view_id ~= nil then
+        local width = (pos.x - drag_start.x) + offset.x
+        local height = (pos.y - drag_start.y) + offset.y
+
+        if width <= 10 then width = 10 end
+        if height <= 10 then height = 10 end
+        mez.view.set_geometry(view_id, {
+          width = width,
+          height = height
+        })
+        mez.view.apply()
+      end
+    end,
+    release = function (view_id)
+      mez.view.set_resizing(view_id, false)
       mez.view.apply()
     end
   })

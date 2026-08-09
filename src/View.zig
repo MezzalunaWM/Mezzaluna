@@ -200,9 +200,9 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     // You shouldn't be able to resize fullscreen views
-    if(self.current.fullscreen) return;
-
     if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    if (self.pending.?.fullscreen) return;
 
     server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry }, "A view has had it's pending geometry status set.");
 

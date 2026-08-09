@@ -125,7 +125,6 @@ M.focus_next = function ()
   local next_view = list[view_addr.view_idx + 1] or other[1] or list[1]
 
   mez.seat.set_focused_view(0, next_view)
-  tag.last_focused = next_view
 end
 
 --- Focus the previous view in the tag. Cycles the floating list,
@@ -147,9 +146,24 @@ M.focus_previous = function ()
       or list[#list]
 
   mez.seat.set_focused_view(0, prev_view)
-  tag.last_focused = prev_view
 end
 
+---Toggle fullscreen status of a view
+---@param view_id view_id|`0` 0 maps to focused view
+M.toggle_fullscreen = function (view_id)
+  if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
+  if not view_id then return end
+
+  if mez.view.get_fullscreen(view_id) then
+    local box = mez.view.get_previous_geometry(view_id)
+    if not box then return end
+
+    mez.view.set_fullscreen(view_id, false)
+    mez.view.set_geometry(view_id, box)
+  else
+    mez.view.set_fullscreen(view_id, true)
+  end
+end
 
 ---Make a tiling view floating
 ---@param view_id view_id|`0` 0 maps to focused view
@@ -219,12 +233,13 @@ end
 ---Disable current tag, and enabled new tag
 ---@param tag_idx integer
 M.switch_to_tag = function (tag_idx)
-  if tag_idx == M.state.tag_idx then return end
-
+if tag_idx == M.state.tag_idx then return end
   local view_id = mez.seat.get_focused_view(0)
-  local view_addr = M.find_view(view_id)
-  if view_addr.tag_idx == tag_idx then
-    M.state.tags[tag_idx].last_focused = view_id
+  if view_id then
+    local view_addr = M.find_view(view_id)
+    if view_addr and view_addr.tag_idx == M.state.tag_idx then
+      M.state.tags[M.state.tag_idx].last_focused = view_id
+    end
   end
 
   M.set_tag_enabled(M.state.tag_idx, false)
@@ -235,12 +250,10 @@ M.switch_to_tag = function (tag_idx)
 end
 
 ---@class (exact) LM_Config
----@field mod_key string
 ---@field tag_count integer
 ---@field gap { screen: integer, tile: integer }
 ---@field layouts LM_Layout[]
 local default_config = {
-  mod_key = "alt",
   tag_count = 9,
   gap = {
     screen = 10,
@@ -426,60 +439,6 @@ M.setup = function (config)
         if view_addr.view_idx == #list + 1 then focus_idx = focus_idx - 1 end
         mez.seat.set_focused_view(0, list[focus_idx])
       end
-    end
-  })
-
-  mez.input.add_mousemap(config.mod_key, "BTN_LEFT", {
-    press = function(view_id)
-      M.make_floating(view_id)
-      M.tile_tag(0)
-      mez.view.raise_to_top(view_id)
-      mez.view.apply()
-    end,
-    drag = function(view_id, pos, _, offset)
-      if view_id ~= nil then
-        mez.view.set_geometry(view_id, {
-          x = pos.x - offset.x,
-          y = pos.y - offset.y
-        })
-        mez.view.apply();
-      end
-    end
-  })
-
-  mez.input.add_mousemap(config.mod_key, "BTN_MIDDLE", {
-    press = function(view_id)
-      M.make_tiling(view_id)
-      M.tile_tag(0)
-      mez.view.apply()
-    end
-  })
-
-  mez.input.add_mousemap(config.mod_key, "BTN_RIGHT", {
-    press = function(view_id)
-      M.make_floating(view_id)
-      M.tile_tag(0)
-      mez.view.raise_to_top(view_id)
-      mez.view.set_resizing(view_id, true)
-      mez.view.apply()
-    end,
-    drag = function(view_id, pos, drag_start, offset)
-      if view_id ~= nil then
-        local width = (pos.x - drag_start.x) + offset.x
-        local height = (pos.y - drag_start.y) + offset.y
-
-        if width <= 10 then width = 10 end
-        if height <= 10 then height = 10 end
-        mez.view.set_geometry(view_id, {
-          width = width,
-          height = height
-        })
-        mez.view.apply()
-      end
-    end,
-    release = function (view_id)
-      mez.view.set_resizing(view_id, false)
-      mez.view.apply()
     end
   })
 
