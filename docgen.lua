@@ -11,7 +11,7 @@ local function generate_docs(file_name)
   end
 
   local first_line = file:read("l")
-  local module_name = first_line:match("//! (%S+)")
+  local module_name = first_line:match("/// (%S+)")
 
   if module_name == nil then
     file:close()

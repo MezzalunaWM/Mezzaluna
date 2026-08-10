@@ -1,5 +1,4 @@
-/// `mez.view` contians utilities relating to
-/// views and manipulating their state
+/// mez.view contians utilities relating to views and manipulating their state
 
 const std = @import("std");
 const zlua = @import("zlua");
@@ -20,8 +19,10 @@ fn view_id_err(L: *zlua.Lua) noreturn {
     L.raiseErrorStr("The view id must be >= 0 and < inf", .{});
 }
 
+/// ---@class view_id
+
 /// ---Get the ids for all available views
-/// ---@return integer[]?
+/// ---@return view_id[]?
 pub fn get_all_ids(L: *zlua.Lua) i32 {
     var output_it = server.root.output_layout.outputs.iterator(.forward);
 
@@ -61,7 +62,7 @@ pub fn get_all_ids(L: *zlua.Lua) i32 {
 /// ---Position and size the view. Size includes borders and position 
 /// ---is relative to the top left of the view's output. 
 /// ---Requires an "apply" to see effects, see `mez.view.apply()`
-/// ---@param view_id integer 0 maps to default focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@param geometry Box Nil dimensions map to current dimensions
 pub fn set_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -101,12 +102,11 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     L.pop(1);
 
     view.?.setGeometry(x, y, width, height);
-    view.?.setEnabled(true);
 
     return 0;
 }
 
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return Box?
 pub fn get_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -135,7 +135,7 @@ pub fn get_geometry(L: *zlua.Lua) i32 {
 
 /// ---Get the geometry of the view before its last geometry
 /// ---application or fullscreen
-/// ---@param view_id integer 0 maps to the focused view
+/// ---@param view_id view_id|`0` 0 maps to the focused view
 /// ---@return Box?
 pub fn get_previous_geometry(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -165,8 +165,8 @@ pub fn get_previous_geometry(L: *zlua.Lua) i32 {
 /// ---Set the view's fullscreen status. Will enter the fullscreen layer
 /// ---if true and will enter content layer if false.
 /// ---and remove any preexisting fullscreened view for it's output.
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param fullscreen bool status of fullscreen
+/// ---@param view_id view_id|`0` 0 maps to focused view
+/// ---@param fullscreen boolean status of fullscreen
 pub fn set_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const fullscreen = L.toBoolean(2);
@@ -179,8 +179,8 @@ pub fn set_fullscreen(L: *zlua.Lua) i32 {
 }
 
 /// ---True if view is fullscreened, false otherwise
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return bool?
+/// ---@param view_id view_id|`0` 0 maps to focused view
+/// ---@return boolean?
 pub fn get_fullscreen(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -194,7 +194,7 @@ pub fn get_fullscreen(L: *zlua.Lua) i32 {
 }
 
 /// ---Enable or disable a view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@param enabled boolean
 pub fn set_enabled(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -208,7 +208,7 @@ pub fn set_enabled(L: *zlua.Lua) i32 {
 }
 
 /// ---Check if a view is enabled
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return boolean?
 pub fn get_enabled(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -223,8 +223,8 @@ pub fn get_enabled(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the view's resizing status.
-/// ---@param view_id integer 0 maps to focused view
-/// ---@param resizing bool status of resizing
+/// ---@param view_id view_id|`0` 0 maps to focused view
+/// ---@param resizing boolean status of resizing
 pub fn set_resizing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
     const resizing = L.toBoolean(2);
@@ -237,8 +237,8 @@ pub fn set_resizing(L: *zlua.Lua) i32 {
 }
 
 /// ---True if view is resizing, false otherwise
-/// ---@param view_id integer 0 maps to focused view
-/// ---@return bool
+/// ---@param view_id view_id|`0` 0 maps to focused view
+/// ---@return boolean
 pub fn get_resizing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 
@@ -252,7 +252,7 @@ pub fn get_resizing(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the window decoration style for a view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@param mode "server_side", "client_side" or "none"
 pub fn set_decoration_mode(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -272,7 +272,7 @@ pub fn set_decoration_mode(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the window decoration style for a view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return string? current view decoration state or nil if not found
 pub fn get_decoration_mode(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -293,7 +293,7 @@ pub fn get_decoration_mode(L: *zlua.Lua) i32 {
 /// ---@field bottom boolean?
 
 /// ---Set the tiling edge status of a view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@param edges Edges tiling edges to set, where nil fields retain the current edge state
 pub fn set_tiled_edges(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -348,7 +348,7 @@ pub fn set_tiled_edges(L: *zlua.Lua) i32 {
 }
 
 /// ---Set the tiling edge status of a view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return Edges?
 pub fn get_tiled_edges(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -376,7 +376,7 @@ pub fn get_tiled_edges(L: *zlua.Lua) i32 {
 }
 
 /// ---Set a view as closing (part of the state cycle)
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@param closing boolean
 pub fn set_closing(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -390,7 +390,7 @@ pub fn set_closing(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the title of the view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return string?
 pub fn get_title(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -407,7 +407,7 @@ pub fn get_title(L: *zlua.Lua) i32 {
 }
 
 /// ---Get the app_id of the view
-/// ---@param view_id integer 0 maps to focused view
+/// ---@param view_id view_id|`0` 0 maps to focused view
 /// ---@return string?
 pub fn get_app_id(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -432,7 +432,7 @@ pub fn apply(_: *zlua.Lua) i32 {
 }
 
 // ---Set the borders of a view
-// ---@param view_id view_id 0 maps to focused view
+// ---@param view_id view_id|`0` 0 maps to focused view
 // ---@param options table options for the view's borders
 pub fn set_border(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
@@ -489,7 +489,7 @@ pub fn set_border(L: *zlua.Lua) i32 {
 }
 
 // ---Raise view to render above other views
-// ---@param view_id view_id 0 maps to focused view
+// ---@param view_id view_id|`0` 0 maps to focused view
 pub fn raise_to_top(L: *zlua.Lua) i32 {
     const view_id = LuaUtils.coerceInteger(u64, L.checkInteger(1)) catch view_id_err(L);
 

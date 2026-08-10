@@ -34,8 +34,8 @@ pub fn init(self: *Lua, cfg: Config) !void {
     // load lua files
     loadRuntimeDir(self.state) catch utils.oomPanic();
 
-    if (cfg.enabled) loadConfigDir(self.state);
     loadBaseConfig(self.state);
+    if (cfg.enabled) loadConfigDir(self.state);
 
     log.info("Loaded lua", .{});
 }

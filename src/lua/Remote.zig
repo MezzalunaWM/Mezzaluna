@@ -1,5 +1,4 @@
-/// `mez.remote` grants interface with remote lua clients
-/// See https://github.com/MezzalunaWM/Whetstone for more information
+/// mez.remote grants interface with remote lua clients. See https://github.com/MezzalunaWM/Whetstone for more information
 
 const Remote = @This();
 

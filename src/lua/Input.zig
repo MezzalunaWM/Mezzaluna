@@ -1,5 +1,4 @@
-/// `mez.input` allows custom interactions between input
-/// devices and the Mezzaluna via keymaps and mousemaps
+/// mez.input allows custom interactions between input devices and the Mezzaluna via keymaps and mousemaps
 
 const Input = @This();
 
@@ -204,13 +203,13 @@ pub fn del_keymap(L: *zlua.Lua) i32 {
 /// ---@field y number
 
 /// ---@alias MousemapButtonFunc fun(
-/// ---     view_id: integer,
+/// ---     view_id: view_id,
 /// ---     pos: Position,
 /// ---     start: Position,
 /// ---     offset: Position): boolean?
 
 /// ---@alias MousemapScrollFunc fun(
-/// ---     view_id: integer,
+/// ---     view_id: view_id,
 /// ---     pos: Position,
 /// ---     delta: integer,
 /// ---     discrete_delta: number) :boolean?

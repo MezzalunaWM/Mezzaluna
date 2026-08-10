@@ -183,9 +183,9 @@ pub fn processCursorMotion(
 
     const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
     if (surfaceAtResult) |surface| {
-        if (surface.surface_snd.* == .view) {
+        if (surface.surface_snd.* == .view_surface) {
             server.events.exec("ViewPointerMotion", .{
-                surface.surface_snd.view.id,
+                surface.surface_snd.view_surface.id,
                 @as(c_int, @intFromFloat(self.wlr_cursor.x)),
                 @as(c_int, @intFromFloat(self.wlr_cursor.y)),
                 self.seat.id(),

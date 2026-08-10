@@ -200,9 +200,11 @@ pub fn setParent(self: *View, parent: *wlr.SceneTree) void {
 // Null values are set to their corresponding current geometry values
 pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) void {
     // You shouldn't be able to resize fullscreen views
-    if(self.current.fullscreen) return;
-
     if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    if (self.pending.?.fullscreen) return;
+
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry }, "A view has had it's pending geometry status set.");
 
     self.previous_geometry = self.current.geometry;
     const geo_base = self.sending orelse self.current; // use in-flight geometry as default for nil fields
@@ -264,7 +266,10 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
 }
 
 pub fn setActivated(self: *View, activated: bool) void {
-    server.events.exec("ViewSetFocusPre", .{ self.id, activated }, "A view has had it's pending focus status set.");
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
+    // Before a view's focus is set
+    server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "A view has had it's pending focus status set.");
 
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
@@ -443,6 +448,7 @@ pub fn applySending(self: *View) void {
         server.events.exec("ViewSetFullscreenPost", .{ self.id, self.sending.?.fullscreen }, "A view has had it's pending fullscreen status applied.");
 
     if (self.sending.?.activated != self.current.activated) {
+        if (self.sending.?.activated) self.focus_count +|= 1 else self.focus_count -|= 1;
         server.events.exec("ViewSetFocusPost", .{ self.id, self.sending.?.activated, self.focus_count }, "A view has had it's pending focus status applied.");
     }
 

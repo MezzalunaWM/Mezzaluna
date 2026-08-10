@@ -1,5 +1,4 @@
-/// `mez.hook` allows for callbacks to be attached 
-/// hooks for custom reponses to compositor events
+/// mez.hook allows for callbacks to be attached hooks for custom reponses to compositor events
 
 const Hook = @This();
 

@@ -1,4 +1,4 @@
-/// `mez.fs` provides filesystem io
+/// mez.fs provides filesystem io
 
 const Fs = @This();
 
@@ -38,6 +38,54 @@ pub fn joinpath(L: *zlua.Lua) i32 {
     defer gpa.free(final_path);
 
     _ = L.pushString(final_path);
+    return 1;
+}
+
+/// ---@alias StatType
+/// ---'"block_device"'
+/// ---'"character_device"'
+/// ---'"directory"'
+/// ---'"named_pipe"'
+/// ---'"sym_link"'
+/// ---'"file"'
+/// ---'"unix_domain_socket"'
+/// ---'"whiteout"'
+/// ---'"door"'
+/// ---'"event_port"'
+/// ---'"unknown"'
+
+/// ---@class (exact) FileStat
+/// ---@field type StatType
+/// ---@field size integer in bytes
+/// ---@field ctime integer time of last status/metadata change in seconds since Unix epoch
+/// ---@field mtime integer time of last modification in seconds since Unix epoch
+
+/// ---give file or file system status
+/// ---@param file string
+/// ---@return FileStat
+pub fn stat(L: *zlua.Lua) i32 {
+    const file_path = L.checkString(1);
+
+    var follow_symlinks = true;
+    if (L.isTable(2)) {
+        _ = L.pushString("follow_symlinks");
+        if (L.getTable(2) == .boolean) {
+            follow_symlinks = L.toBoolean(-1);
+        }
+        L.pop(1);
+    }
+
+    const res = std.Io.Dir.cwd().statFile(io.*, file_path, .{ .follow_symlinks = follow_symlinks }) catch {
+        L.pushNil();
+        return 1;
+    };
+
+    L.pushAny(.{
+        .kind = @tagName(res.kind),
+        .size = res.size,
+        .ctime = res.ctime.toSeconds(),
+        .mtime = res.mtime.toSeconds()
+    }) catch utils.oomPanic();
     return 1;
 }
 

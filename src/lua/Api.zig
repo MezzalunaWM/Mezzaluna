@@ -1,4 +1,4 @@
-/// `mez.api` more important
+/// mez.api more important
 
 const std = @import("std");
 const zlua = @import("zlua");
