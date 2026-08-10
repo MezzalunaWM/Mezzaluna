@@ -102,7 +102,6 @@ pub fn set_geometry(L: *zlua.Lua) i32 {
     L.pop(1);
 
     view.?.setGeometry(x, y, width, height);
-    view.?.setEnabled(true);
 
     return 0;
 }

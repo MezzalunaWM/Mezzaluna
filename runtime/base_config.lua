@@ -10,7 +10,7 @@ do
   layout_manager.setup(config)
   local master_layout = layout_manager.get_layout("master")
 
-  -- Keybinds and mousemaps for layout manager
+  -- Keybinds and mouse maps for layout manager
   mez.input.add_keymap(mod, "j", {
     press = function ()
       layout_manager.focus_next()
@@ -35,6 +35,7 @@ do
   for i = 1, config.tag_count do
     mez.input.add_keymap(mod, tostring(i), {
       press = function ()
+        print("switch to")
         layout_manager.switch_to_tag(i)
         mez.view.apply()
       end
@@ -42,6 +43,7 @@ do
 
     mez.input.add_keymap(mod .. "|shift", tostring(i), {
       press = function ()
+        print("send to")
         layout_manager.send_to_tag(0, i)
         mez.view.apply()
       end

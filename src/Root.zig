@@ -132,7 +132,7 @@ pub fn viewById(self: *Root, id: u64) ?*View {
             var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
 
             while(view_it.next()) |data| {
-                std.debug.assert(data.* == .view);
+                if (data.* != .view) continue;
 
                 if(data.view.id == id) return data.view;
             }
@@ -178,7 +178,7 @@ pub fn applyPending(self: *Root) void {
         for(layers) |layer| {
             var view_it: SceneNode.Iterator(.{}) = .fromSceneTree(layer);
             while(view_it.next()) |data| {
-                std.debug.assert(data.* == .view);
+                if (data.* != .view) continue;
 
                 data.view.applyPending();
             }
@@ -205,12 +205,13 @@ pub fn applySending(self: *Root) void {
         std.debug.assert(o.output.data != null);
         const output: *Output = @ptrCast(@alignCast(o.output.data.?));
 
-        const layers = [_]*wlr.SceneTree{ output.layers.top, output.layers.content };
+        const layers = [_]*wlr.SceneTree{ output.layers.content, output.layers.top };
         for(layers) |layer| {
             var view_it: SceneNode.Iterator(.{ .safe = true }) = .fromSceneTree(layer);
 
             while(view_it.next()) |data| {
-                std.debug.assert(data.* == .view);
+                if (data.* != .view) continue;
+
                 data.view.applySending();
             }
         }

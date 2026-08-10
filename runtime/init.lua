@@ -8,7 +8,7 @@ do
   mez.inspect = require("inspect").inspect
 end
 
--- don't find the config directory if one was provided already
+-- Don't find the config directory if one was provided already
 if not mez.path.config then
   local env_conf = os.getenv("XDG_CONFIG_HOME")
   if not env_conf then

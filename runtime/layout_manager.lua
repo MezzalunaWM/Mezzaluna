@@ -1,4 +1,4 @@
----@class Layout_Manager
+--@class Layout_Manager
 local M = {}
 
 local table_deep_copy
@@ -56,7 +56,7 @@ M.tile_tag = function (tag_idx)
   if not tag then return end
   if not tag.layout then return end
 
-  M.state.layouts[tag.layout --[[@as string]]].tile(
+  M.state.layouts[tag.layout].tile(
     tag.tiling,
     mez.seat.get_focused_output(0),
     tag.contexts[tag.layout],
@@ -85,7 +85,7 @@ end
 ---@class (exact) LM_Tag
 ---@field tiling view_id[]
 ---@field floating view_id[]
----@field last_focused integer?
+---@field last_focused view_id?
 ---@field layout string?
 ---@field contexts { [string]: table }
 
@@ -112,7 +112,11 @@ end
 --- then the floating list, wrapping back around.
 M.focus_next = function ()
   local tag = M.get_tag(0)
-  local view_addr = M.find_view(mez.seat.get_focused_view(0))
+
+  local view_id = mez.seat.get_focused_view(0)
+  if not view_id then return end
+
+  local view_addr = M.find_view(view_id)
 
   if not view_addr then
     mez.seat.set_focused_view(0, tag.tiling[1] or tag.floating[1])
@@ -134,7 +138,10 @@ end
 --- then the tiling list, wrapping back around.
 M.focus_previous = function ()
   local tag = M.get_tag(0)
-  local view_addr = M.find_view(mez.seat.get_focused_view(0))
+  local view_id = mez.seat.get_focused_view(0)
+  if not view_id then return end
+
+  local view_addr = M.find_view(view_id)
 
   if not view_addr then
     mez.seat.set_focused_view(0, tag.tiling[#tag.tiling] or tag.floating[#tag.floating])
@@ -152,7 +159,7 @@ M.focus_previous = function ()
   M.tile_tag(0)
 end
 
----Toggle fullscreen status of a view
+---Toggle full screen status of a view
 ---@param view_id view_id|`0` 0 maps to focused view
 M.toggle_fullscreen = function (view_id)
   if view_id == 0 then view_id = mez.seat.get_focused_view(0) end
@@ -211,10 +218,16 @@ M.send_to_tag = function (view_id, tag_idx)
   local to_tag = M.state.tags[tag_idx]
   if not to_tag then return end
 
+  if tag_idx ~= M.state.tag_idx then
+    print("DISABLING")
+    mez.view.set_enabled(view_id, false)
+  end
+
   local from_list = view_addr.floating and from_tag.floating or from_tag.tiling
   local to_list = view_addr.floating and to_tag.floating or to_tag.tiling
 
   to_list[#to_list + 1] = table.remove(from_list, view_addr.view_idx)
+  M.focus_previous()
 
   M.tile_tag(view_addr.tag_idx)
   M.tile_tag(tag_idx)
@@ -237,7 +250,8 @@ end
 ---Disable current tag, and enabled new tag
 ---@param tag_idx integer
 M.switch_to_tag = function (tag_idx)
-if tag_idx == M.state.tag_idx then return end
+  if tag_idx == M.state.tag_idx then return end
+
   local view_id = mez.seat.get_focused_view(0)
   if view_id then
     local view_addr = M.find_view(view_id)
@@ -250,7 +264,8 @@ if tag_idx == M.state.tag_idx then return end
   M.set_tag_enabled(tag_idx, true)
 
   M.state.tag_idx = tag_idx
-  mez.seat.set_focused_view(0, M.state.tags[tag_idx].last_focused)
+  local tag = M.state.tags[tag_idx]
+  mez.seat.set_focused_view(0, tag.last_focused or tag.tiling[1] or tag.floating[1])
 end
 
 ---@class (exact) LM_Config
@@ -357,7 +372,7 @@ local default_config = {
 
 ---@class (exact) LM_Layout
 ---@field name string
----@field tile fun(view_ids: integer[], output_id: integer, context: table, gap: { screen: integer, tile: integer })
+---@field tile fun(view_ids: view_id[], output_id: output_id, context: table, gap: { screen: integer, tile: integer })
 ---@field default_context table
 ---@field builtins function[]
 
