@@ -6,8 +6,7 @@ local run_launcher = "wmenu-run"
 
 do
   local layout_manager = require("layout_manager")
-  local config = { tag_count = 5 }
-  layout_manager.setup(config)
+  layout_manager.setup({})
   local master_layout = layout_manager.get_layout("master")
 
   -- Keybinds and mouse maps for layout manager
@@ -35,7 +34,6 @@ do
   for i = 1, config.tag_count do
     mez.input.add_keymap(mod, tostring(i), {
       press = function ()
-        print("switch to")
         layout_manager.switch_to_tag(i)
         mez.view.apply()
       end
@@ -43,7 +41,6 @@ do
 
     mez.input.add_keymap(mod .. "|shift", tostring(i), {
       press = function ()
-        print("send to")
         layout_manager.send_to_tag(0, i)
         mez.view.apply()
       end
@@ -133,9 +130,6 @@ do
     end
   })
 end
-
--- local master = require("master")
--- master.setup({ mod_key = mod })
 
 local border_width = 4
 

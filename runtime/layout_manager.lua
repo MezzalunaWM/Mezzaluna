@@ -219,7 +219,6 @@ M.send_to_tag = function (view_id, tag_idx)
   if not to_tag then return end
 
   if tag_idx ~= M.state.tag_idx then
-    print("DISABLING")
     mez.view.set_enabled(view_id, false)
   end
 
@@ -281,47 +280,47 @@ local default_config = {
   layouts = {
     {
       name = "master",
-        tile = function (view_ids, output_id, context, gap)
-          local output_state = mez.output.get_state(output_id)
-          if output_state == nil or #view_ids == 0 then
-            return
-          end
+      tile = function (view_ids, output_id, context, gap)
+        local output_state = mez.output.get_state(output_id)
+        if output_state == nil or #view_ids == 0 then
+          return
+        end
 
-          local area = output_state.available_area
+        local area = output_state.available_area
 
-          local tx = area.x + gap.screen
-          local ty = area.y + gap.screen
-          local tw = area.width - gap.screen * 2
-          local th = area.height - gap.screen * 2
+        local tx = area.x + gap.screen
+        local ty = area.y + gap.screen
+        local tw = area.width - gap.screen * 2
+        local th = area.height - gap.screen * 2
 
-          if #view_ids == 1 then
-            mez.view.set_geometry(view_ids[1], {
-              x = tx, y = ty, width = tw, height = th
-            })
-            return
-          end
-
-          local master_width = tw * context.master_ratio - gap.tile / 2
-
+        if #view_ids == 1 then
           mez.view.set_geometry(view_ids[1], {
-            x = tx, y = ty, width = master_width, height = th
+            x = tx, y = ty, width = tw, height = th
           })
+          return
+        end
 
-          -- Stack views share the remaining space, split by tile gaps
-          local stack_count = #view_ids - 1
-          local stack_x = tx + tw * context.master_ratio + gap.tile / 2
-          local stack_width = tw * (1 - context.master_ratio) - gap.tile / 2
-          local stack_height = (th - (stack_count - 1) * gap.tile) / stack_count
+        local master_width = tw * context.master_ratio - gap.tile / 2
 
-          for i = 1, stack_count do
-            mez.view.set_geometry(view_ids[i + 1], {
-              x = stack_x,
-              y = ty + (stack_height + gap.tile) * (i - 1),
-              width = stack_width,
-              height = stack_height
-            })
-          end
-        end,
+        mez.view.set_geometry(view_ids[1], {
+          x = tx, y = ty, width = master_width, height = th
+        })
+
+        -- Stack views share the remaining space, split by tile gaps
+        local stack_count = #view_ids - 1
+        local stack_x = tx + tw * context.master_ratio + gap.tile / 2
+        local stack_width = tw * (1 - context.master_ratio) - gap.tile / 2
+        local stack_height = (th - (stack_count - 1) * gap.tile) / stack_count
+
+        for i = 1, stack_count do
+          mez.view.set_geometry(view_ids[i + 1], {
+            x = stack_x,
+            y = ty + (stack_height + gap.tile) * (i - 1),
+            width = stack_width,
+            height = stack_height
+          })
+        end
+      end,
       default_context = {
         master_ratio = 0.5
       },
