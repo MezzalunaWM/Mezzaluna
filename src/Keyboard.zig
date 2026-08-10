@@ -20,7 +20,6 @@ const c = @import("c");
 const log = std.log.scoped(.Keyboard);
 
 wlr_keyboard: *wlr.Keyboard,
-context: ?*xkb.Context,
 // there's wlr.KeyboardGroup.fromKeyboard, but it doesn't seem to work
 group: ?*KeyboardGroup,
 
@@ -36,7 +35,6 @@ pub fn init(device: *wlr.InputDevice) *Keyboard {
     const self = gpa.create(Keyboard) catch utils.oomPanic();
 
     self.* = .{
-        .context = xkb.Context.new(.no_flags),
         .wlr_keyboard = device.toKeyboard(),
         .group = null,
     };
