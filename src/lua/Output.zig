@@ -152,7 +152,7 @@ pub fn get_state(L: *zlua.Lua) i32 {
                 }
                 break: blk modes;
             },
-        }) catch unreachable;
+        }) catch utils.oomPanic();
         return 1;
     }
 

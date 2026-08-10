@@ -41,9 +41,27 @@ pub fn joinpath(L: *zlua.Lua) i32 {
     return 1;
 }
 
+/// ---@alias StatType
+/// ---| '"left"'
+/// ---| '"right"'
+/// ---| '"top"'
+/// ---| '"bottom"'
+/// ---| '"front"'
+/// ---| '"back"'
+/// ---| '"block_device"'
+/// ---| '"character_device"'
+/// ---| '"directory"'
+/// ---| '"named_pipe"'
+/// ---| '"sym_link"'
+/// ---| '"file"'
+/// ---| '"unix_domain_socket"'
+/// ---| '"whiteout"'
+/// ---| '"door"'
+/// ---| '"event_port"'
+
 /// ---@class (exact) FileStat
-/// ---@field kind string
-/// ---@field size integer
+/// ---@field type StatType
+/// ---@field size integer in bytes
 /// ---@field ctime integer time of last status/metadata change in seconds since Unix epoch
 /// ---@field mtime integer time of last modification in seconds since Unix epoch
 
@@ -51,11 +69,6 @@ pub fn joinpath(L: *zlua.Lua) i32 {
 /// ---@param file string
 /// ---@return FileStat
 pub fn stat(L: *zlua.Lua) i32 {
-    const nargs: i32 = L.getTop();
-    if (nargs < 1) {
-        L.raiseErrorStr("Expected a file path to stat", .{});
-    }
-
     const file_path = L.checkString(1);
 
     var follow_symlinks = true;
@@ -77,7 +90,7 @@ pub fn stat(L: *zlua.Lua) i32 {
         .size = res.size,
         .ctime = res.ctime.toSeconds(),
         .mtime = res.mtime.toSeconds()
-    }) catch unreachable;
+    }) catch utils.oomPanic();
     return 1;
 }
 

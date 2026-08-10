@@ -31,7 +31,7 @@ do
     end
   })
 
-  for i = 1, config.tag_count do
+  for i = 1, 9 do
     mez.input.add_keymap(mod, tostring(i), {
       press = function ()
         layout_manager.switch_to_tag(i)
