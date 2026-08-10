@@ -89,6 +89,11 @@ end
 ---@field layout string?
 ---@field contexts { [string]: table }
 
+---@return LM_Tag[]
+M.get_tags = function ()
+  return M.state.tags
+end
+
 ---@param tag_idx integer 0 maps to focused tag
 ---@return LM_Tag tag
 M.get_tag = function (tag_idx)

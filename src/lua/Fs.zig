@@ -42,22 +42,17 @@ pub fn joinpath(L: *zlua.Lua) i32 {
 }
 
 /// ---@alias StatType
-/// ---| '"left"'
-/// ---| '"right"'
-/// ---| '"top"'
-/// ---| '"bottom"'
-/// ---| '"front"'
-/// ---| '"back"'
-/// ---| '"block_device"'
-/// ---| '"character_device"'
-/// ---| '"directory"'
-/// ---| '"named_pipe"'
-/// ---| '"sym_link"'
-/// ---| '"file"'
-/// ---| '"unix_domain_socket"'
-/// ---| '"whiteout"'
-/// ---| '"door"'
-/// ---| '"event_port"'
+/// ---'"block_device"'
+/// ---'"character_device"'
+/// ---'"directory"'
+/// ---'"named_pipe"'
+/// ---'"sym_link"'
+/// ---'"file"'
+/// ---'"unix_domain_socket"'
+/// ---'"whiteout"'
+/// ---'"door"'
+/// ---'"event_port"'
+/// ---'"unknown"'
 
 /// ---@class (exact) FileStat
 /// ---@field type StatType

@@ -31,7 +31,7 @@ do
     end
   })
 
-  for i = 1, 9 do
+  for i, _ in ipairs(layout_manager.get_tags()) do
     mez.input.add_keymap(mod, tostring(i), {
       press = function ()
         layout_manager.switch_to_tag(i)
