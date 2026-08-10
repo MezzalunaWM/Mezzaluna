@@ -30,21 +30,20 @@ pub fn deinit(self: *EventGen, allocator: std.mem.Allocator) void {
     allocator.destroy(self);
 }
 
-pub fn generate(self: *EventGen, allocator: std.mem.Allocator) !void {
-    var proc = std.process.Child.init(&[_][]const u8{
-        "zig",
-        "build",
-        "-Devent_gen=true",
-    }, allocator);
-
-    proc.stderr_behavior = .Pipe;
-    proc.stdout_behavior = .Ignore;
-    proc.stdin_behavior = .Ignore;
-
-    try proc.spawn();
+pub fn generate(self: *EventGen, io: std.Io, allocator: std.mem.Allocator) !void {
+    const proc = try std.process.spawn(io, .{
+        .argv = &[_][]const u8{
+            "zig",
+            "build",
+            "-Devent_gen=true",
+        },
+        .stdout = .ignore,
+        .stderr = .pipe,
+        .stdin = .ignore,
+    });
 
     var reader_buf: [1024]u8 = undefined;
-    var f_reader = proc.stderr.?.reader(&reader_buf);
+    var f_reader = proc.stderr.?.reader(io, &reader_buf);
     var reader = &f_reader.interface;
     while (true) {
         const chunk = reader.takeDelimiter('\n') catch |err| switch (err) {

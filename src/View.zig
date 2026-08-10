@@ -215,12 +215,12 @@ pub fn setGeometry(self: *View, x: ?i32, y: ?i32, width: ?i32, height: ?i32) voi
         .height = @max(1 + 2 * self.border_width, height orelse geo_base.geometry.height),
     };
 
+    server.events.exec("ViewSetGeometryPre", .{ self.id, self.pending.?.geometry }, "A view has had it's pending geometry status set.");
+
     self.resizeBorders();
 }
 
 pub fn setFullscreen(self: *View, fullscreen: bool) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-
     if (self.output == null) {
         log.debug("View {d} has no output to fullscreen on", .{self.id});
         return;
@@ -230,6 +230,8 @@ pub fn setFullscreen(self: *View, fullscreen: bool) void {
     // Before making a view fullscreen within it's output
     // passed view_id and true `true` if being fullscreened `false` otherwise
     server.events.exec("ViewSetFullscreenPre", .{ self.id, fullscreen }, "A view has had it's pending fullscreen status set.");
+
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
     // log.debug("Setting fullscreen to {}", .{fullscreen});
 
@@ -269,13 +271,15 @@ pub fn setActivated(self: *View, activated: bool) void {
     // Before a view's focus is set
     server.events.exec("ViewSetFocusPre", .{ self.id, activated, self.focus_count }, "A view has had it's pending focus status set.");
 
+    if (self.pending == null) self.pending = self.sending orelse self.current;
+
     self.pending.?.activated = activated;
 }
 
 pub fn setEnabled(self: *View, enabled: bool) void {
-    if (self.pending == null) self.pending = self.sending orelse self.current;
-
     server.events.exec("ViewSetEnabledPre", .{ self.id, enabled }, "A view has had it's pending enabled status set.");
+
+    if (self.pending == null) self.pending = self.sending orelse self.current;
 
     self.pending.?.enabled = enabled;
 }
@@ -286,13 +290,13 @@ pub fn setResizing(self: *View, resizing: bool) void {
 }
 
 pub fn setClosing(self: *View, closing: bool) void {
+    server.events.exec("ViewSetClosingPre", .{ self.id, closing }, "A view has had it's pending closing status set.");
+
     if (self.pending == null) self.pending = self.sending orelse self.current;
 
     if (closing and self.current.fullscreen) {
         self.setFullscreen(false);
     }
-
-    server.events.exec("ViewSetClosingPre", .{ self.id, closing }, "A view has had it's pending closing status set.");
 
     self.pending.?.closing = closing;
 }
@@ -369,7 +373,8 @@ pub fn applyPending(self: *View) void {
 
     // Activated
     if (pending.activated != current.activated) {
-        serial = @max(serial, self.xdg_toplevel.setActivated(pending.activated));
+        if (self.pending.?.activated) self.focus_count += 1 else self.focus_count -= 1;
+        serial = @max(serial, self.xdg_toplevel.setActivated(self.focus_count != 0));
     }
 
     // Decoration mode
@@ -424,9 +429,9 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.closing) {
         self.scene_tree.node.setEnabled(false);
 
-        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view is being closed.");
-        
         self.xdg_toplevel.sendClose();
+
+        server.events.exec("ViewSetClosingPost", .{ self.id }, "A view has been closed.");
 
         self.current = self.sending.?;
         self.sending = null;
@@ -436,7 +441,7 @@ pub fn applySending(self: *View) void {
     if (self.sending.?.geometry.x != self.current.geometry.x or
         self.sending.?.geometry.y != self.current.geometry.y or
         self.sending.?.geometry.width != self.current.geometry.width or
-        self.sending.?.geometry.height != self.current.geometry.height) 
+        self.sending.?.geometry.height != self.current.geometry.height)
         server.events.exec("ViewSetGeometryPost", .{ self.id }, "A view has had it's pending geometry applied.");
 
     if (self.sending.?.fullscreen != self.current.fullscreen)
@@ -602,7 +607,8 @@ fn handleDestroy(listener: *wl.Listener(void)) void {
 fn handleCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const view: *View = @fieldParentPtr("commit", listener);
 
-    server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit}, "After a view receives a commit. The commit may be the initial commit.");
+    defer server.events.exec("ViewCommitPost", .{view.id, view.xdg_toplevel.base.initial_commit}, "After a view receives a commit. The commit may be the initial commit.");
+
     if (view.xdg_toplevel.base.initial_commit) {
         if (view.xdg_toplevel_decoration) |deco| {
             _ = deco.setMode(.server_side);
