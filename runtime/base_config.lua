@@ -179,11 +179,17 @@ mez.hook.add("ViewCommitPost", {
   end
 })
 
-mez.hook.add("ViewPointerMotion", {
+mez.hook.add("ViewPointerEnter", {
 	callback = function (view_id, _, _, seat_id)
     mez.seat.set_focused_view(seat_id, view_id)
     mez.view.apply()
 	end
+})
+
+mez.hook.add("ViewPointerExit", {
+  callback = function ()
+    print("EXIT")
+  end
 })
 
 for i = 1, 12 do

@@ -8,6 +8,7 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 
+const SceneNode = @import("SceneNode.zig");
 const View = @import("View.zig");
 const Seat = @import("Seat.zig");
 const utils = @import("utils.zig");
@@ -20,6 +21,7 @@ const log = std.log.scoped(.Cursor);
 wlr_cursor: *wlr.Cursor,
 x_cursor_manager: *wlr.XcursorManager,
 cursor_shape_manager: *wlr.CursorShapeManagerV1,
+previous_view_snd: ?*SceneNode.Data,
 seat: *Seat,
 
 motion: wl.Listener(*wlr.Pointer.event.Motion) = .init(handleMotion),
@@ -52,6 +54,7 @@ pub fn init(self: *Cursor, seat: *Seat) void {
         .wlr_cursor = try wlr.Cursor.create(),
         .x_cursor_manager = try wlr.XcursorManager.create(null, 24),
         .cursor_shape_manager = try wlr.CursorShapeManagerV1.create(server.wl_server, 1),
+        .previous_view_snd = null,
         .drag = null,
         .seat = seat,
     };
@@ -153,6 +156,9 @@ pub fn processCursorMotion(
         break :blk null;
     };
 
+    const cursor_x: c_int = @as(c_int, @intFromFloat(self.wlr_cursor.x));
+    const cursor_y: c_int = @as(c_int, @intFromFloat(self.wlr_cursor.y));
+
     var passthrough = true;
     if (self.mode == .drag) {
         const modifiers = self.seat.keyboard_group.wlr_group.keyboard.getModifiers();
@@ -163,8 +169,8 @@ pub fn processCursorMotion(
                 passthrough = map.callback(.drag, .{
                     if (view != null) view.?.id else null, // view_id
                     .{ // pos
-                        .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
-                        .y = @as(c_int, @intFromFloat(self.wlr_cursor.y)),
+                        .x = cursor_x,
+                        .y = cursor_y
                     },
                     self.drag.?.start, // start
                     // TODO: Do we really need an offset , is it necessary
@@ -182,19 +188,57 @@ pub fn processCursorMotion(
     std.debug.assert(output != null);
 
     const surfaceAtResult = output.?.surfaceAt(self.wlr_cursor.x, self.wlr_cursor.y);
+
+    if (self.previous_view_snd) |previous| {
+        if (surfaceAtResult == null or surfaceAtResult.?.surface_snd != previous) {
+            switch (previous.*) {
+                .view_surface => |v| {
+                    server.events.exec("ViewPointerExit", .{
+                        v.id,
+                        cursor_x,
+                        cursor_y,
+                        self.seat.id()
+                    }, "Before cursor moves to enter a new view");
+                },
+                else => log.debug("Skipping enter hook for {any}", .{ @tagName(previous.*) })
+            }
+        }
+    }
+
     if (surfaceAtResult) |surface| {
-        if (surface.surface_snd.* == .view_surface) {
-            server.events.exec("ViewPointerMotion", .{
-                surface.surface_snd.view_surface.id,
-                @as(c_int, @intFromFloat(self.wlr_cursor.x)),
-                @as(c_int, @intFromFloat(self.wlr_cursor.y)),
-                self.seat.id(),
-            }, "After the cursor moves, but before anyone is told about it.");
+        switch (surface.surface_snd.*) {
+            .view_surface => {
+                server.events.exec("ViewPointerMotion", .{
+                    surface.surface_snd.view_surface.id,
+                    cursor_x,
+                    cursor_y,
+                    self.seat.id()
+                }, "After the cursor moves, but before anyone is told about it.");
+            },
+            else => log.debug("{any}", .{ surface.surface_snd.* })
+        }
+
+        if(self.previous_view_snd != surface.surface_snd) {
+            switch (surface.surface_snd.*) {
+                .view_surface => |v| {
+                    server.events.exec("ViewPointerEnter", .{
+                        v.id,
+                        cursor_x, 
+                        cursor_y,
+                        self.seat.id()
+                    }, "Before cursor moves to enter a new view");
+                },
+                else => log.debug("Skipping enter hook for {any}", .{ @tagName(surface.surface_snd.*) })
+            }
+
+            self.previous_view_snd = surface.surface_snd;
         }
 
         self.seat.wlr_seat.pointerNotifyEnter(surface.surface, surface.sx, surface.sy);
         self.seat.wlr_seat.pointerNotifyMotion(time_msec, surface.sx, surface.sy);
     } else {
+        if (self.previous_view_snd != null) self.previous_view_snd = null;
+
         self.seat.wlr_seat.pointerClearFocus();
         self.wlr_cursor.setXcursor(self.x_cursor_manager, "default");
     }
