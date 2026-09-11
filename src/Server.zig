@@ -3,7 +3,6 @@ const Server = @This();
 const std = @import("std");
 const wlr = @import("wlroots");
 const wl = @import("wayland").server.wl;
-const xev = @import("xev");
 const utils = @import("utils.zig");
 
 const Root = @import("Root.zig");
@@ -28,7 +27,6 @@ const log = std.log.scoped(.Server);
 
 running: bool,
 event_loop: *wl.EventLoop,
-xev_event_loop: xev.Loop,
 
 wl_server: *wl.Server,
 session: ?*wlr.Session,
@@ -107,7 +105,6 @@ pub fn init(self: *Server) void {
         // event loop
         .running = true,
         .event_loop = event_loop,
-        .xev_event_loop = try .init(.{}),
 
         // core wayland
         .wl_server = wl_server,
@@ -217,39 +214,6 @@ pub fn terminate(self: *Server) void {
     self.running = false;
 }
 
-pub fn run(self: *Server) void {
-    // this polls the wayland event loop file descriptor to check for any
-    // events we need to handle
-    const stream = xev.Stream.initFd(self.event_loop.getFd());
-    defer stream.deinit();
-
-    var stream_c: xev.Completion = undefined;
-    stream.poll(&self.xev_event_loop, &stream_c, .read, Server, self, &struct {
-        fn callback(
-            userdata: ?*Server,
-            loop: *xev.Loop,
-            _: *xev.Completion,
-            _: xev.Stream,
-            _: xev.PollError!xev.PollEvent,
-        ) xev.CallbackAction {
-            const s: *Server = userdata.?;
-            if (!s.running) loop.stop();
-            s.dispatchEvents(loop);
-            return .rearm;
-        }
-    }.callback);
-
-    self.xev_event_loop.run(.until_done) catch |err| {
-        log.err("Failed to run wayland event loop: {}", .{ err });
-    };
-}
-
-pub fn dispatchEvents(self: *Server, loop: *xev.Loop) void {
-    // dispatch events then tell the clients that there's stuff for them to do
-    self.event_loop.dispatch(0) catch loop.stop();
-    self.wl_server.flushClients();
-}
-
 pub fn getDefaultSeat(self: *Server) *Seat {
     return self.seats.first() orelse unreachable; // shouldn't ever be null
 }
@@ -280,7 +244,6 @@ pub fn deinit(self: *Server) noreturn {
     }
 
     self.wl_server.destroy();
-    self.xev_event_loop.deinit();
     self.async_callbacks.deinit();
 
     log.info("Exiting mez successfully", .{});

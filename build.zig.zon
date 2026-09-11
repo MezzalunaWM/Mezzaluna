@@ -24,10 +24,6 @@
             .url = "git+https://codeberg.org/ifreund/zig-pixman?ref=v0.3.0#d7851166dea7aefb2ba2c4ce751e2620aaa87e34",
             .hash = "pixman-0.3.0-LClMnz2VAAAs7QSCGwLimV5VUYx0JFnX5xWU6HwtMuDX",
         },
-        .libxev = .{
-            .url = "git+https://github.com/mitchellh/libxev?ref=zig-0-16#05c89fbbb140254510fa812dce1a35c289bec4ca",
-            .hash = "libxev-0.0.0-86vtcwIRFACVrx54GaHsMFFlyC4dTi0tcVh10V7btRUc",
-        },
         .zlua = .{
             .url = "git+https://github.com/natecraddock/ziglua#d2cb6191ec20f888ab04ad222c9bcf9b194bfbf2",
             .hash = "zlua-0.1.0-hGRpC1mUBQCNQf4CnmRTM4I7gxE3YpCvZ-p2EarlcyER",

@@ -46,7 +46,6 @@ pub fn build(b: *std.Build) void {
     const wlroots = b.dependency("wlroots", .{}).module("wlroots");
     const zlua = b.dependency("zlua", .{ .optimize = optimize, .target = target, .lang = .luajit }).module("zlua");
     const clap = b.dependency("clap", .{ .optimize = optimize, .target = target }).module("clap");
-    const xev = b.dependency("libxev", .{ .target = target, .optimize = optimize }).module("xev");
 
     wlroots.addImport("wayland", wayland);
     wlroots.addImport("xkbcommon", xkbcommon);
@@ -76,7 +75,6 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "wlroots", .module = wlroots },
                 .{ .name = "zlua", .module = zlua },
                 .{ .name = "clap", .module = clap },
-                .{ .name = "xev", .module = xev },
             }
         }),
     });

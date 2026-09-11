@@ -3,6 +3,7 @@
 const std = @import("std");
 const zlua = @import("zlua");
 const xev = @import("xev");
+const wl = @import("wayland").server.wl;
 const utils = @import("../utils.zig");
 
 const LuaUtils = @import("LuaUtils.zig");
@@ -15,84 +16,58 @@ const log = std.log.scoped(.@"Lua.Async");
 
 pub const AsyncData = struct {
     lua_cb_ref_idx: i32,
-    timeout: u32,
+    timeout: c_int, // in ms
     once: bool,
+    timer: ?*wl.EventSource,
 
-    cancel_completion: xev.Completion,
-    completion: xev.Completion,
-    timer: xev.Timer,
-
-    pub fn init() *AsyncData {
-        const async = gpa.create(AsyncData) catch utils.oomPanic();
-        async.* = .{
+    pub fn init() !*AsyncData {
+        const self = gpa.create(AsyncData) catch utils.oomPanic();
+        self.* = .{
             .once = true,
             .timeout = 0,
             .lua_cb_ref_idx = undefined,
 
-            .completion = undefined,
-            .cancel_completion = undefined,
-            .timer = xev.Timer.init() catch Lua.raiseErrorStr("failed to create timer for event loop", .{}),
+            .timer = undefined,
         };
 
-        return async;
+        self.timer = try server.event_loop.addTimer(?*AsyncData, asyncCallback, self);
+
+        return self;
     }
 
     pub fn deinit(self: *AsyncData) void {
-        // welcome to callback hell
-        self.timer.cancel(&server.xev_event_loop, &self.completion, &self.cancel_completion, AsyncData, self, &struct {
-            fn callback(
-                userdata: ?*AsyncData,
-                _: *xev.Loop,
-                _: *xev.Completion,
-                _: xev.Timer.CancelError!void,
-            ) xev.CallbackAction {
-                // do the rest of the takedown after the timer has been canceled
-                const s: *AsyncData = userdata.?;
-                _ = server.async_callbacks.remove(@intFromPtr(s));
-                s.timer.deinit();
-                gpa.destroy(s);
-                return .disarm;
-            }
-        }.callback);
+        _ = server.async_callbacks.remove(@intFromPtr(self));
+        self.timer.?.timerUpdate(0) catch {}; // disarm
+        self.timer.?.remove();
+        gpa.destroy(self);
     }
 };
 
-fn asyncCallback(
-    userdata: ?*AsyncData,
-    loop: *xev.Loop,
-    c: *xev.Completion,
-    v: xev.Timer.RunError!void,
-) xev.CallbackAction {
-    // don't continue if there's an error
-    v catch |err| switch (err) {
-        else => return .disarm,
-    };
-    const self: *AsyncData = userdata.?;
+fn asyncCallback(data: ?*AsyncData) c_int {
+    const self = data orelse return 0;
 
     const t = Lua.state.getIndexRaw(zlua.registry_index, self.lua_cb_ref_idx);
     if (t != zlua.LuaType.function) {
         RemoteLua.sendNewLogEntry("Failed to call hook, it doesn't have a callback.");
         Lua.state.pop(1);
-        return .disarm;
+        self.deinit();
+        return 0;
     }
 
     Lua.state.protectedCall(.{ .args = 0 }) catch {
         LuaUtils.handleError(Lua.state);
         self.deinit();
-        return .disarm;
+        return 0;
     };
 
-    // we need to call the wayland event loop to draw anything that might've
-    // been updated by the lua code
-    server.dispatchEvents(loop);
-
     // we reset the timer to be run again in the future
-    if (!self.once) {
-        var c_cancel: xev.Completion = undefined;
-        self.timer.reset(loop, c, &c_cancel, self.timeout, AsyncData, userdata, &asyncCallback);
-    } else self.deinit();
+    if (!self.once) b: {
+        self.timer.?.timerUpdate(self.timeout) catch break :b;
+        return 0;
+    }
 
-    return .disarm;
+    self.deinit();
+    return 0;
 }
 
 /// ---@class async_options
@@ -106,37 +81,42 @@ fn asyncCallback(
 /// --- soon as possible. This always runs once unless specified otherwise.
 /// ---@return id used for canceling the async function
 pub fn run(L: *zlua.Lua) i32 {
-    const async: *AsyncData = .init();
+    const self = AsyncData.init() catch |err| {
+        L.raiseErrorStr("Failed to create async timer: {s}", .{ @errorName(err).ptr });
+    };
 
     if (L.isFunction(1)) {
         L.pushValue(1); // move the function to to top of the stack
-        async.lua_cb_ref_idx = L.ref(zlua.registry_index);
+        self.lua_cb_ref_idx = L.ref(zlua.registry_index);
     } else L.raiseErrorStr("argument 1 must be a function", .{});
 
     switch (L.typeOf(2)) {
         .table => {
             _ = L.getField(2, "timeout");
             if (L.isNumber(-1)) {
-                async.timeout = LuaUtils.coerceInteger(
-                    u32,
+                self.timeout = LuaUtils.coerceInteger(
+                    c_int,
                     L.checkInteger(-1),
                 ) catch L.raiseErrorStr("The x must be > -inf and < inf", .{});
             }
 
             _ = L.getField(2, "once");
-            if (L.isBoolean(-1)) async.once = L.toBoolean(-1);
+            if (L.isBoolean(-1)) self.once = L.toBoolean(-1);
         },
-        .number => async.timeout = LuaUtils.coerceInteger(
-            u32,
+        .number => self.timeout = LuaUtils.coerceInteger(
+            c_int,
             L.checkInteger(2),
         ) catch L.raiseErrorStr("The x must be > -inf and < inf", .{}),
-        else => async.timeout = 0,
+        else => self.timeout = 0,
     }
 
-    async.timer.run(&server.xev_event_loop, &async.completion, async.timeout, AsyncData, async, asyncCallback);
+    self.timer.?.timerUpdate(self.timeout) catch {
+        self.deinit();
+        @panic("posix unexpected error");
+    };
 
-    const id = @intFromPtr(async);
-    server.async_callbacks.put(id, async) catch utils.oomPanic();
+    const id = @intFromPtr(self);
+    server.async_callbacks.put(id, self) catch utils.oomPanic();
     L.pushInteger(@intCast(id));
     return 1;
 }

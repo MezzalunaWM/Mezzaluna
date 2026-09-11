@@ -113,5 +113,5 @@ pub fn main(init: std.process.Init) !void {
     };
 
     log.info("Starting server", .{});
-    server.run();
+    server.wl_server.run();
 }
