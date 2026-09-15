@@ -25,7 +25,6 @@ const InputDevice = @import("input_device.zig").InputDevice;
 const gpa = &@import("main.zig").gpa;
 const log = std.log.scoped(.Server);
 
-running: bool,
 event_loop: *wl.EventLoop,
 
 wl_server: *wl.Server,
@@ -103,7 +102,6 @@ pub fn init(self: *Server) void {
 
     self.* = .{
         // event loop
-        .running = true,
         .event_loop = event_loop,
 
         // core wayland
@@ -201,17 +199,6 @@ pub fn init(self: *Server) void {
     self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
     self.events.exec("ServerStartPost", .{}, "Just after Mezzaluna has successfully started.");
-}
-
-/// libwayland uses a bool which the event loop checks to see if the server
-/// should be running, this is not included in our bindings, so we maintain our
-/// own.
-pub fn terminate(self: *Server) void {
-    // we still call as libwayland does write some information to a fd about
-    // termination
-    self.wl_server.terminate();
-
-    self.running = false;
 }
 
 pub fn getDefaultSeat(self: *Server) *Seat {

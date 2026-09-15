@@ -40,7 +40,7 @@ pub fn spawn(L: *zlua.Lua) i32 {
         gpa.free(command);
     };
 
-    _ = std.process.spawn(io.*, .{ 
+    _ = std.process.spawn(io.*, .{
         .argv = command,
         .environ_map = environ_map.*
     }) catch |err| switch (err) {
@@ -55,7 +55,7 @@ pub fn spawn(L: *zlua.Lua) i32 {
 pub fn exit(L: *zlua.Lua) i32 {
     _ = L;
 
-    server.terminate();
+    server.wl_server.terminate();
 
     return 0;
 }
