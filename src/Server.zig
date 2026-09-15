@@ -168,6 +168,7 @@ pub fn init(self: *Server) void {
     self.seats.init();
     self.seats.append(try Seat.init("default"));
 
+    _ = try wlr.Fixes.create(self.wl_server, 1);
     _ = try wlr.Subcompositor.create(self.wl_server);
     _ = try wlr.DataDeviceManager.create(self.wl_server);
     _ = try wlr.ExportDmabufManagerV1.create(self.wl_server);
