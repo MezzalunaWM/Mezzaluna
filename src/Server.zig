@@ -218,9 +218,7 @@ pub fn deinit(self: *Server) noreturn {
     self.new_virtual_pointer.link.remove();
     self.new_virtual_keyboard.link.remove();
     self.new_pointer_constraint.link.remove();
-    if (self.drm_lease_manager) |drmlm| {
-        drmlm.events.request.add(&self.drm_lease_request);
-    }
+    if (self.drm_lease_manager) |_| self.drm_lease_request.link.remove();
 
     self.backend.destroy();
     self.wl_server.destroyClients();
