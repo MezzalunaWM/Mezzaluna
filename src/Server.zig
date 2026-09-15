@@ -142,7 +142,7 @@ pub fn init(self: *Server) void {
         .async_callbacks = .init(gpa.*),
     };
 
-    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+    if (renderer.getDrmFd() >= 0 and renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
         self.linux_dmabuf = try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer);
     }
 
