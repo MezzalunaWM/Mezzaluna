@@ -50,6 +50,8 @@ xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 xdg_toplevel_decoration_manager: *wlr.XdgDecorationManagerV1,
 xdg_activation: *wlr.XdgActivationV1,
+output_manager: *wlr.OutputManagerV1,
+output_power_manager: *wlr.OutputPowerManagerV1,
 
 relative_pointer_manager: *wlr.RelativePointerManagerV1,
 pointer_constraints: *wlr.PointerConstraintsV1,
@@ -78,6 +80,10 @@ new_idle_inhibitor: wl.Listener(*wlr.IdleInhibitorV1) = .init(handleNewIdleInhib
 drm_lease_request: wl.Listener(*wlr.DrmLeaseRequestV1) = .init(handleDrmRequest),
 
 new_pointer_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(handleNewPointerConstraint),
+
+output_manager_apply: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerApply),
+output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerTest),
+output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleOutputPowerManagerSet),
 
 pub fn init(self: *Server) void {
     errdefer utils.oomPanic();
@@ -133,6 +139,8 @@ pub fn init(self: *Server) void {
 
         .relative_pointer_manager = try wlr.RelativePointerManagerV1.create(self.wl_server),
         .pointer_constraints = try wlr.PointerConstraintsV1.create(self.wl_server),
+        .output_manager = try wlr.OutputManagerV1.create(self.wl_server),
+        .output_power_manager = try wlr.OutputPowerManagerV1.create(self.wl_server),
 
         // lua stuff
         .remote_lua_manager = RemoteLuaManager.init() catch utils.oomPanic(),
@@ -199,6 +207,10 @@ pub fn init(self: *Server) void {
 
     self.pointer_constraints.events.new_constraint.add(&self.new_pointer_constraint);
 
+    self.output_manager.events.apply.add(&self.output_manager_apply);
+    self.output_manager.events.@"test".add(&self.output_manager_test);
+    self.output_power_manager.events.set_mode.add(&self.output_power_manager_set);
+
     self.events.exec("ServerStartPost", .{}, "Just after Mezzaluna has successfully started.");
 }
 
@@ -218,6 +230,9 @@ pub fn deinit(self: *Server) noreturn {
     self.new_virtual_pointer.link.remove();
     self.new_virtual_keyboard.link.remove();
     self.new_pointer_constraint.link.remove();
+    self.output_manager_apply.link.remove();
+    self.output_manager_test.link.remove();
+    self.output_power_manager_set.link.remove();
     if (self.drm_lease_manager) |_| self.drm_lease_request.link.remove();
 
     self.backend.destroy();
@@ -379,4 +394,71 @@ fn handleNewPointerConstraint(
     constraint: *wlr.PointerConstraintV1,
 ) void {
     _ = PointerConstraint.init(constraint);
+}
+
+fn handleOutputManagerApply(
+    _: *wl.Listener(*wlr.OutputConfigurationV1),
+    config: *wlr.OutputConfigurationV1
+) void {
+    outputManagerConfigure(config, true);
+}
+
+fn handleOutputManagerTest(
+    _: *wl.Listener(*wlr.OutputConfigurationV1),
+    config: *wlr.OutputConfigurationV1
+) void {
+    outputManagerConfigure(config, false);
+}
+
+/// if apply is false we test the output instead
+fn outputManagerConfigure(config: *wlr.OutputConfigurationV1, apply: bool) void {
+    // by default we will tell the client this worked, if we encounter an error
+    // we keep going, but tell the client that we did not succeed.
+    var success = true;
+    defer config.destroy();
+
+    var iter = config.heads.iterator(.forward);
+    while (iter.next()) |head| {
+        const output: *Output = @fieldParentPtr("wlr_output", &head.state.output);
+        var state: wlr.Output.State = .init();
+        defer state.finish();
+
+        state.setEnabled(head.state.enabled);
+
+        // TEST: further configuration only happens if the output is enabled
+        // if (state.enabled) {
+            if (head.state.mode) |mode| {
+                state.setMode(mode);
+            } else {
+                state.setCustomMode(
+                    head.state.custom_mode.width,
+                    head.state.custom_mode.height,
+                    head.state.custom_mode.refresh,
+                );
+            }
+
+            state.setTransform(head.state.transform);
+            state.setScale(head.state.scale);
+            state.setAdaptiveSyncEnabled(head.state.adaptive_sync_enabled);
+        // }
+
+        success &= if (apply) output.wlr_output.commitState(&state)
+            else output.wlr_output.testState(&state);
+    }
+
+    if (success) {
+        config.sendSucceeded();
+    } else config.sendFailed();
+}
+
+fn handleOutputPowerManagerSet(
+    _: *wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode),
+    event: *wlr.OutputPowerManagerV1.event.SetMode
+) void {
+    const output: *Output = @fieldParentPtr("wlr_output", &event.output);
+    var state: wlr.Output.State = .init();
+    defer state.finish();
+
+    state.setEnabled(event.mode == .on);
+    _ = output.wlr_output.commitState(&state);
 }
