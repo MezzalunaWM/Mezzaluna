@@ -1,5 +1,4 @@
-/// The root of Mezzaluna is, you guessed it, the root of many of the systems mez needs
-
+/// The root of Mezzaluna is the root of the scene trees
 const Root = @This();
 
 const std = @import("std");
@@ -25,16 +24,7 @@ scene_output_layout: *wlr.SceneOutputLayout,
 
 hidden_tree: *wlr.SceneTree,
 hidden_tree_scene_node_data: SceneNode.Data,
-
-// All visible views should be accessed through these
 output_layout: *wlr.OutputLayout,
-output_manager: *wlr.OutputManagerV1,
-output_power_manager: *wlr.OutputPowerManagerV1,
-
-// listeners
-output_manager_apply: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerApply),
-output_manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(handleOutputManagerTest),
-output_power_manager_set: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(handleOutputPowerManagerSet),
 
 pub fn init(self: *Root) void {
     log.info("Creating root of mezzaluna\n", .{});
@@ -55,8 +45,6 @@ pub fn init(self: *Root) void {
         .hidden_tree = try scene.tree.createSceneTree(),
         .hidden_tree_scene_node_data = .{ .hidden_tree = self.hidden_tree },
 
-        .output_manager = try wlr.OutputManagerV1.create(server.wl_server),
-        .output_power_manager = try wlr.OutputPowerManagerV1.create(server.wl_server),
         .output_layout = output_layout,
 
         .pending_views = 0,
@@ -68,17 +56,9 @@ pub fn init(self: *Root) void {
     if (server.linux_dmabuf) |dmabuf| self.scene.setLinuxDmabufV1(dmabuf);
 
     self.scene.tree.node.data = &self.scene_node_data;
-
-    self.output_manager.events.apply.add(&self.output_manager_apply);
-    self.output_manager.events.@"test".add(&self.output_manager_test);
-    self.output_power_manager.events.set_mode.add(&self.output_power_manager_set);
 }
 
 pub fn deinit(self: *Root) void {
-    self.output_manager_apply.link.remove();
-    self.output_manager_test.link.remove();
-    self.output_power_manager_set.link.remove();
-
     var output_it = self.output_layout.outputs.safeIterator(.forward);
     while(output_it.next()) |o| {
         std.debug.assert(o.output.data != null);
@@ -109,7 +89,7 @@ pub fn configureOutputs(self: *const Root) void {
         }
     }
 
-    self.output_manager.setConfiguration(config);
+    server.output_manager.setConfiguration(config);
 }
 
 // Search output_layout's outputs, and each outputs views
@@ -222,72 +202,4 @@ pub fn applySending(self: *Root) void {
         self.pending_state_dirty = false;
         self.applyPending();
     }
-}
-
-// --------- OutputManagerV1 event handlers ---------
-fn handleOutputManagerApply(
-    _: *wl.Listener(*wlr.OutputConfigurationV1),
-    config: *wlr.OutputConfigurationV1
-) void {
-    outputManagerConfigure(config, true);
-}
-
-fn handleOutputManagerTest(
-    _: *wl.Listener(*wlr.OutputConfigurationV1),
-    config: *wlr.OutputConfigurationV1
-) void {
-    outputManagerConfigure(config, false);
-}
-
-/// if apply is false we test the output instead
-fn outputManagerConfigure(config: *wlr.OutputConfigurationV1, apply: bool) void {
-    // by default we will tell the client this worked, if we encounter an error
-    // we keep going, but tell the client that we did not succeed.
-    var success = true;
-    defer config.destroy();
-
-    var iter = config.heads.iterator(.forward);
-    while (iter.next()) |head| {
-        const output: *Output = @fieldParentPtr("wlr_output", &head.state.output);
-        var state: wlr.Output.State = .init();
-        defer state.finish();
-
-        state.setEnabled(head.state.enabled);
-
-        // TEST: further configuration only happens if the output is enabled
-        // if (state.enabled) {
-            if (head.state.mode) |mode| {
-                state.setMode(mode);
-            } else {
-                state.setCustomMode(
-                    head.state.custom_mode.width,
-                    head.state.custom_mode.height,
-                    head.state.custom_mode.refresh,
-                );
-            }
-
-            state.setTransform(head.state.transform);
-            state.setScale(head.state.scale);
-            state.setAdaptiveSyncEnabled(head.state.adaptive_sync_enabled);
-        // }
-
-        success &= if (apply) output.wlr_output.commitState(&state)
-            else output.wlr_output.testState(&state);
-    }
-
-    if (success) {
-        config.sendSucceeded();
-    } else config.sendFailed();
-}
-
-fn handleOutputPowerManagerSet(
-    _: *wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode),
-    event: *wlr.OutputPowerManagerV1.event.SetMode
-) void {
-    const output: *Output = @fieldParentPtr("wlr_output", &event.output);
-    var state: wlr.Output.State = .init();
-    defer state.finish();
-
-    state.setEnabled(event.mode == .on);
-    _ = output.wlr_output.commitState(&state);
 }
