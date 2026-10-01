@@ -446,23 +446,24 @@ M.setup = function (config)
     end
   })
 
-  mez.hook.add("ViewSetClosingPre", {
+  mez.hook.add({ "ViewSetClosingPre", "ViewDestroyPre" }, {
     callback = function(view_id, closing)
-      if closing then
-        local view_addr = M.find_view(view_id)
-        if not view_addr then return end
+      if closing == false then return end
 
-        local tag = M.state.tags[view_addr.tag_idx]
-        local list = view_addr.floating and tag.floating or tag.tiling
+      local view_addr = M.find_view(view_id)
+      if not view_addr then return end
 
-        table.remove(list, view_addr.view_idx)
+      local tag = M.state.tags[view_addr.tag_idx]
+      local list = view_addr.floating and tag.floating or tag.tiling
 
-        M.tile_tag(view_addr.tag_idx)
+      table.remove(list, view_addr.view_idx)
 
-        local focus_idx = view_addr.view_idx
-        if view_addr.view_idx == #list + 1 then focus_idx = focus_idx - 1 end
-        mez.seat.set_focused_view(0, list[focus_idx])
-      end
+      M.tile_tag(view_addr.tag_idx)
+
+      local focus_idx = view_addr.view_idx
+      if view_addr.view_idx == #list + 1 then focus_idx = focus_idx - 1 end
+      mez.seat.set_focused_view(0, list[focus_idx])
+      mez.view.apply()
     end
   })
 

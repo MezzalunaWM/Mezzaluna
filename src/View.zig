@@ -582,6 +582,8 @@ fn handleUnmap(listener: *wl.Listener(void)) void {
 fn handleDestroy(listener: *wl.Listener(void)) void {
     const view: *View = @fieldParentPtr("destroy", listener);
 
+    server.events.exec("ViewDestroyPre", .{ view.id }, "Just before a view is going to be destoryed.");
+
     // Remove decorations
     for (view.borders) |b| {
         b.node.destroy();
