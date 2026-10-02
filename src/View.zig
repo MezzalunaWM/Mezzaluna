@@ -8,7 +8,7 @@ const utils = @import("utils.zig");
 const Popup = @import("Popup.zig");
 const Output = @import("Output.zig");
 const SceneNode = @import("SceneNode.zig");
-const Options = @import("lua/Options.zig");
+const options = @import("lua/options.zig");
 const Debug = @import("Debug.zig");
 
 const server = &@import("main.zig").server;
@@ -521,8 +521,8 @@ fn handleMap(listener: *wl.Listener(void)) void {
 
     server.events.exec("ViewMapPre", .{view.id}, "Before a view is mapped to the screen. This means the view is not yet displayed to the user.");
 
-    const new_view_hidden = Options.getOption(.boolean, "new_view_hidden");
-    if(new_view_hidden != null and !new_view_hidden.?) {
+    const new_view_hidden: ?bool = options.get(.new_view_hidden) catch null;
+    if (new_view_hidden != null and !new_view_hidden.?) {
         if(server.getDefaultSeat().focused_output) |output| {
             view.setParent(output.layers.content);
         }
