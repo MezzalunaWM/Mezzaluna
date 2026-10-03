@@ -7,7 +7,7 @@ const utils = @import("../utils.zig");
 
 const LuaUtils = @import("LuaUtils.zig");
 const Bridge = @import("Bridge.zig");
-const Options = @import("Options.zig");
+const options = @import("options.zig");
 
 const gpa = &@import("../main.zig").gpa;
 pub const log = std.log.scoped(.@"Lua.Lua");
@@ -133,7 +133,7 @@ pub fn openMezLibs(self: *zlua.Lua) void {
     self.newTable();
     _ = self.setField(-2, "path");
 
-    Options.getDefaultOptions(self);
+    options.Default.pushTable(self);
     _ = self.setField(-2, "opt");
 
     inline for (.{
