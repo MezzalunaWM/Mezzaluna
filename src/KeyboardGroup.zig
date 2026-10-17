@@ -79,7 +79,7 @@ fn handleRepeat(data: ?*KeyboardGroup) c_int {
         log.warn("failed to update keyboard repeat timer", .{});
     };
     for (data.?.keysyms.?) |sym| {
-        _ = Keyboard.keypress(data.?.seat, data.?.modifiers.?, sym, .pressed);
+        if (Keyboard.keypress(data.?.seat, data.?.modifiers.?, sym, .pressed)) break;
     }
 
     return 0;
