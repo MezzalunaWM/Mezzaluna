@@ -44,18 +44,22 @@ pub const KeymapData = struct {
         lua_release_ref_idx: i32,
     },
 
-    pub fn callback(self: *const KeymapData, release: bool) void {
+    /// Returns true if the keypress is mapped and callable. The keypress may
+    /// have still failed to run, but that is for the user to reconcile.
+    pub fn callback(self: *const KeymapData, release: bool) bool {
         const lua_ref_idx = if (release) self.options.lua_release_ref_idx else self.options.lua_press_ref_idx;
 
         const t = Lua.state.getIndexRaw(zlua.registry_index, lua_ref_idx);
         if (t != zlua.LuaType.function) {
             RemoteLua.sendNewLogEntry("Failed to call keybind, it doesn't have a callback.");
             Lua.state.pop(1);
-            return;
+            return false;
         }
 
         Lua.state.protectedCall(.{ .args = 0, .results = 0 }) catch LuaUtils.handleError(Lua.state);
         Lua.state.pop(-1);
+
+        return true;
     }
 
     pub fn hash(modifier: wlr.Keyboard.ModifierMask, keycode: xkb.Keysym) u64 {

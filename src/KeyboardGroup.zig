@@ -63,11 +63,12 @@ pub fn deinit(self: *KeyboardGroup) void {
 }
 
 fn handleRepeat(data: ?*KeyboardGroup) c_int {
-    // we failed to create the event loop timer, which means we can't repeat keys
-    if (data.?.repeat_source == null) return 0;
-
-    if (data == null or data.?.keysyms == null or data.?.modifiers == null or
-        data.?.wlr_group.keyboard.repeat_info.rate <= 0)
+    // cancel the timer if any information is missing
+    if (data == null
+        or data.?.repeat_source == null // we failed to create the event loop timer, which means we can't repeat keys
+        or data.?.keysyms == null
+        or data.?.modifiers == null
+        or data.?.wlr_group.keyboard.repeat_info.rate <= 0)
     {
         return 0;
     }

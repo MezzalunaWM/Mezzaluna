@@ -67,7 +67,7 @@ fn handleModifiers(listener: *wl.Listener(*wlr.Keyboard), wlr_keyboard: *wlr.Key
 
 fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboard.event.Key) void {
     const self: *Keyboard = @fieldParentPtr("key", listener);
-    const seat = if (self.group) |group| group.seat else {
+    const group = if (self.group) |group| group else {
         log.warn(
             "dropping keyboard event: `{}` no keyboard group available",
             .{event}
@@ -75,61 +75,37 @@ fn handleKey(listener: *wl.Listener(*wlr.Keyboard.event.Key), event: *wlr.Keyboa
         return;
     };
 
-    // Translate libinput keycode -> xkbcommon
-    const keycode = event.keycode + 8;
+    // tell the idle notifier that we've received activity
+    server.idle_notifier.notifyActivity(group.seat.wlr_seat);
 
-    var handled: bool = false;
-    const modifiers = self.group.?.wlr_group.keyboard.getModifiers();
-    // TODO: We should check against other layers besides 0, hyprland does this according to jippity
-    const level_keysyms = seat.xkb_keymap.keyGetSymsByLevel(keycode, 0, 0);
-    const state_keysyms = blk: {
-        if(self.wlr_keyboard.xkb_state) |xkb_state| {
-            break :blk xkb_state.keyGetSyms(keycode);
+    const keycode = event.keycode + 8; // Translate libinput keycode -> xkbcommon
+    const modifiers = group.wlr_group.keyboard.getModifiers();
+
+    if (self.wlr_keyboard.xkb_state) |xkb_state| not_handled: {
+        const state_keysyms = xkb_state.keyGetSyms(keycode);
+        for (state_keysyms) |sym| {
+            if (keypress(group.seat, modifiers, sym, event.state)) break;
+        } else break :not_handled;
+
+        // give the keyboard group information about what to repeat and update it
+        if (self.wlr_keyboard.repeat_info.delay > 0) {
+            group.modifiers = modifiers;
+            group.keysyms = state_keysyms;
+            group.repeat_source.?.timerUpdate(
+                self.wlr_keyboard.repeat_info.delay,
+            ) catch log.warn("failed to update keyboard repeat timer", .{});
         }
-        break :blk null;
-    };
 
-    var syms: []const xkb.Keysym = undefined;
-    for (level_keysyms) |sym| {
-        handled = keypress(self.group.?.seat, modifiers, sym, event.state);
-        if(handled) {
-            syms = level_keysyms;
-            break;
-        }
+        return; // there's nothing else that should be done atp
     }
 
-    if(!handled and state_keysyms != null) {
-        for (state_keysyms.?) |sym| {
-            handled = keypress(self.group.?.seat, modifiers, sym, event.state);
-            if(handled) {
-                syms = state_keysyms.?;
-                break;
-            }
-        }
-    }
+    // clear the repeat info
+    group.modifiers = null;
+    group.keysyms = null;
 
-    // give the keyboard group information about what to repeat and update it
-    if (handled and self.wlr_keyboard.repeat_info.delay > 0) {
-        self.group.?.modifiers = modifiers;
-        self.group.?.keysyms = syms;
-        self.group.?.repeat_source.?.timerUpdate(
-            self.wlr_keyboard.repeat_info.delay,
-        ) catch {
-            log.warn("failed to update keyboard repeat timer", .{});
-        };
-    } else {
-        self.group.?.modifiers = null;
-        self.group.?.keysyms = null;
-    }
-
-    if (!handled) {
-        seat.wlr_seat.setKeyboard(&self.group.?.wlr_group.keyboard);
-        seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
-    }
-
-    // tell the idle notifier that we've received activity now that it's been
-    // fully processed
-    server.idle_notifier.notifyActivity(seat.wlr_seat);
+    // pass keyboard event to the focused client
+    group.seat.wlr_seat.keyboardNotifyKey(event.time_msec, event.keycode, event.state);
+    group.seat.wlr_seat.setKeyboard(&group.wlr_group.keyboard);
 }
 
 pub fn keypress(
@@ -139,15 +115,8 @@ pub fn keypress(
     state: wl.Keyboard.KeyState,
 ) bool {
     if (seat.keymaps.get(Keymap.hash(modifiers, sym))) |map| {
-        if (state == .pressed and map.options.lua_press_ref_idx > 0) {
-            map.callback(false);
-            return true;
-        } else if (state == .released and map.options.lua_release_ref_idx > 0) {
-            map.callback(true);
-            return true;
-        }
+        return map.callback(state == .released);
     }
-
     return false;
 }
 
