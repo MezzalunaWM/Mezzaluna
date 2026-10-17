@@ -69,29 +69,6 @@ fn handleNewPopup(listener: *wl.Listener(*wlr.XdgPopup), xdg_popup: *wlr.XdgPopu
     _ = Popup.init(xdg_popup, popup.tree);
 }
 
-fn handleReposition(listener: *wl.Listener(void)) void {
-    const popup: *Popup = @fieldParentPtr("reposition", listener);
-
-    var box: wlr.Box = undefined;
-
-    // TODO: figure this out to prevent popups from rendering outside of the
-    // current monitor
-    //
-    // if (SceneNodeData.getFromNode(&popup.tree.node)) |node| {
-    //   const output = switch (node.data) {
-    //     .view => |view| view.output orelse return,
-    //     .layer_surface => |layer_surface| layer_surface.output,
-    //   };
-    //
-    //   server.root.output_layout.getBox(output.wlr_output, &box);
-    // }
-
-    var root_lx: c_int = undefined;
-    var root_ly: c_int = undefined;
-    _ = popup.tree.node.coords(&root_lx, &root_ly);
-
-    box.x -= root_lx;
-    box.y -= root_ly;
-
-    popup.xdg_popup.unconstrainFromBox(&box);
+fn handleReposition(_: *wl.Listener(void)) void {
+    log.debug("Unimplemented Popup.handleReposition", .{});
 }
