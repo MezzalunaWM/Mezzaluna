@@ -27,8 +27,7 @@ motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) = .init(handleMo
 button: wl.Listener(*wlr.Pointer.event.Button) = .init(handleButton),
 axis: wl.Listener(*wlr.Pointer.event.Axis) = .init(handleAxis),
 frame: wl.Listener(*wlr.Cursor) = .init(handleFrame),
-hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) = .init(handleHoldBegin),
-hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) = .init(handleHoldEnd),
+// TODO: hold_{begin,end}, pinch_{begin,update,end}, swipe_{begin,update,end}
 
 request_set_cursor_shape: wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShape) = .init(handleCursorShape),
 
@@ -65,8 +64,6 @@ pub fn init(self: *Cursor, seat: *Seat) void {
     self.wlr_cursor.events.button.add(&self.button);
     self.wlr_cursor.events.axis.add(&self.axis);
     self.wlr_cursor.events.frame.add(&self.frame);
-    self.wlr_cursor.events.hold_begin.add(&self.hold_begin);
-    self.wlr_cursor.events.hold_end.add(&self.hold_end);
 
     self.cursor_shape_manager.events.request_set_shape.add(&self.request_set_cursor_shape);
 }
@@ -77,8 +74,6 @@ pub fn deinit(self: *Cursor) void {
     self.button.link.remove();
     self.axis.link.remove();
     self.frame.link.remove();
-    self.hold_begin.link.remove();
-    self.hold_end.link.remove();
     self.request_set_cursor_shape.link.remove();
 
     self.wlr_cursor.destroy();
@@ -97,8 +92,7 @@ pub fn processCursorMotion(
     var dx = delta_x;
     var dy = delta_y;
 
-    // tell the idle notifier that we've received activity now that it's been
-    // fully processed
+    // tell the idle notifier that we've received activity
     server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
     // try and activate a cursor constraint
@@ -170,12 +164,11 @@ pub fn processCursorMotion(
                     // TODO: Do we really need an offset , is it necessary
                     if (self.drag.?.view != null) self.drag.?.view.?.offset else null, // offset
                 });
-                if (!passthrough) return;
             }
         }
     }
 
-    if(!passthrough) return;
+    if (!passthrough) return;
 
     const output = self.seat.focused_output;
     // Exit the switch if no focused output exists
@@ -251,6 +244,9 @@ fn handleMotionAbsolute(
 
 fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.event.Button) void {
     const self: *Cursor = @fieldParentPtr("button", listener);
+
+    // tell the idle notifier that we've received activity
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
     const view: ?*View = blk: {
         if (self.seat.focused_surface) |fs| {
@@ -338,20 +334,6 @@ fn handleButton(listener: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.P
     if (passthrough) {
         _ = self.seat.wlr_seat.pointerNotifyButton(event.time_msec, event.button, event.state);
     }
-
-    // tell the idle notifier that we've received activity now that it's been
-    // fully processed
-    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
-}
-
-fn handleHoldBegin(listener: *wl.Listener(*wlr.Pointer.event.HoldBegin), event: *wlr.Pointer.event.HoldBegin) void {
-    _ = listener;
-    _ = event;
-}
-
-fn handleHoldEnd(listener: *wl.Listener(*wlr.Pointer.event.HoldEnd), event: *wlr.Pointer.event.HoldEnd) void {
-    _ = listener;
-    _ = event;
 }
 
 fn handleAxis(
@@ -359,6 +341,9 @@ fn handleAxis(
     event: *wlr.Pointer.event.Axis,
 ) void {
     const self: *Cursor = @fieldParentPtr("axis", listener);
+
+    // tell the idle notifier that we've received activity
+    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
 
     const event_name = if(event.orientation == .vertical_scroll) "REL_WHEEL" else "REL_HWHEEL";
     const event_code = c.libevdev_event_code_from_name(c.EV_REL, event_name);
@@ -376,7 +361,8 @@ fn handleAxis(
             break :blk null;
         };
 
-        const args = .{
+        if (map.options.lua_scroll_ref_idx > 0) {
+            passthrough = map.callback(.scroll, .{
             if (view != null) view.?.id else null, // view_id
             .{ // pos
                 .x = @as(c_int, @intFromFloat(self.wlr_cursor.x)),
@@ -384,18 +370,11 @@ fn handleAxis(
             },
             event.delta,
             event.delta_discrete
-        };
-
-        if(map.options.lua_scroll_ref_idx > 0) {
-            passthrough = map.callback(.scroll, args);
+        });
         }
     }
 
-    // tell the idle notifier that we've received activity now that it's been
-    // fully processed
-    server.idle_notifier.notifyActivity(self.seat.wlr_seat);
-
-    if(!passthrough) return;
+    if (!passthrough) return;
 
     self.seat.wlr_seat.pointerNotifyAxis(
         event.time_msec,
